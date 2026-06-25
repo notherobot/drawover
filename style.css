@@ -29,7 +29,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   background: #181818; border-bottom: 1px solid #2a2a2a; flex-shrink: 0;
 }
 #app-title { font-size: 14px; font-weight: 600; color: #3aa0ff; letter-spacing: 0.5px; }
-#version { font-size: 10px; font-weight: 400; color: #555; margin-left: 4px; }
+#version { font-size: 10px; font-weight: 400; color: #999; margin-left: 4px; }
 #main-body { display: flex; flex: 1; overflow: hidden; }
 
 /* ===== SIDEBAR TOGGLE BUTTON ===== */
@@ -89,9 +89,9 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 .playlist-thumb-placeholder { background: #222; border: 1px solid #333; }
 .playlist-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .playlist-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.playlist-duration { font-size: 11px; color: #777; }
+.playlist-duration { font-size: 11px; color: #999; }
 .playlist-remove {
-  background: none; border: none; color: #666; padding: 2px 4px; font-size: 14px; flex-shrink: 0;
+  background: none; border: none; color: #888; padding: 2px 4px; font-size: 14px; flex-shrink: 0;
 }
 .playlist-remove:hover { color: #ff4444; background: none; }
 
@@ -147,10 +147,10 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #color-hover-hex { font-size: 11px; color: #ccc; flex: 1; font-family: monospace; }
 #color-panel-bottom input[type="color"] { width: 28px; height: 28px; flex-shrink: 0; }
 .sliders { gap: 10px; }
-.sliders label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #bbb; white-space: nowrap; }
+.sliders label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #ccc; white-space: nowrap; }
 .sliders label span { min-width: 24px; text-align: right; color: #e0e0e0; font-size: 11px; }
 .sliders input[type="range"] { width: 80px; height: 16px; }
-.tool-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #bbb; white-space: nowrap; }
+.tool-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #ccc; white-space: nowrap; }
 .tool-label input[type="number"] { width: 46px; }
 
 /* ===== VIDEO CONTAINER ===== */
@@ -171,7 +171,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 }
 #scrub-times-top {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 2px 0 4px; font-size: 11px; color: #666;
+  padding: 2px 0 4px; font-size: 11px; color: #999;
   font-variant-numeric: tabular-nums; letter-spacing: 0.3px;
 }
 #scrub-frame { color: #aaa; font-size: 11px; }
@@ -242,7 +242,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #status-bar {
   display: flex; align-items: center; gap: 16px; padding: 3px 12px;
   background: #141414; border-top: 1px solid #222;
-  font-size: 10px; color: #444; flex-shrink: 0;
+  font-size: 10px; color: #888; flex-shrink: 0;
 }
 #status-version { margin-left: auto; }
 
@@ -273,7 +273,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #welcome-icon { font-size: 80px; line-height: 1; margin-bottom: 20px; }
 #welcome-title { font-size: 28px; font-weight: 700; color: #3aa0ff; margin-bottom: 8px; }
 #welcome-sub {
-  font-size: 13px; color: #666; margin-bottom: 40px;
+  font-size: 13px; color: #aaa; margin-bottom: 40px;
   text-align: center; max-width: 380px; line-height: 1.6;
 }
 #welcome-drop-zone {
@@ -286,9 +286,9 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #welcome-drop-zone:hover, #welcome-drop-zone.drag-over {
   border-color: #3aa0ff; background: rgba(58,160,255,0.06);
 }
-#welcome-drop-icon { font-size: 36px; margin-bottom: 12px; color: #555; }
+#welcome-drop-icon { font-size: 36px; margin-bottom: 12px; color: #888; }
 #welcome-drop-label { font-size: 15px; color: #aaa; margin-bottom: 6px; }
-#welcome-drop-sub { font-size: 12px; color: #555; }
+#welcome-drop-sub { font-size: 12px; color: #888; }
 #btn-welcome-browse {
   background: #3aa0ff; color: #fff; border: none; border-radius: 8px;
   font-size: 14px; font-weight: 600; padding: 11px 28px; cursor: pointer;
