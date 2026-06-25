@@ -9,7 +9,7 @@
 <body>
   <div id="app">
     <div id="topbar">
-      <div id="app-title">DrawOverLMS <span id="version">v1.4</span></div>
+      <div id="app-title">DrawOverLMS <span id="version">v1.5</span></div>
     </div>
 
     <div id="main-body">
@@ -23,20 +23,23 @@
       <div id="content">
         <div id="tool-row">
           <div class="tool-group">
-            <button class="tool-btn active" data-tool="pen" title="Pen">🖌️</button>
-            <button class="tool-btn" data-tool="laser" title="Laser">💫</button>
-            <button class="tool-btn" data-tool="eraser" title="Eraser">🧹</button>
+            <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
+            <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
+            <button class="tool-btn" data-tool="eraser" title="Eraser (E)">🧹</button>
           </div>
           <div class="tool-sep"></div>
-          <div class="tool-group" id="color-swatches">
-            <button class="swatch active" data-color="#ff3333" style="background:#ff3333" title="Red"></button>
-            <button class="swatch" data-color="#ff8800" style="background:#ff8800" title="Orange"></button>
-            <button class="swatch" data-color="#ffee00" style="background:#ffee00" title="Yellow"></button>
-            <button class="swatch" data-color="#33cc33" style="background:#33cc33" title="Green"></button>
-            <button class="swatch" data-color="#00cccc" style="background:#00cccc" title="Cyan"></button>
-            <button class="swatch" data-color="#cc33cc" style="background:#cc33cc" title="Magenta"></button>
-            <button class="swatch" data-color="#ffffff" style="background:#ffffff" title="White"></button>
-            <input type="color" id="color-picker" value="#ff3333" title="Custom color">
+          <div class="tool-group" id="color-picker-area">
+            <button id="color-picker-btn" title="Pick Color">
+              <span id="color-preview-dot"></span>
+            </button>
+            <div id="color-panel">
+              <div id="color-grid"></div>
+              <div id="color-panel-bottom">
+                <div id="color-hover-swatch"></div>
+                <span id="color-hover-hex">#ff3333</span>
+                <input type="color" id="color-custom" value="#ff3333" title="Custom color">
+              </div>
+            </div>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group sliders">
@@ -74,7 +77,7 @@
         <div id="playback-row">
           <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
           <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
-          <button id="btn-toggle-drawings" class="active" title="Show/Hide Drawings">Drawings ON</button>
+          <button id="btn-toggle-drawings" class="active" title="Show/Hide Drawovers">Drawovers ON</button>
           <div class="pb-sep"></div>
           <button id="btn-to-start" title="Go to In / Start">|◀</button>
           <button id="btn-frame-back" title="Frame Back (←)">◄◄</button>
@@ -82,13 +85,13 @@
           <button id="btn-frame-fwd" title="Frame Forward (→)">▶▶</button>
           <button id="btn-to-end" title="Go to Out / End">▶|</button>
           <div class="pb-sep"></div>
-          <button id="btn-set-in" title="Set In Point">[ In</button>
-          <button id="btn-set-out" title="Set Out Point">Out ]</button>
+          <button id="btn-set-in" title="Set In Point (I)">[ In</button>
+          <button id="btn-set-out" title="Set Out Point (O)">Out ]</button>
           <button id="btn-clear-inout" title="Clear In/Out">✕ Range</button>
           <button id="btn-loop" title="Loop In/Out">↺ Loop</button>
           <div class="pb-sep"></div>
-          <button id="btn-prev-annotation" title="Previous annotated frame">◄ Draw</button>
-          <button id="btn-next-annotation" title="Next annotated frame">Draw ►</button>
+          <button id="btn-prev-annotation" title="Previous Drawover (↑)">◄ Drawover</button>
+          <button id="btn-next-annotation" title="Next Drawover (↓)">Drawover ►</button>
           <div class="pb-sep"></div>
           <button id="btn-mute" title="Mute">🔊</button>
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
@@ -98,7 +101,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOverLMS v1.4</span>
+          <span id="status-version">DrawOverLMS v1.5</span>
         </div>
       </div>
     </div>
@@ -153,9 +156,16 @@
       const brushSizeVal = document.getElementById('brush-size-val');
       const brushOpacitySlider = document.getElementById('brush-opacity');
       const brushOpacityVal = document.getElementById('brush-opacity-val');
-      const colorPicker = document.getElementById('color-picker');
       const toolBtns = document.querySelectorAll('.tool-btn');
-      const swatches = document.querySelectorAll('.swatch');
+
+      // Color picker refs
+      const colorPickerBtn = document.getElementById('color-picker-btn');
+      const colorPreviewDot = document.getElementById('color-preview-dot');
+      const colorPanel = document.getElementById('color-panel');
+      const colorGrid = document.getElementById('color-grid');
+      const colorHoverSwatch = document.getElementById('color-hover-swatch');
+      const colorHoverHex = document.getElementById('color-hover-hex');
+      const colorCustom = document.getElementById('color-custom');
 
       // ===== STATE =====
       let playlist = [];
@@ -446,6 +456,7 @@
         penCanvas.width = rect.width; penCanvas.height = rect.height;
         laserCanvas.width = rect.width; laserCanvas.height = rect.height;
         redrawPenCanvas(); redrawLaserCanvas(); updateScrubTicks();
+        updateToolCursor();
       }
       new ResizeObserver(resizeCanvases).observe(videoContainer);
 
@@ -635,21 +646,102 @@
       }
 
       // ===== TOOLS =====
-      toolBtns.forEach(btn => btn.addEventListener('click', () => {
-        toolBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentTool = btn.dataset.tool;
-        penCanvas.style.cursor = currentTool === 'eraser' ? 'cell' : 'crosshair';
-      }));
+      function updateToolCursor() {
+        if (currentTool === 'laser') {
+          penCanvas.style.cursor = 'crosshair';
+          return;
+        }
+        const size = Math.max(brushSize, 4);
+        const dim = size + 8;
+        const c = document.createElement('canvas');
+        c.width = dim; c.height = dim;
+        const cx = c.getContext('2d');
+        const half = dim / 2;
+        if (currentTool === 'pen') {
+          cx.strokeStyle = 'rgba(0,0,0,0.6)';
+          cx.lineWidth = 2;
+          cx.beginPath(); cx.arc(half, half, size / 2 + 1, 0, Math.PI * 2); cx.stroke();
+          cx.strokeStyle = '#ffffff';
+          cx.lineWidth = 1.5;
+          cx.beginPath(); cx.arc(half, half, size / 2, 0, Math.PI * 2); cx.stroke();
+        } else {
+          const pad = 3;
+          cx.strokeStyle = 'rgba(0,0,0,0.6)';
+          cx.lineWidth = 2;
+          cx.strokeRect(pad - 1, pad - 1, dim - 2 * pad + 2, dim - 2 * pad + 2);
+          cx.strokeStyle = '#ffffff';
+          cx.lineWidth = 1.5;
+          cx.strokeRect(pad, pad, dim - 2 * pad, dim - 2 * pad);
+        }
+        penCanvas.style.cursor = `url(${c.toDataURL()}) ${half} ${half}, crosshair`;
+      }
 
-      swatches.forEach(s => s.addEventListener('click', () => {
-        drawColor = s.dataset.color; colorPicker.value = drawColor;
-        swatches.forEach(sw => sw.classList.remove('active')); s.classList.add('active');
-      }));
+      function activateTool(tool) {
+        currentTool = tool;
+        toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+        updateToolCursor();
+      }
 
-      colorPicker.addEventListener('input', () => { drawColor = colorPicker.value; swatches.forEach(sw => sw.classList.remove('active')); });
-      brushSizeSlider.addEventListener('input', () => { brushSize = parseInt(brushSizeSlider.value, 10); brushSizeVal.textContent = brushSize; });
-      brushOpacitySlider.addEventListener('input', () => { brushOpacity = parseInt(brushOpacitySlider.value, 10) / 100; brushOpacityVal.textContent = brushOpacitySlider.value; });
+      toolBtns.forEach(btn => btn.addEventListener('click', () => activateTool(btn.dataset.tool)));
+
+      brushSizeSlider.addEventListener('input', () => {
+        brushSize = parseInt(brushSizeSlider.value, 10);
+        brushSizeVal.textContent = brushSize;
+        updateToolCursor();
+      });
+
+      brushOpacitySlider.addEventListener('input', () => {
+        brushOpacity = parseInt(brushOpacitySlider.value, 10) / 100;
+        brushOpacityVal.textContent = brushOpacitySlider.value;
+      });
+
+      // ===== COLOR PICKER =====
+      const PALETTE = [
+        '#ff0000','#ff4400','#ff8800','#ffcc00','#ffff00','#ccff00',
+        '#00ff00','#00ff88','#00ffcc','#00ffff','#00aaff','#0044ff',
+        '#4400ff','#8800ff','#cc00ff','#ff00ff','#ff00cc','#ff0066',
+        '#ff6666','#ff9966','#ffcc66','#ffff66','#ccff66','#66ff99',
+        '#66ffee','#66ccff','#6699ff','#9966ff','#cc66ff','#ff66cc',
+        '#ffffff','#cccccc','#999999','#666666','#333333','#000000',
+      ];
+
+      PALETTE.forEach(hex => {
+        const cell = document.createElement('button');
+        cell.className = 'color-cell';
+        cell.style.background = hex;
+        cell.dataset.color = hex;
+        cell.title = hex;
+        cell.addEventListener('mouseenter', () => {
+          colorHoverSwatch.style.background = hex;
+          colorHoverHex.textContent = hex;
+        });
+        cell.addEventListener('click', () => { setDrawColor(hex); closeColorPanel(); });
+        colorGrid.appendChild(cell);
+      });
+
+      function setDrawColor(hex) {
+        drawColor = hex;
+        colorPreviewDot.style.background = hex;
+        colorCustom.value = hex;
+        colorHoverSwatch.style.background = hex;
+        colorHoverHex.textContent = hex;
+      }
+
+      function closeColorPanel() {
+        colorPanel.classList.remove('open');
+      }
+
+      colorPickerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        colorPanel.classList.toggle('open');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!colorPanel.contains(e.target) && e.target !== colorPickerBtn) closeColorPanel();
+      });
+
+      colorCustom.addEventListener('input', () => { setDrawColor(colorCustom.value); });
+      colorCustom.addEventListener('change', () => { setDrawColor(colorCustom.value); closeColorPanel(); });
 
       // ===== DRAWING =====
       function getCanvasPos(e) {
@@ -816,13 +908,22 @@
         else if (e.key === ' ') { e.preventDefault(); btnPlay.click(); }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); btnFrameBack.click(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); btnFrameFwd.click(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); btnPrevAnnotation.click(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); btnNextAnnotation.click(); }
+        else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+          if (e.key === 'b' || e.key === 'B') activateTool('pen');
+          else if (e.key === 'e' || e.key === 'E') activateTool('eraser');
+          else if (e.key === 'l' || e.key === 'L') activateTool('laser');
+          else if (e.key === 'i' || e.key === 'I') btnSetIn.click();
+          else if (e.key === 'o' || e.key === 'O') btnSetOut.click();
+        }
       });
 
-      // ===== DRAWINGS TOGGLE & FULLSCREEN =====
+      // ===== DRAWOVERS TOGGLE & FULLSCREEN =====
       btnToggleDrawings.addEventListener('click', () => {
         drawingsVisible = !drawingsVisible;
         penCanvas.style.display = laserCanvas.style.display = drawingsVisible ? '' : 'none';
-        btnToggleDrawings.textContent = drawingsVisible ? 'Drawings ON' : 'Drawings OFF';
+        btnToggleDrawings.textContent = drawingsVisible ? 'Drawovers ON' : 'Drawovers OFF';
         btnToggleDrawings.classList.toggle('active', drawingsVisible);
       });
 
@@ -877,7 +978,8 @@
       }
 
       // ===== INIT =====
-      swatches[0].classList.add('active');
+      setDrawColor(drawColor);
+      updateToolCursor();
       mainCanvas.style.display = 'block';
       resizeCanvases();
     })();
