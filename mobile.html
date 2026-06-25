@@ -133,8 +133,7 @@
     #scrub-inout {
       position: absolute; top: 0; height: 100%;
       background: rgba(58,160,255,0.15);
-      border-left: 2px solid #30c060; border-right: 2px solid #e05030;
-      pointer-events: none;
+      pointer-events: none; display: none;
     }
     #scrub-ticks { position: absolute; inset: 0; pointer-events: none; }
     .scrub-tick {
@@ -252,17 +251,18 @@
 
     /* ===== WELCOME OVERLAY ===== */
     #welcome-overlay {
-      position: fixed; inset: 0; z-index: 300;
-      background: #0d0d0d;
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999;
+      background: #0d0d0d; opacity: 1;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
       padding: 40px 32px;
       padding-top: calc(40px + env(safe-area-inset-top));
       padding-bottom: calc(40px + env(safe-area-inset-bottom));
       transition: opacity 0.4s ease;
+      -webkit-transition: opacity 0.4s ease;
     }
-    #welcome-overlay.dismissing { opacity: 0; pointer-events: none; }
-    #welcome-overlay.hidden { display: none; }
+    #welcome-overlay.dismissing { opacity: 0 !important; pointer-events: none; }
+    #welcome-overlay.hidden { display: none !important; }
     #welcome-icon { font-size: 72px; margin-bottom: 20px; line-height: 1; }
     #welcome-title { font-size: 26px; font-weight: 700; color: #3aa0ff; margin-bottom: 8px; text-align: center; }
     #welcome-sub { font-size: 14px; color: #666; text-align: center; margin-bottom: 48px; line-height: 1.5; max-width: 280px; }
@@ -290,14 +290,6 @@
   </style>
 </head>
 <body>
-
-  <!-- Welcome / onboarding overlay -->
-  <div id="welcome-overlay">
-    <div id="welcome-icon">🖌️</div>
-    <div id="welcome-title">DrawOverLMS</div>
-    <div id="welcome-sub">Draw annotations over your videos, frame by frame. Open a video to get started.</div>
-    <button id="btn-welcome-open">Open a Video</button>
-  </div>
 
   <!-- Drawer overlay -->
   <div id="drawer-overlay"></div>
@@ -388,6 +380,14 @@
       <br>
       <button id="btn-color-modal-close">Done</button>
     </div>
+  </div>
+
+  <!-- Welcome / onboarding overlay — placed after all other elements so z-index wins on iOS -->
+  <div id="welcome-overlay">
+    <div id="welcome-icon">🖌️</div>
+    <div id="welcome-title">DrawOverLMS</div>
+    <div id="welcome-sub">Draw annotations over your videos, frame by frame. Open a video to get started.</div>
+    <button id="btn-welcome-open">Open a Video</button>
   </div>
 
   <script>
@@ -573,8 +573,10 @@
           this._frameNum = Math.round(meta.mediaTime * this.fps);
           this._renderFrame();
           if (this.onFrameChange) this.onFrameChange(this._frameNum);
-          if (this.loop && this.inPoint !== null && this.outPoint !== null && meta.mediaTime >= this.outPoint) {
-            this.video.currentTime = this.inPoint; return;
+          const effOut = this.outPoint !== null ? this.outPoint : this.duration;
+          const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
+          if (this.loop && (this.inPoint !== null || this.outPoint !== null) && meta.mediaTime >= effOut) {
+            this.video.currentTime = effIn; return;
           }
           this._scheduleVFCB();
         });
@@ -585,8 +587,10 @@
         this._frameNum = Math.round(this.video.currentTime * this.fps);
         this._renderFrame();
         if (this.onFrameChange) this.onFrameChange(this._frameNum);
-        if (this.loop && this.inPoint !== null && this.outPoint !== null && this.video.currentTime >= this.outPoint) {
-          this.video.currentTime = this.inPoint;
+        const effOut = this.outPoint !== null ? this.outPoint : this.duration;
+        const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
+        if (this.loop && (this.inPoint !== null || this.outPoint !== null) && this.video.currentTime >= effOut) {
+          this.video.currentTime = effIn;
         }
         this._rafId = requestAnimationFrame(() => this._rafLoop());
       }
@@ -775,9 +779,11 @@
       } else {
         if (loopEnabled) {
           const entry = playlist[activeIndex];
-          if (entry.inPoint !== null && entry.outPoint !== null) {
+          if (entry.inPoint !== null || entry.outPoint !== null) {
+            const effIn = entry.inPoint !== null ? entry.inPoint : 0;
+            const effOut = entry.outPoint !== null ? entry.outPoint : player.duration;
             const t = player.getCurrentTime();
-            if (t < entry.inPoint || t >= entry.outPoint) player.seekToTime(entry.inPoint);
+            if (t < effIn || t >= effOut) player.seekToTime(effIn);
           }
         }
         player.play(); btnPlay.textContent = '⏸';
@@ -801,7 +807,7 @@
 
     function setAutoLoop() {
       const e = playlist[activeIndex];
-      if (e && e.inPoint !== null && e.outPoint !== null) {
+      if (e && (e.inPoint !== null || e.outPoint !== null)) {
         loopEnabled = true; btnLoop.classList.add('active'); player.loop = true;
       }
     }
@@ -862,15 +868,22 @@
 
     function updateInOutUI() {
       const entry = getActiveEntry();
-      if (!entry || !player.duration) {
-        scrubInout.style.cssText = 'left:0;width:0';
-        return;
+      const dur = player.duration;
+      if (!entry || !dur) { scrubInout.style.cssText = 'display:none'; return; }
+      const { inPoint, outPoint } = entry;
+      if (inPoint === null && outPoint === null) {
+        scrubInout.style.cssText = 'display:none';
+      } else if (inPoint !== null && outPoint !== null) {
+        const lp = inPoint / dur * 100;
+        const wp = (outPoint - inPoint) / dur * 100;
+        scrubInout.style.cssText = `display:block;left:${lp}%;width:${wp}%;border-left:2px solid #30c060;border-right:2px solid #e05030`;
+      } else if (inPoint !== null) {
+        const lp = inPoint / dur * 100;
+        scrubInout.style.cssText = `display:block;left:${lp}%;width:${100 - lp}%;border-left:2px solid #30c060;border-right:none`;
+      } else {
+        const wp = outPoint / dur * 100;
+        scrubInout.style.cssText = `display:block;left:0%;width:${wp}%;border-left:none;border-right:2px solid #e05030`;
       }
-      if (entry.inPoint !== null && entry.outPoint !== null) {
-        const lp = entry.inPoint / player.duration * 100;
-        const wp = (entry.outPoint - entry.inPoint) / player.duration * 100;
-        scrubInout.style.left = lp + '%'; scrubInout.style.width = wp + '%';
-      } else { scrubInout.style.left = '0'; scrubInout.style.width = '0'; }
     }
 
     function updateScrubTicks() {
