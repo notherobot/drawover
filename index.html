@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.8</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.9</span></div>
     </div>
 
     <div id="main-body">
@@ -47,11 +47,8 @@
             <label>Opacity <input type="range" id="brush-opacity" min="1" max="100" value="100"><span id="brush-opacity-val">100</span>%</label>
             <label>Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="3"><span id="laser-hold-val">3</span>s</label>
           </div>
-          <div class="tool-sep"></div>
-          <div class="tool-group">
-            <label class="tool-label">FPS <input type="number" id="fps-input" min="1" max="120" value="24"></label>
-          </div>
         </div>
+        <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
         <div id="video-container">
           <div id="video-viewport">
@@ -96,6 +93,8 @@
           <button id="btn-prev-annotation" title="Previous Drawover (↑)">◄ Drawover</button>
           <button id="btn-next-annotation" title="Next Drawover (↓)">Drawover ►</button>
           <div class="pb-sep"></div>
+          <button class="speed-btn" data-speed="0.1">0.1×</button>
+          <button class="speed-btn" data-speed="0.25">0.25×</button>
           <button class="speed-btn" data-speed="0.5">0.5×</button>
           <button class="speed-btn active" data-speed="1">1×</button>
           <button class="speed-btn" data-speed="1.5">1.5×</button>
@@ -104,15 +103,37 @@
           <button id="btn-mute" title="Mute">🔊</button>
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
+          <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
         </div>
 
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.8</span>
+          <span id="status-version">DrawOver v1.9</span>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Keyboard shortcuts panel -->
+  <div id="shortcuts-panel">
+    <h3>Keyboard Shortcuts</h3>
+    <table>
+      <tr><td>Space</td><td>Play / Pause</td></tr>
+      <tr><td>← / →</td><td>Frame back / forward</td></tr>
+      <tr><td>↑ / ↓</td><td>Prev / next annotation</td></tr>
+      <tr><td>B</td><td>Pen tool</td></tr>
+      <tr><td>E</td><td>Eraser tool</td></tr>
+      <tr><td>L</td><td>Laser tool</td></tr>
+      <tr><td>I</td><td>Set In point</td></tr>
+      <tr><td>O</td><td>Set Out point</td></tr>
+      <tr><td>Ctrl+Z</td><td>Undo</td></tr>
+      <tr><td>Ctrl+⇧+Z</td><td>Redo</td></tr>
+      <tr class="sc-section"><td colspan="2">Mouse</td></tr>
+      <tr><td>Right-drag</td><td>Zoom at click point</td></tr>
+      <tr><td>MMB drag</td><td>Pan</td></tr>
+      <tr><td>Scroll</td><td>Zoom at cursor</td></tr>
+    </table>
   </div>
 
   <!-- Eyedropper zoom preview -->
@@ -1182,6 +1203,20 @@
       sidebarResizer.addEventListener('pointerup', () => {
         sidebarResizer.classList.remove('dragging');
         resizeCanvases();
+      });
+
+      // ===== SHORTCUTS PANEL =====
+      const btnShortcuts = document.getElementById('btn-shortcuts');
+      const shortcutsPanel = document.getElementById('shortcuts-panel');
+      btnShortcuts.addEventListener('click', () => {
+        const open = shortcutsPanel.classList.toggle('open');
+        btnShortcuts.classList.toggle('active', open);
+      });
+      document.addEventListener('click', (e) => {
+        if (!shortcutsPanel.contains(e.target) && e.target !== btnShortcuts) {
+          shortcutsPanel.classList.remove('open');
+          btnShortcuts.classList.remove('active');
+        }
       });
 
       // ===== STORAGE ESTIMATE =====
