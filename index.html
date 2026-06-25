@@ -129,6 +129,7 @@
       <tr><td>O</td><td>Set Out point</td></tr>
       <tr><td>Ctrl+Z</td><td>Undo</td></tr>
       <tr><td>Ctrl+⇧+Z</td><td>Redo</td></tr>
+      <tr><td>A</td><td>Reset pan &amp; zoom</td></tr>
       <tr class="sc-section"><td colspan="2">Mouse</td></tr>
       <tr><td>Right-drag</td><td>Zoom at click point</td></tr>
       <tr><td>MMB drag</td><td>Pan</td></tr>
@@ -1128,6 +1129,7 @@
           else if (e.key === 'l' || e.key === 'L') activateTool('laser');
           else if (e.key === 'i' || e.key === 'I') btnSetIn.click();
           else if (e.key === 'o' || e.key === 'O') btnSetOut.click();
+          else if (e.key === 'a' || e.key === 'A') { panX = 0; panY = 0; vpZoom = 1; applyViewport(); }
         }
       });
 
