@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>DrawOverLMS</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖌️</text></svg>">
   <link rel="stylesheet" href="style.css">
@@ -10,13 +10,15 @@
 <body>
   <div id="app">
     <div id="topbar">
+      <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
       <div id="app-title">DrawOverLMS <span id="version">v1.5</span></div>
     </div>
 
     <div id="main-body">
+      <div id="sidebar-overlay"></div>
       <div id="sidebar">
         <button id="btn-add-video">+ Add Video</button>
-        <input type="file" id="file-input" accept="video/mp4,video/webm" multiple hidden>
+        <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*" multiple hidden>
         <div id="playlist"></div>
       </div>
       <div id="sidebar-resizer"></div>
@@ -983,6 +985,31 @@
       }
       requestAnimationFrame(laserLoop);
 
+      // ===== SIDEBAR TOGGLE =====
+      const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
+      const sidebarOverlay = document.getElementById('sidebar-overlay');
+      const isMobile = () => window.innerWidth < 640;
+
+      function setSidebarOpen(open) {
+        if (!open) {
+          sidebarEl.style.width = '';
+          sidebarEl.style.minWidth = '';
+        }
+        sidebarEl.classList.toggle('sidebar-open', open);
+        sidebarOverlay.classList.toggle('open', open);
+        btnSidebarToggle.classList.toggle('active', open);
+        if (!isMobile()) resizeCanvases();
+      }
+
+      btnSidebarToggle.addEventListener('click', () => setSidebarOpen(!sidebarEl.classList.contains('sidebar-open')));
+      sidebarOverlay.addEventListener('click', () => setSidebarOpen(false));
+
+      // On mobile, close sidebar after picking a video
+      const origLoadVideo = loadVideo;
+      // (loadVideo is defined above; close drawer on mobile after load)
+      // We hook renderPlaylist row clicks via delegation:
+      playlistEl.addEventListener('click', () => { if (isMobile()) setSidebarOpen(false); });
+
       // ===== SIDEBAR RESIZE =====
       sidebarResizer.addEventListener('pointerdown', (e) => {
         e.preventDefault();
@@ -1014,6 +1041,7 @@
       setDrawColor(drawColor);
       updateToolCursor();
       mainCanvas.style.display = 'block';
+      setSidebarOpen(!isMobile());
       resizeCanvases();
     })();
   </script>

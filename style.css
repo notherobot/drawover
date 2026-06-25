@@ -32,10 +32,31 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #version { font-size: 10px; font-weight: 400; color: #555; margin-left: 4px; }
 #main-body { display: flex; flex: 1; overflow: hidden; }
 
+/* ===== SIDEBAR TOGGLE BUTTON ===== */
+#btn-sidebar-toggle {
+  background: none; border: none; color: #aaa; font-size: 18px;
+  padding: 2px 8px; flex-shrink: 0; border-radius: 4px;
+}
+#btn-sidebar-toggle:hover { background: #2a2a2a; color: #e0e0e0; }
+#btn-sidebar-toggle.active { color: #3aa0ff; }
+
 /* ===== SIDEBAR ===== */
+#sidebar-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55); z-index: 50;
+}
+#sidebar-overlay.open { display: block; }
+
 #sidebar {
-  width: 220px; min-width: 220px; background: #1e1e1e; display: flex;
-  flex-direction: column; flex-shrink: 0; overflow: hidden;
+  background: #1e1e1e; display: flex;
+  flex-direction: column; flex-shrink: 0;
+  overflow: hidden;
+  /* Collapsed: zero width */
+  width: 0; min-width: 0;
+  transition: width 0.2s ease;
+}
+#sidebar.sidebar-open {
+  width: 220px; min-width: 220px;
 }
 #btn-add-video {
   margin: 8px; padding: 8px; background: #3aa0ff; color: #fff;
@@ -48,7 +69,10 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #sidebar-resizer {
   width: 5px; flex-shrink: 0; background: #2a2a2a; cursor: ew-resize;
   transition: background 0.15s;
+  display: none;
 }
+/* Only show resizer when sidebar is open (set via JS) */
+#sidebar.sidebar-open ~ #sidebar-resizer { display: block; }
 #sidebar-resizer:hover, #sidebar-resizer.dragging { background: #3aa0ff; }
 
 /* ===== PLAYLIST ROWS ===== */
@@ -234,3 +258,36 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   width: 100vw; height: 100vh; padding: 0;
 }
 #content:fullscreen #video-container { flex: 1; min-height: 0; }
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media (max-width: 639px) {
+  /* Sidebar becomes a fixed overlay panel */
+  #sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 51;
+    width: 0;
+  }
+  #sidebar.sidebar-open {
+    width: min(85vw, 280px);
+  }
+  /* Hide resizer on mobile — drag-to-resize not needed with overlay */
+  #sidebar-resizer { display: none; }
+
+  /* Give the topbar padding for iPhone notch */
+  #topbar { padding-top: max(6px, env(safe-area-inset-top)); }
+
+  /* Tool row: let it scroll, slightly taller touch targets */
+  #tool-row { height: auto; padding: 6px 10px; }
+  .tool-btn { width: 36px; height: 34px; }
+
+  /* Playback row: allow wrapping on very small screens */
+  #playback-row { gap: 2px; padding: 4px 6px; }
+  #playback-row button { padding: 4px 6px; font-size: 10px; }
+  #btn-play { width: 34px; height: 34px; font-size: 14px; }
+
+  /* Status bar: hide the note text, keep storage + version */
+  #status-note { display: none; }
+  #status-bar { gap: 8px; }
+
+  /* Bottom safe area */
+  #status-bar { padding-bottom: max(3px, env(safe-area-inset-bottom)); }
+}
