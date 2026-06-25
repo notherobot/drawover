@@ -27,6 +27,7 @@ input[type="color"] {
   flex-shrink: 0; min-height: 36px;
 }
 #app-title { font-size: 15px; font-weight: 600; color: #3aa0ff; letter-spacing: 0.5px; }
+#version { font-size: 10px; font-weight: 400; color: #555; letter-spacing: 0; vertical-align: middle; margin-left: 4px; }
 #topbar-actions { display: flex; gap: 6px; align-items: center; }
 #main-body { display: flex; flex: 1; overflow: hidden; }
 #sidebar {
