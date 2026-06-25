@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>DrawOverLMS</title>
+  <title>DrawOver</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖌️</text></svg>">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -273,6 +273,10 @@
     }
     #btn-welcome-open:active { opacity: 0.8; }
 
+    /* ===== SPEED BUTTONS ===== */
+    .speed-btn { height: 38px; padding: 0 10px; font-size: 12px; flex-shrink: 0; }
+    .speed-btn.active { background: #1e3550; color: #3aa0ff; border-color: #3aa0ff; }
+
     /* ===== SCROLLBARS ===== */
     ::-webkit-scrollbar { display: none; }
 
@@ -310,7 +314,7 @@
 
     <div id="topbar">
       <button id="btn-menu">☰</button>
-      <div id="app-title">DrawOverLMS <span>v1.6</span></div>
+      <div id="app-title">DrawOver <span>v1.7</span></div>
       <button id="btn-topbar-add">+ Video</button>
     </div>
 
@@ -369,6 +373,11 @@
       <div id="laser-hold-group">
         💫<input type="range" id="laser-hold" min="0" max="5" step="0.5" value="3"><span id="laser-hold-val">3</span>s
       </div>
+      <div class="tool-sep"></div>
+      <button class="speed-btn" data-speed="0.5">0.5×</button>
+      <button class="speed-btn active" data-speed="1">1×</button>
+      <button class="speed-btn" data-speed="1.5">1.5×</button>
+      <button class="speed-btn" data-speed="2">2×</button>
     </div>
   </div>
 
@@ -385,7 +394,7 @@
   <!-- Welcome / onboarding overlay — placed after all other elements so z-index wins on iOS -->
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
-    <div id="welcome-title">DrawOverLMS</div>
+    <div id="welcome-title">DrawOver</div>
     <div id="welcome-sub">Draw annotations over your videos, frame by frame. Open a video to get started.</div>
     <button id="btn-welcome-open">Open a Video</button>
   </div>
@@ -922,6 +931,14 @@
     laserHoldSlider.addEventListener('input', () => {
       laserHoldMs = parseFloat(laserHoldSlider.value) * 1000;
       laserHoldValEl.textContent = laserHoldSlider.value;
+    });
+
+    // ===== PLAYBACK SPEED =====
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        player.video.playbackRate = parseFloat(btn.dataset.speed);
+        document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', b === btn));
+      });
     });
 
     // ===== COLORS =====

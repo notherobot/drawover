@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>DrawOverLMS</title>
+  <title>DrawOver</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖌️</text></svg>">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOverLMS <span id="version">v1.6</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.7</span></div>
     </div>
 
     <div id="main-body">
@@ -32,18 +32,14 @@
             <button class="tool-btn" data-tool="eyedrop" title="Eyedropper — sample color from video">⊕</button>
           </div>
           <div class="tool-sep"></div>
-          <div class="tool-group" id="color-picker-area">
-            <button id="color-picker-btn" title="Pick Color">
-              <span id="color-preview-dot"></span>
-            </button>
-            <div id="color-panel">
-              <div id="color-grid"></div>
-              <div id="color-panel-bottom">
-                <div id="color-hover-swatch"></div>
-                <span id="color-hover-hex">#ff3333</span>
-                <input type="color" id="color-custom" value="#ff3333" title="Custom color">
-              </div>
-            </div>
+          <div class="tool-group" id="color-swatches">
+            <button class="d-swatch active" data-color="#ff3333" style="background:#ff3333" title="Red"></button>
+            <button class="d-swatch" data-color="#ff8800" style="background:#ff8800" title="Orange"></button>
+            <button class="d-swatch" data-color="#ffee00" style="background:#ffee00" title="Yellow"></button>
+            <button class="d-swatch" data-color="#33cc33" style="background:#33cc33" title="Green"></button>
+            <button class="d-swatch" data-color="#00aaff" style="background:#00aaff" title="Blue"></button>
+            <button class="d-swatch" data-color="#ffffff" style="background:#ffffff" title="White"></button>
+            <input type="color" id="color-custom" value="#ff3333" title="Custom color">
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group sliders">
@@ -98,6 +94,11 @@
           <button id="btn-prev-annotation" title="Previous Drawover (↑)">◄ Drawover</button>
           <button id="btn-next-annotation" title="Next Drawover (↓)">Drawover ►</button>
           <div class="pb-sep"></div>
+          <button class="speed-btn" data-speed="0.5">0.5×</button>
+          <button class="speed-btn active" data-speed="1">1×</button>
+          <button class="speed-btn" data-speed="1.5">1.5×</button>
+          <button class="speed-btn" data-speed="2">2×</button>
+          <div class="pb-sep"></div>
           <button id="btn-mute" title="Mute">🔊</button>
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
@@ -106,7 +107,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOverLMS v1.6</span>
+          <span id="status-version">DrawOver v1.7</span>
         </div>
       </div>
     </div>
@@ -115,7 +116,7 @@
   <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
-    <div id="welcome-title">DrawOverLMS</div>
+    <div id="welcome-title">DrawOver</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -179,12 +180,7 @@
       const toolBtns = document.querySelectorAll('.tool-btn');
 
       // Color picker refs
-      const colorPickerBtn = document.getElementById('color-picker-btn');
-      const colorPreviewDot = document.getElementById('color-preview-dot');
-      const colorPanel = document.getElementById('color-panel');
-      const colorGrid = document.getElementById('color-grid');
-      const colorHoverSwatch = document.getElementById('color-hover-swatch');
-      const colorHoverHex = document.getElementById('color-hover-hex');
+      const colorSwatchBtns = document.querySelectorAll('.d-swatch');
       const colorCustom = document.getElementById('color-custom');
 
       // ===== STATE =====
@@ -319,8 +315,10 @@
             this._frameNum = Math.round(meta.mediaTime * this.fps);
             this._renderFrame();
             if (this.onFrameChange) this.onFrameChange(this._frameNum);
-            if (this.loop && this.inPoint !== null && this.outPoint !== null && meta.mediaTime >= this.outPoint) {
-              this.video.currentTime = this.inPoint; return;
+            const effOut = this.outPoint !== null ? this.outPoint : this.duration;
+            const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
+            if (this.loop && (this.inPoint !== null || this.outPoint !== null) && meta.mediaTime >= effOut) {
+              this.video.currentTime = effIn; return;
             }
             this._scheduleVFCB();
           });
@@ -331,8 +329,10 @@
           this._frameNum = Math.round(this.video.currentTime * this.fps);
           this._renderFrame();
           if (this.onFrameChange) this.onFrameChange(this._frameNum);
-          if (this.loop && this.inPoint !== null && this.outPoint !== null && this.video.currentTime >= this.outPoint) {
-            this.video.currentTime = this.inPoint;
+          const effOut = this.outPoint !== null ? this.outPoint : this.duration;
+          const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
+          if (this.loop && (this.inPoint !== null || this.outPoint !== null) && this.video.currentTime >= effOut) {
+            this.video.currentTime = effIn;
           }
           this._rafId = requestAnimationFrame(() => this._rafLoop());
         }
@@ -489,9 +489,11 @@
         } else {
           if (loopEnabled) {
             const entry = playlist[activeIndex];
-            if (entry.inPoint !== null && entry.outPoint !== null) {
+            if (entry.inPoint !== null || entry.outPoint !== null) {
+              const effIn = entry.inPoint !== null ? entry.inPoint : 0;
+              const effOut = entry.outPoint !== null ? entry.outPoint : player.duration;
               const t = player.getCurrentTime();
-              if (t < entry.inPoint || t >= entry.outPoint) player.seekToTime(entry.inPoint);
+              if (t < effIn || t >= effOut) player.seekToTime(effIn);
             }
           }
           player.play(); btnPlay.textContent = '⏸';
@@ -515,7 +517,7 @@
 
       function setAutoLoop() {
         const e = playlist[activeIndex];
-        if (e && e.inPoint !== null && e.outPoint !== null) {
+        if (e && (e.inPoint !== null || e.outPoint !== null)) {
           loopEnabled = true;
           btnLoop.classList.add('active');
           player.loop = true;
@@ -630,25 +632,34 @@
 
       function updateInOutUI() {
         const entry = getActiveEntry();
-        if (!entry || !player.duration) {
-          scrubInout.style.cssText = 'left:0;width:0';
+        const dur = player.duration;
+        if (!entry || !dur) {
+          scrubInout.style.cssText = 'display:none';
           scrubInHandle.style.display = 'none';
           scrubOutHandle.style.display = 'none';
           return;
         }
-        if (entry.inPoint !== null) {
-          scrubInHandle.style.left = (entry.inPoint / player.duration * 100) + '%';
+        const { inPoint, outPoint } = entry;
+        // Drag handles
+        if (inPoint !== null) {
+          scrubInHandle.style.left = (inPoint / dur * 100) + '%';
           scrubInHandle.style.display = '';
         } else { scrubInHandle.style.display = 'none'; }
-        if (entry.outPoint !== null) {
-          scrubOutHandle.style.left = (entry.outPoint / player.duration * 100) + '%';
+        if (outPoint !== null) {
+          scrubOutHandle.style.left = (outPoint / dur * 100) + '%';
           scrubOutHandle.style.display = '';
         } else { scrubOutHandle.style.display = 'none'; }
-        if (entry.inPoint !== null && entry.outPoint !== null) {
-          const lp = entry.inPoint / player.duration * 100;
-          const wp = (entry.outPoint - entry.inPoint) / player.duration * 100;
-          scrubInout.style.left = lp + '%'; scrubInout.style.width = wp + '%';
-        } else { scrubInout.style.left = '0'; scrubInout.style.width = '0'; }
+        // Shaded region
+        if (inPoint === null && outPoint === null) {
+          scrubInout.style.cssText = 'display:none';
+        } else if (inPoint !== null && outPoint !== null) {
+          const lp = inPoint / dur * 100, wp = (outPoint - inPoint) / dur * 100;
+          scrubInout.style.cssText = `display:block;left:${lp}%;width:${wp}%;border-left:2px solid #30c060;border-right:2px solid #e05030`;
+        } else if (inPoint !== null) {
+          scrubInout.style.cssText = `display:block;left:${inPoint / dur * 100}%;width:${100 - inPoint / dur * 100}%;border-left:2px solid #30c060;border-right:none`;
+        } else {
+          scrubInout.style.cssText = `display:block;left:0;width:${outPoint / dur * 100}%;border-left:none;border-right:2px solid #e05030`;
+        }
       }
 
       function updateScrubTicks() {
@@ -722,49 +733,30 @@
         laserHoldValEl.textContent = laserHoldSlider.value;
       });
 
-      // ===== COLOR PICKER =====
-      const PALETTE = [
-        '#ff3333', '#ff8800', '#ffee00', '#33cc33',
-        '#00aaff', '#cc33cc', '#ffffff', '#000000',
-      ];
-
-      PALETTE.forEach(hex => {
-        const cell = document.createElement('button');
-        cell.className = 'color-cell';
-        cell.style.background = hex;
-        cell.dataset.color = hex;
-        cell.title = hex;
-        cell.addEventListener('mouseenter', () => {
-          colorHoverSwatch.style.background = hex;
-          colorHoverHex.textContent = hex;
-        });
-        cell.addEventListener('click', () => { setDrawColor(hex); closeColorPanel(); });
-        colorGrid.appendChild(cell);
-      });
-
+      // ===== COLOR SWATCHES =====
       function setDrawColor(hex) {
         drawColor = hex;
-        colorPreviewDot.style.background = hex;
         colorCustom.value = hex;
-        colorHoverSwatch.style.background = hex;
-        colorHoverHex.textContent = hex;
+        colorSwatchBtns.forEach(s => s.classList.toggle('active', s.dataset.color === hex));
       }
 
-      function closeColorPanel() {
-        colorPanel.classList.remove('open');
-      }
-
-      colorPickerBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        colorPanel.classList.toggle('open');
+      colorSwatchBtns.forEach(swatch => {
+        swatch.addEventListener('click', () => setDrawColor(swatch.dataset.color));
       });
 
-      document.addEventListener('click', (e) => {
-        if (!colorPanel.contains(e.target) && e.target !== colorPickerBtn) closeColorPanel();
+      colorCustom.addEventListener('input', () => {
+        drawColor = colorCustom.value;
+        colorSwatchBtns.forEach(s => s.classList.remove('active'));
       });
+      colorCustom.addEventListener('change', () => setDrawColor(colorCustom.value));
 
-      colorCustom.addEventListener('input', () => { setDrawColor(colorCustom.value); });
-      colorCustom.addEventListener('change', () => { setDrawColor(colorCustom.value); closeColorPanel(); });
+      // ===== PLAYBACK SPEED =====
+      document.querySelectorAll('.speed-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          player.video.playbackRate = parseFloat(btn.dataset.speed);
+          document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+      });
 
       // ===== EYEDROPPER =====
       function sampleColorFromCanvas(pos) {
