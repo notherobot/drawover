@@ -250,6 +250,29 @@
     }
     #laser-hold-group span { min-width: 18px; color: #ccc; }
 
+    /* ===== WELCOME OVERLAY ===== */
+    #welcome-overlay {
+      position: fixed; inset: 0; z-index: 300;
+      background: #0d0d0d;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 40px 32px;
+      padding-top: calc(40px + env(safe-area-inset-top));
+      padding-bottom: calc(40px + env(safe-area-inset-bottom));
+      transition: opacity 0.4s ease;
+    }
+    #welcome-overlay.dismissing { opacity: 0; pointer-events: none; }
+    #welcome-overlay.hidden { display: none; }
+    #welcome-icon { font-size: 72px; margin-bottom: 20px; line-height: 1; }
+    #welcome-title { font-size: 26px; font-weight: 700; color: #3aa0ff; margin-bottom: 8px; text-align: center; }
+    #welcome-sub { font-size: 14px; color: #666; text-align: center; margin-bottom: 48px; line-height: 1.5; max-width: 280px; }
+    #btn-welcome-open {
+      background: #3aa0ff; color: #fff; border: none; border-radius: 14px;
+      font-size: 17px; font-weight: 700; padding: 18px 48px;
+      width: 100%; max-width: 300px;
+    }
+    #btn-welcome-open:active { opacity: 0.8; }
+
     /* ===== SCROLLBARS ===== */
     ::-webkit-scrollbar { display: none; }
 
@@ -267,6 +290,14 @@
   </style>
 </head>
 <body>
+
+  <!-- Welcome / onboarding overlay -->
+  <div id="welcome-overlay">
+    <div id="welcome-icon">🖌️</div>
+    <div id="welcome-title">DrawOverLMS</div>
+    <div id="welcome-sub">Draw annotations over your videos, frame by frame. Open a video to get started.</div>
+    <button id="btn-welcome-open">Open a Video</button>
+  </div>
 
   <!-- Drawer overlay -->
   <div id="drawer-overlay"></div>
@@ -287,7 +318,7 @@
 
     <div id="topbar">
       <button id="btn-menu">☰</button>
-      <div id="app-title">DrawOverLMS <span>v1.5</span></div>
+      <div id="app-title">DrawOverLMS <span>v1.6</span></div>
       <button id="btn-topbar-add">+ Video</button>
     </div>
 
@@ -403,6 +434,10 @@
     const laserHoldSlider = document.getElementById('laser-hold');
     const laserHoldValEl = document.getElementById('laser-hold-val');
     const toolBtns = document.querySelectorAll('.tool-btn');
+
+    // Welcome overlay
+    const welcomeOverlay = document.getElementById('welcome-overlay');
+    const btnWelcomeOpen = document.getElementById('btn-welcome-open');
 
     // Drawer
     const drawer = document.getElementById('drawer');
@@ -588,6 +623,16 @@
     player.onFrameChange = () => { redrawPenCanvas(); updateScrubBar(); updateScrubTimes(); };
     player.onDurationChange = (dur) => { scrubTotal.textContent = formatTimecode(dur); updateScrubTicks(); };
 
+    // ===== WELCOME =====
+    function dismissWelcome() {
+      if (welcomeOverlay.classList.contains('hidden')) return;
+      welcomeOverlay.classList.add('dismissing');
+      welcomeOverlay.addEventListener('transitionend', () => {
+        welcomeOverlay.classList.add('hidden');
+      }, { once: true });
+    }
+    btnWelcomeOpen.addEventListener('click', () => fileInput.click());
+
     // ===== DRAWER =====
     function openDrawer() {
       drawer.classList.add('open');
@@ -631,6 +676,7 @@
 
     fileInput.addEventListener('change', async (e) => {
       closeDrawer();
+      dismissWelcome();
       const files = Array.from(e.target.files);
       const firstNewIdx = playlist.length;
       for (const file of files) {
