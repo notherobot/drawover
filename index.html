@@ -1,1070 +1,881 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DrawOverLMS</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DrawOverLMS</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="app">
-  <div id="topbar">
-    <div id="app-title">DrawOverLMS</div>
-    <div id="topbar-actions">
-      <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
-      <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
-      <button id="btn-toggle-drawings" title="Show/Hide Drawings">👁 Hide Drawings</button>
-      <button id="btn-fullscreen" title="Fullscreen">⛶ Fullscreen</button>
+  <div id="app">
+    <div id="topbar">
+      <div id="app-title">DrawOverLMS</div>
+      <div id="topbar-actions">
+        <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+        <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
+        <button id="btn-toggle-drawings" title="Show/Hide Drawings">👁 Hide Drawings</button>
+        <button id="btn-fullscreen" title="Fullscreen">⛶ Fullscreen</button>
+      </div>
+    </div>
+
+    <div id="main-body">
+      <div id="sidebar">
+        <button id="btn-add-video">+ Add Video</button>
+        <input type="file" id="file-input" accept="video/mp4,video/webm" multiple hidden>
+        <div id="playlist"></div>
+      </div>
+
+      <div id="content">
+        <div id="tool-row">
+          <div class="tool-group">
+            <button class="tool-btn active" data-tool="pen" title="Pen Tool">✏ Pen</button>
+            <button class="tool-btn" data-tool="laser" title="Laser Tool">⚡ Laser</button>
+            <button class="tool-btn" data-tool="eraser" title="Eraser Tool">◻ Eraser</button>
+          </div>
+          <div class="tool-group">
+            <div class="swatch" data-color="#ff3333" style="background:#ff3333" title="Red"></div>
+            <div class="swatch" data-color="#ffcc00" style="background:#ffcc00" title="Yellow"></div>
+            <div class="swatch" data-color="#33cc33" style="background:#33cc33" title="Green"></div>
+            <div class="swatch" data-color="#00cccc" style="background:#00cccc" title="Cyan"></div>
+            <div class="swatch" data-color="#cc33cc" style="background:#cc33cc" title="Magenta"></div>
+            <div class="swatch" data-color="#ffffff" style="background:#ffffff" title="White"></div>
+            <input type="color" id="color-picker" value="#ff3333" title="Custom Color">
+          </div>
+          <div class="tool-group">
+            <label>
+              Size:
+              <input type="range" id="brush-size" min="1" max="40" step="1" value="4">
+              <span id="brush-size-val">4</span>
+            </label>
+          </div>
+          <div class="tool-group">
+            <label>
+              Opacity:
+              <input type="range" id="brush-opacity" min="0" max="1" step="0.05" value="1">
+              <span id="brush-opacity-val">1.00</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="video-container">
+          <canvas id="main-canvas"></canvas>
+          <canvas id="pen-canvas"></canvas>
+          <canvas id="laser-canvas"></canvas>
+        </div>
+
+        <div id="scrub-bar-container">
+          <div id="scrub-bar">
+            <div id="scrub-progress"></div>
+            <div id="scrub-inout"></div>
+            <div id="scrub-ticks"></div>
+            <div id="scrub-playhead"></div>
+          </div>
+          <div id="scrub-times">
+            <span id="scrub-current">00:00</span> / <span id="scrub-total">00:00</span>
+          </div>
+        </div>
+
+        <div id="playback-row">
+          <button id="btn-play" title="Play/Pause (Space)">▶ Play</button>
+          <button id="btn-frame-back" title="Frame Back (←)">|◀</button>
+          <button id="btn-frame-fwd" title="Frame Forward (→)">▶|</button>
+          <button id="btn-set-in" title="Set In Point">Set In</button>
+          <button id="btn-set-out" title="Set Out Point">Set Out</button>
+          <button id="btn-clear-inout" title="Clear In/Out">Clear In/Out</button>
+          <button id="btn-loop" title="Loop In/Out">Loop</button>
+          <label>FPS: <input type="number" id="fps-input" min="1" max="120" value="24" style="width:50px"></label>
+          <button id="btn-mute" title="Mute">🔊</button>
+          <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
+        </div>
+      </div>
     </div>
   </div>
 
-  <div id="main-body">
-    <div id="sidebar">
-      <button id="btn-add-video">+ Add Video</button>
-      <input type="file" id="file-input" accept="video/mp4" multiple hidden>
-      <div id="playlist"></div>
-    </div>
+  <script>
+    (function () {
+      'use strict';
 
-    <div id="content">
-      <div id="tool-row">
-        <div class="tool-group">
-          <button class="tool-btn active" data-tool="pen" title="Pen Tool">✏ Pen</button>
-          <button class="tool-btn" data-tool="laser" title="Laser Tool">⚡ Laser</button>
-          <button class="tool-btn" data-tool="eraser" title="Eraser Tool">◻ Eraser</button>
-        </div>
-        <div class="tool-group">
-          <div class="swatch" data-color="#ff3333" style="background:#ff3333" title="Red"></div>
-          <div class="swatch" data-color="#ffcc00" style="background:#ffcc00" title="Yellow"></div>
-          <div class="swatch" data-color="#33cc33" style="background:#33cc33" title="Green"></div>
-          <div class="swatch" data-color="#00cccc" style="background:#00cccc" title="Cyan"></div>
-          <div class="swatch" data-color="#cc33cc" style="background:#cc33cc" title="Magenta"></div>
-          <div class="swatch" data-color="#ffffff" style="background:#ffffff" title="White"></div>
-          <input type="color" id="color-picker" value="#ff3333" title="Custom Color">
-        </div>
-        <div class="tool-group">
-          <label>Size: <input type="range" id="brush-size" min="1" max="40" step="1" value="4"> <span id="brush-size-val">4</span></label>
-        </div>
-        <div class="tool-group">
-          <label>Opacity: <input type="range" id="brush-opacity" min="0" max="1" step="0.05" value="1"> <span id="brush-opacity-val">1.00</span></label>
-        </div>
-      </div>
+      // ===== DOM REFS =====
+      const mainCanvas = document.getElementById('main-canvas');
+      const penCanvas = document.getElementById('pen-canvas');
+      const laserCanvas = document.getElementById('laser-canvas');
+      const mainCtx = mainCanvas.getContext('2d');
+      const penCtx = penCanvas.getContext('2d');
+      const laserCtx = laserCanvas.getContext('2d');
+      const videoContainer = document.getElementById('video-container');
+      const scrubBar = document.getElementById('scrub-bar');
+      const scrubProgress = document.getElementById('scrub-progress');
+      const scrubInout = document.getElementById('scrub-inout');
+      const scrubTicks = document.getElementById('scrub-ticks');
+      const scrubPlayhead = document.getElementById('scrub-playhead');
+      const scrubCurrent = document.getElementById('scrub-current');
+      const scrubTotal = document.getElementById('scrub-total');
+      const playlistEl = document.getElementById('playlist');
+      const fileInput = document.getElementById('file-input');
+      const btnAddVideo = document.getElementById('btn-add-video');
+      const btnPlay = document.getElementById('btn-play');
+      const btnFrameBack = document.getElementById('btn-frame-back');
+      const btnFrameFwd = document.getElementById('btn-frame-fwd');
+      const btnSetIn = document.getElementById('btn-set-in');
+      const btnSetOut = document.getElementById('btn-set-out');
+      const btnClearInOut = document.getElementById('btn-clear-inout');
+      const btnLoop = document.getElementById('btn-loop');
+      const fpsInput = document.getElementById('fps-input');
+      const btnMute = document.getElementById('btn-mute');
+      const volumeSlider = document.getElementById('volume-slider');
+      const btnUndo = document.getElementById('btn-undo');
+      const btnRedo = document.getElementById('btn-redo');
+      const btnToggleDrawings = document.getElementById('btn-toggle-drawings');
+      const btnFullscreen = document.getElementById('btn-fullscreen');
+      const brushSizeSlider = document.getElementById('brush-size');
+      const brushSizeVal = document.getElementById('brush-size-val');
+      const brushOpacitySlider = document.getElementById('brush-opacity');
+      const brushOpacityVal = document.getElementById('brush-opacity-val');
+      const colorPicker = document.getElementById('color-picker');
+      const toolBtns = document.querySelectorAll('.tool-btn');
+      const swatches = document.querySelectorAll('.swatch');
 
-      <div id="video-container">
-        <canvas id="main-canvas"></canvas>
-        <canvas id="pen-canvas"></canvas>
-        <canvas id="laser-canvas"></canvas>
-      </div>
+      // ===== STATE =====
+      let playlist = [];
+      let activeIndex = -1;
+      let currentTool = 'pen';
+      let drawColor = '#ff3333';
+      let brushSize = 4;
+      let brushOpacity = 1;
+      let drawingsVisible = true;
+      let loopEnabled = false;
 
-      <div id="scrub-bar-container">
-        <div id="scrub-bar">
-          <div id="scrub-progress"></div>
-          <div id="scrub-inout"></div>
-          <div id="scrub-ticks"></div>
-          <div id="scrub-playhead"></div>
-        </div>
-        <div id="scrub-times">
-          <span id="scrub-current">00:00</span> / <span id="scrub-total">00:00</span>
-        </div>
-      </div>
+      // Laser state
+      let laserStrokes = [];
+      let lastLaserInputTime = 0;
+      let laserFadeOpacity = 1;
+      let laserFading = false;
+      let laserFadeStart = 0;
+      const LASER_FADE_DURATION = 500;
+      const LASER_IDLE_THRESHOLD = 3000;
 
-      <div id="playback-row">
-        <button id="btn-play" title="Play/Pause (Space)">▶ Play</button>
-        <button id="btn-frame-back" title="Frame Back (←)">|◀</button>
-        <button id="btn-frame-fwd" title="Frame Forward (→)">▶|</button>
-        <button id="btn-set-in" title="Set In Point">Set In</button>
-        <button id="btn-set-out" title="Set Out Point">Set Out</button>
-        <button id="btn-clear-inout" title="Clear In/Out">Clear In/Out</button>
-        <button id="btn-loop" title="Loop In/Out">Loop</button>
-        <label>FPS: <input type="number" id="fps-input" min="1" max="120" value="24" style="width:50px"></label>
-        <button id="btn-mute" title="Mute">🔊</button>
-        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
-      </div>
-    </div>
-  </div>
-</div>
+      // Drawing state
+      let isDrawing = false;
+      let currentStroke = null;
+      let isErasing = false;
 
-<script>
-(function() {
-  'use strict';
+      // Scrub dragging
+      let isScrubbing = false;
 
-  if (!window.VideoDecoder) {
-    alert('WebCodecs API not supported. Please use Chrome/Edge 94+ or Safari 16.4+');
-    return;
-  }
+      // ===== HELPERS =====
+      function formatTime(seconds) {
+        if (isNaN(seconds) || !isFinite(seconds)) return '00:00';
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+      }
 
-  // ===== DOM REFS =====
-  const mainCanvas = document.getElementById('main-canvas');
-  const penCanvas = document.getElementById('pen-canvas');
-  const laserCanvas = document.getElementById('laser-canvas');
-  const mainCtx = mainCanvas.getContext('2d');
-  const penCtx = penCanvas.getContext('2d');
-  const laserCtx = laserCanvas.getContext('2d');
-  const videoContainer = document.getElementById('video-container');
-  const scrubBar = document.getElementById('scrub-bar');
-  const scrubProgress = document.getElementById('scrub-progress');
-  const scrubInout = document.getElementById('scrub-inout');
-  const scrubTicks = document.getElementById('scrub-ticks');
-  const scrubPlayhead = document.getElementById('scrub-playhead');
-  const scrubCurrent = document.getElementById('scrub-current');
-  const scrubTotal = document.getElementById('scrub-total');
-  const playlistEl = document.getElementById('playlist');
-  const fileInput = document.getElementById('file-input');
-  const btnAddVideo = document.getElementById('btn-add-video');
-  const btnPlay = document.getElementById('btn-play');
-  const btnFrameBack = document.getElementById('btn-frame-back');
-  const btnFrameFwd = document.getElementById('btn-frame-fwd');
-  const btnSetIn = document.getElementById('btn-set-in');
-  const btnSetOut = document.getElementById('btn-set-out');
-  const btnClearInOut = document.getElementById('btn-clear-inout');
-  const btnLoop = document.getElementById('btn-loop');
-  const fpsInput = document.getElementById('fps-input');
-  const btnMute = document.getElementById('btn-mute');
-  const volumeSlider = document.getElementById('volume-slider');
-  const btnUndo = document.getElementById('btn-undo');
-  const btnRedo = document.getElementById('btn-redo');
-  const btnToggleDrawings = document.getElementById('btn-toggle-drawings');
-  const btnFullscreen = document.getElementById('btn-fullscreen');
-  const brushSizeSlider = document.getElementById('brush-size');
-  const brushSizeVal = document.getElementById('brush-size-val');
-  const brushOpacitySlider = document.getElementById('brush-opacity');
-  const brushOpacityVal = document.getElementById('brush-opacity-val');
-  const colorPicker = document.getElementById('color-picker');
-  const toolBtns = document.querySelectorAll('.tool-btn');
-  const swatches = document.querySelectorAll('.swatch');
+      function getFPS() {
+        const v = parseInt(fpsInput.value, 10);
+        return (v >= 1 && v <= 120) ? v : 24;
+      }
 
-  // ===== STATE =====
-  let playlist = [];
-  let activeIndex = -1;
-  let currentTool = 'pen';
-  let drawColor = '#ff3333';
-  let brushSize = 4;
-  let brushOpacity = 1;
-  let drawingsVisible = true;
-  let loopEnabled = false;
+      function getActiveVideoState() {
+        if (activeIndex < 0 || activeIndex >= playlist.length) return null;
+        return playlist[activeIndex];
+      }
 
-  let laserStrokes = [];
-  let lastLaserInputTime = 0;
-  let laserFadeOpacity = 1;
-  let laserFading = false;
-  let laserFadeStart = 0;
-  const LASER_FADE_DURATION = 500;
-  const LASER_IDLE_THRESHOLD = 3000;
+      // ===== VIDEO PLAYER =====
+      // Uses a hidden <video> element for broad codec support.
+      // requestVideoFrameCallback (Chrome/Edge 83+, Safari 15.4+) is used when available
+      // so frame numbers are derived from the browser's actual presented-frame metadata
+      // rather than floating-point currentTime math, giving sub-frame accuracy during
+      // playback. For seeks/stepping we use a tiny epsilon offset so floating-point
+      // rounding never lands us on the wrong side of a frame boundary.
+      class FramePlayer {
+        constructor(canvas, ctx) {
+          this.canvas = canvas;
+          this.ctx = ctx;
 
-  let isDrawing = false;
-  let currentStroke = null;
-  let isErasing = false;
-  let isScrubbing = false;
+          this.video = document.createElement('video');
+          this.video.preload = 'auto';
+          this.video.playsInline = true;
+          this.video.style.display = 'none';
+          document.body.appendChild(this.video);
 
-  // ===== HELPERS =====
-  function formatTime(seconds) {
-    if (isNaN(seconds) || !isFinite(seconds)) return '00:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-  }
+          this.fps = 24;
+          this.playing = false;
+          this.duration = 0;
+          this.inPoint = null;
+          this.outPoint = null;
+          this.loop = false;
+          this.onFrameChange = null;
+          this.onDurationChange = null;
 
-  function getFPS() {
-    const v = parseInt(fpsInput.value, 10);
-    return (v >= 1 && v <= 120) ? v : 24;
-  }
+          this._frameNum = 0;
+          this._rafId = null;
+          this._hasVFCB = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
 
-  function getActiveVideoState() {
-    if (activeIndex < 0 || activeIndex >= playlist.length) return null;
-    return playlist[activeIndex];
-  }
+          // After any seek (step, scrub, loop) — sync frame and render
+          this.video.addEventListener('seeked', () => {
+            this._frameNum = this._timeToFrame(this.video.currentTime);
+            this._renderFrame();
+            if (this.onFrameChange) this.onFrameChange(this._frameNum);
+          });
 
-  // ===== MP4 PARSER (ISO 14496-12 Compliant) =====
-  class MP4Parser {
-    constructor(buffer) {
-      this.view = new DataView(buffer);
-      this.buffer = buffer;
-      this.tracks = [];
-    }
-
-    readBox(offset, size) {
-      if (offset + 8 > this.buffer.byteLength) return null;
-      const boxSize = this.view.getUint32(offset);
-      const type = String.fromCharCode(...new Uint8Array(this.buffer, offset + 4, 4));
-      const dataOffset = offset + 8;
-      const dataSize = boxSize - 8;
-      return { type, size: boxSize, offset: dataOffset, sizeData: dataSize };
-    }
-
-    parseBoxes(parentOffset, parentSize, path = []) {
-      let offset = parentOffset;
-      const end = parentOffset + parentSize;
-      while (offset + 8 <= end) {
-        const boxSize = this.view.getUint32(offset);
-        if (boxSize < 8 || offset + boxSize > end) break;
-        const type = String.fromCharCode(...new Uint8Array(this.buffer, offset + 4, 4));
-        const dataOffset = offset + 8;
-        const dataSize = boxSize - 8;
-
-        if (type === 'moov' || type === 'trak' || type === 'mdia' || type === 'minf' || type === 'stbl') {
-          this.parseBoxes(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'stsd') {
-          this.parseSampleDesc(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'stts') {
-          this.parseTimeToSample(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'stsc') {
-          this.parseSampleToChunk(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'stco') {
-          this.parseChunkOffset(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'co64') {
-          this.parseChunkOffset64(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'stsz') {
-          this.parseSampleSize(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'avcC') {
-          this.parseAVCC(dataOffset, dataSize, [...path, type]);
-        } else if (type === 'mdhd') {
-          this.parseMediaHeader(dataOffset, dataSize, [...path, type]);
+          this.video.addEventListener('ended', () => {
+            this.playing = false;
+            this._cancelRAF();
+            btnPlay.textContent = '▶ Play';
+            if (this.onFrameChange) this.onFrameChange(this._frameNum);
+          });
         }
-        offset += boxSize;
-      }
-    }
 
-    parseMediaHeader(offset, size, path) {
-      const version = this.view.getUint8(offset);
-      const dataOffset = offset + (version === 0 ? 12 : 20);
-      const timescale = this.view.getUint32(dataOffset);
-      const duration = this.view.getUint32(dataOffset + 4);
-      const track = this.tracks[this.tracks.length - 1];
-      if (track) {
-        track.timescale = timescale;
-        track.duration = duration;
-      }
-    }
+        get currentFrame() { return this._frameNum; }
 
-    parseSampleDesc(offset, size, path) {
-      const entryCount = this.view.getUint32(offset + 8);
-      let pos = offset + 12;
-      for (let i = 0; i < entryCount; i++) {
-        const boxSize = this.view.getUint32(pos);
-        const type = String.fromCharCode(...new Uint8Array(this.buffer, pos + 4, 4));
-        if (type === 'avc1' || type === 'avc3') {
-          const track = this.tracks[this.tracks.length - 1];
-          track.codec = 'avc1';
-          track.width = this.view.getUint16(pos + 24);
-          track.height = this.view.getUint16(pos + 26);
+        _timeToFrame(t) {
+          return Math.round(t * this.fps);
         }
-        pos += boxSize;
-      }
-    }
 
-    parseAVCC(offset, size, path) {
-      const track = this.tracks[this.tracks.length - 1];
-      if (!track) return;
-      track.avcC = new Uint8Array(this.buffer, offset, size);
-      // Extract profile/level for codec string
-      const profile = track.avcC[1];
-      const level = track.avcC[3];
-      track.codecString = `avc1.${profile.toString(16).padStart(2,'0')}${level.toString(16).padStart(2,'0')}00`;
-    }
-
-    parseTimeToSample(offset, size, path) {
-      const entryCount = this.view.getUint32(offset + 8);
-      let pos = offset + 12;
-      const track = this.tracks[this.tracks.length - 1];
-      track.stts = [];
-      for (let i = 0; i < entryCount; i++) {
-        track.stts.push({
-          count: this.view.getUint32(pos),
-          delta: this.view.getUint32(pos + 4)
-        });
-        pos += 8;
-      }
-    }
-
-    parseSampleToChunk(offset, size, path) {
-      const entryCount = this.view.getUint32(offset + 8);
-      let pos = offset + 12;
-      const track = this.tracks[this.tracks.length - 1];
-      track.stsc = [];
-      for (let i = 0; i < entryCount; i++) {
-        track.stsc.push({
-          firstChunk: this.view.getUint32(pos),
-          samplesPerChunk: this.view.getUint32(pos + 4),
-          descIndex: this.view.getUint32(pos + 8)
-        });
-        pos += 12;
-      }
-    }
-
-    parseChunkOffset(offset, size, path) {
-      const entryCount = this.view.getUint32(offset + 8);
-      let pos = offset + 12;
-      const track = this.tracks[this.tracks.length - 1];
-      track.stco = [];
-      for (let i = 0; i < entryCount; i++) {
-        track.stco.push(this.view.getUint32(pos));
-        pos += 4;
-      }
-    }
-
-    parseChunkOffset64(offset, size, path) {
-      const entryCount = this.view.getUint32(offset + 8);
-      let pos = offset + 12;
-      const track = this.tracks[this.tracks.length - 1];
-      track.stco = [];
-      for (let i = 0; i < entryCount; i++) {
-        const hi = this.view.getUint32(pos);
-        const lo = this.view.getUint32(pos + 4);
-        track.stco.push(hi * 0x100000000 + lo);
-        pos += 8;
-      }
-    }
-
-    parseSampleSize(offset, size, path) {
-      const track = this.tracks[this.tracks.length - 1];
-      track.sampleSize = this.view.getUint32(offset + 8);
-      if (track.sampleSize === 0) {
-        const entryCount = this.view.getUint32(offset + 12);
-        let pos = offset + 16;
-        track.stsz = [];
-        for (let i = 0; i < entryCount; i++) {
-          track.stsz.push(this.view.getUint32(pos));
-          pos += 4;
+        _frameToTime(f) {
+          // Tiny epsilon keeps floating-point from landing just before the frame boundary
+          return f / this.fps + 1e-5;
         }
-      }
-    }
 
-    buildSamples() {
-      const track = this.tracks.find(t => t.codec === 'avc1');
-      if (!track || !track.stco || !track.stsc || !track.stts) return [];
+        async load(objectUrl, fps) {
+          this.pause();
+          this.fps = fps;
+          this._frameNum = 0;
+          this.video.src = objectUrl;
 
-      const samples = [];
-      let sampleIndex = 0;
-      let chunkIndex = 1;
-      let stscIdx = 0;
-      let samplesInChunk = 0;
-      let currentTime = 0;
-      let sttsIdx = 0;
-      let sttsCount = 0;
-
-      const totalSamples = track.stsz ? track.stsz.length : 999999;
-
-      for (let i = 0; i < totalSamples; i++) {
-        if (stscIdx < track.stsc.length - 1 && chunkIndex === track.stsc[stscIdx + 1].firstChunk) {
-          stscIdx++;
-          samplesInChunk = 0;
+          return new Promise((resolve, reject) => {
+            const onReady = () => {
+              cleanup();
+              this.duration = this.video.duration;
+              this.canvas.width = this.video.videoWidth || 1280;
+              this.canvas.height = this.video.videoHeight || 720;
+              if (this.onDurationChange) this.onDurationChange(this.duration);
+              this._renderFrame();
+              if (this.onFrameChange) this.onFrameChange(0);
+              resolve();
+            };
+            const onError = () => {
+              cleanup();
+              reject(new Error('Failed to load video. Ensure it is a supported format (MP4/H.264 or WebM).'));
+            };
+            const cleanup = () => {
+              this.video.removeEventListener('loadeddata', onReady);
+              this.video.removeEventListener('error', onError);
+            };
+            this.video.addEventListener('loadeddata', onReady);
+            this.video.addEventListener('error', onError);
+            this.video.load();
+          });
         }
-        const samplesPerChunk = track.stsc[stscIdx].samplesPerChunk;
-        const chunkOffset = track.stco[chunkIndex - 1] || 0;
-        const sampleSize = track.stsz ? track.stsz[i] : track.sampleSize;
 
-        // Calculate timestamp from stts
-        if (sttsCount >= track.stts[sttsIdx].count) {
-          sttsIdx++;
-          sttsCount = 0;
+        _renderFrame() {
+          if (this.video.readyState < 2) return;
+          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
         }
-        const delta = track.stts[sttsIdx].delta;
-        const timestamp = currentTime;
-        currentTime += delta;
-        sttsCount++;
 
-        samples.push({
-          offset: chunkOffset,
-          size: sampleSize,
-          timestamp: timestamp,
-          duration: delta,
-          index: sampleIndex++
-        });
-
-        chunkOffset += sampleSize;
-        samplesInChunk++;
-        if (samplesInChunk >= samplesPerChunk) {
-          chunkIndex++;
-          samplesInChunk = 0;
+        _cancelRAF() {
+          if (this._rafId !== null) { cancelAnimationFrame(this._rafId); this._rafId = null; }
         }
-      }
-      return samples;
-    }
 
-    parse() {
-      this.parseBoxes(0, this.buffer.byteLength);
-      const track = this.tracks.find(t => t.codec === 'avc1');
-      if (!track) return null;
-      track.samples = this.buildSamples();
-      track.durationSeconds = track.duration / track.timescale;
-      return track;
-    }
-  }
+        // requestVideoFrameCallback path: fires exactly once per displayed frame,
+        // giving us the real mediaTime the browser used for that frame.
+        _scheduleVFCB() {
+          if (!this.playing) return;
+          this.video.requestVideoFrameCallback((_, meta) => {
+            if (!this.playing) return;
+            this._frameNum = this._timeToFrame(meta.mediaTime);
+            this._renderFrame();
+            if (this.onFrameChange) this.onFrameChange(this._frameNum);
 
-  // ===== WEB CODECS PLAYER =====
-  class FramePlayer {
-    constructor(canvas, ctx) {
-      this.canvas = canvas;
-      this.ctx = ctx;
-      this.decoder = null;
-      this.frameCache = new Map();
-      this.currentFrame = 0;
-      this.totalFrames = 0;
-      this.fps = 24;
-      this.playing = false;
-      this.lastFrameTime = 0;
-      this.duration = 0;
-      this.samples = [];
-      this.trackInfo = null;
-      this.loop = false;
-      this.inPoint = null;
-      this.outPoint = null;
-      this.onFrameChange = null;
-      this.onDurationChange = null;
-      this.initDecoder();
-    }
+            if (this.loop && this.inPoint !== null && this.outPoint !== null) {
+              if (meta.mediaTime >= this.outPoint) {
+                this.video.currentTime = this.inPoint;
+                return; // seeked handler re-arms once seek settles
+              }
+            }
 
-    initDecoder() {
-      this.decoder = new VideoDecoder({
-        output: (frame) => {
-          const frameNum = Math.floor(frame.timestamp / 1000 * this.fps);
-          this.frameCache.set(frameNum, frame);
-          if (frameNum >= this.totalFrames) {
-            this.totalFrames = frameNum + 1;
-            this.duration = this.totalFrames / this.fps;
-            if (this.onDurationChange) this.onDurationChange(this.duration);
-          }
-        },
-        error: (e) => console.error('VideoDecoder error:', e)
-      });
-    }
-
-    async load(arrayBuffer, fps) {
-      this.fps = fps;
-      this.frameCache.clear();
-      this.currentFrame = 0;
-      this.totalFrames = 0;
-      this.duration = 0;
-      this.playing = false;
-
-      const parser = new MP4Parser(arrayBuffer);
-      this.trackInfo = parser.parse();
-      if (!this.trackInfo) {
-        console.error('Failed to parse MP4. Ensure H.264/AVC codec.');
-        return;
-      }
-
-      this.samples = this.trackInfo.samples;
-      this.canvas.width = this.trackInfo.width;
-      this.canvas.height = this.trackInfo.height;
-      this.duration = this.trackInfo.durationSeconds;
-
-      if (this.onDurationChange) this.onDurationChange(this.duration);
-
-      const config = {
-        codec: this.trackInfo.codecString || 'avc1.42001e',
-        codedWidth: this.trackInfo.width,
-        codedHeight: this.trackInfo.height,
-        description: this.trackInfo.avcC
-      };
-
-      try {
-        await this.decoder.configure(config);
-        await this.decodeToFrame(0);
-      } catch (e) {
-        console.error('Decoder configuration failed:', e);
-      }
-    }
-
-    async decodeToFrame(targetFrame) {
-      if (this.frameCache.has(targetFrame)) {
-        this.currentFrame = targetFrame;
-        this.renderCurrentFrame();
-        if (this.onFrameChange) this.onFrameChange(targetFrame);
-        return;
-      }
-
-      const sampleIdx = targetFrame;
-      if (sampleIdx < 0 || sampleIdx >= this.samples.length) return;
-
-      // Find nearest keyframe backwards
-      let startIdx = sampleIdx;
-      while (startIdx >= 0) {
-        if (this.isKeyframe(this.samples[startIdx].offset, this.samples[startIdx].size)) break;
-        startIdx--;
-      }
-      if (startIdx < 0) startIdx = 0;
-
-      for (let i = startIdx; i <= sampleIdx; i++) {
-        const s = this.samples[i];
-        if (!s) continue;
-        const chunk = new EncodedVideoChunk({
-          type: this.isKeyframe(s.offset, s.size) ? 'key' : 'delta',
-          data: this.trackInfo.buffer.slice(s.offset, s.offset + s.size),
-          timestamp: s.timestamp,
-          duration: s.duration
-        });
-        try {
-          await this.decoder.decode(chunk);
-        } catch (e) {
-          console.warn('Decode failed for sample', i, e);
+            this._scheduleVFCB();
+          });
         }
-      }
 
-      // Wait for frame
-      await new Promise(resolve => {
-        const check = () => {
-          if (this.frameCache.has(targetFrame)) resolve();
-          else setTimeout(check, 16);
-        };
-        check();
-      });
+        // RAF fallback for browsers without requestVideoFrameCallback
+        _rafLoop() {
+          if (!this.playing) return;
+          this._frameNum = this._timeToFrame(this.video.currentTime);
+          this._renderFrame();
+          if (this.onFrameChange) this.onFrameChange(this._frameNum);
 
-      this.currentFrame = targetFrame;
-      this.renderCurrentFrame();
-      if (this.onFrameChange) this.onFrameChange(targetFrame);
-    }
-
-    isKeyframe(offset, size) {
-      const data = new Uint8Array(this.trackInfo.buffer, offset, Math.min(size, 64));
-      for (let i = 0; i < data.length - 4; i++) {
-        if (data[i] === 0 && data[i+1] === 0 && data[i+2] === 0 && data[i+3] === 1) {
-          const nalType = data[i+4] & 0x1F;
-          if (nalType === 5) return true;
-        }
-      }
-      return false;
-    }
-
-    renderCurrentFrame() {
-      const frame = this.frameCache.get(this.currentFrame);
-      if (!frame) return;
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      this.ctx.drawImage(frame, 0, 0, this.canvas.width, this.canvas.height);
-    }
-
-    play() {
-      this.playing = true;
-      this.lastFrameTime = performance.now();
-      this.loopPlayback();
-    }
-
-    pause() {
-      this.playing = false;
-    }
-
-    loopPlayback() {
-      if (!this.playing) return;
-      const now = performance.now();
-      const elapsed = now - this.lastFrameTime;
-      const frameInterval = 1000 / this.fps;
-
-      if (elapsed >= frameInterval) {
-        this.currentFrame++;
-        if (this.currentFrame >= this.totalFrames) {
           if (this.loop && this.inPoint !== null && this.outPoint !== null) {
-            this.currentFrame = Math.floor(this.inPoint * this.fps);
+            if (this.video.currentTime >= this.outPoint) {
+              this.video.currentTime = this.inPoint;
+            }
+          }
+
+          this._rafId = requestAnimationFrame(() => this._rafLoop());
+        }
+
+        play() {
+          if (!this.video.src) return;
+          this.playing = true;
+          this.video.play().catch(() => {});
+          if (this._hasVFCB) {
+            this._scheduleVFCB();
           } else {
-            this.currentFrame = this.totalFrames - 1;
-            this.pause();
+            this._cancelRAF();
+            this._rafLoop();
           }
         }
-        this.decodeToFrame(this.currentFrame).then(() => {
-          if (this.playing) this.loopPlayback();
-        });
-        this.lastFrameTime = now;
-      } else {
-        requestAnimationFrame(() => this.loopPlayback());
+
+        pause() {
+          this.playing = false;
+          this.video.pause();
+          this._cancelRAF();
+        }
+
+        stepFrame(dir) {
+          this.pause();
+          const maxFrame = Math.ceil(this.duration * this.fps) - 1;
+          const target = Math.max(0, Math.min(maxFrame, this._frameNum + dir));
+          this.video.currentTime = this._frameToTime(target);
+        }
+
+        seekToTime(time) {
+          this.video.currentTime = Math.max(0, Math.min(this.duration, time));
+        }
+
+        getCurrentTime() {
+          return this.video.currentTime;
+        }
       }
-    }
 
-    stepFrame(dir) {
-      this.pause();
-      const target = Math.max(0, Math.min(this.totalFrames - 1, this.currentFrame + dir));
-      this.decodeToFrame(target);
-    }
+      // ===== PLAYER INIT =====
+      const player = new FramePlayer(mainCanvas, mainCtx);
 
-    seekToTime(time) {
-      this.pause();
-      const frame = Math.floor(time * this.fps);
-      this.decodeToFrame(frame);
-    }
-
-    getCurrentTime() {
-      return this.currentFrame / this.fps;
-    }
-  }
-
-  // ===== PLAYER INIT =====
-  const player = new FramePlayer(mainCanvas, mainCtx);
-  player.onFrameChange = (frame) => {
-    redrawPenCanvas();
-    updateScrubBar();
-    updateScrubTimes();
-  };
-  player.onDurationChange = (dur) => {
-    scrubTotal.textContent = formatTime(dur);
-    updateScrubTicks();
-  };
-
-  // ===== PLAYLIST =====
-  btnAddVideo.addEventListener('click', () => fileInput.click());
-
-  fileInput.addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files);
-    for (const file of files) {
-      const buffer = await file.arrayBuffer();
-      const entry = {
-        file,
-        buffer,
-        annotations: {},
-        inPoint: null,
-        outPoint: null,
-        fps: getFPS(),
-        undoStack: [],
-        redoStack: [],
-        duration: 0
+      player.onFrameChange = () => {
+        redrawPenCanvas();
+        updateScrubBar();
+        updateScrubTimes();
       };
-      playlist.push(entry);
-      const parser = new MP4Parser(buffer);
-      const info = parser.parse();
-      if (info) entry.duration = info.durationSeconds;
-    }
-    renderPlaylist();
-    fileInput.value = '';
-  });
+      player.onDurationChange = (dur) => {
+        scrubTotal.textContent = formatTime(dur);
+        updateScrubTicks();
+      };
 
-  function renderPlaylist() {
-    playlistEl.innerHTML = '';
-    playlist.forEach((entry, i) => {
-      const row = document.createElement('div');
-      row.className = 'playlist-row' + (i === activeIndex ? ' active' : '');
-      const name = document.createElement('span');
-      name.className = 'playlist-name';
-      name.textContent = entry.file.name;
-      const dur = document.createElement('span');
-      dur.className = 'playlist-duration';
-      dur.textContent = formatTime(entry.duration);
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'playlist-remove';
-      removeBtn.textContent = '✕';
-      removeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        playlist.splice(i, 1);
-        if (activeIndex === i) {
-          activeIndex = -1;
-          player.pause();
-          mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-        } else if (activeIndex > i) activeIndex--;
+      // ===== PLAYLIST =====
+      btnAddVideo.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        for (const file of files) {
+          const objectUrl = URL.createObjectURL(file);
+          const entry = {
+            file,
+            objectUrl,
+            annotations: {},
+            inPoint: null,
+            outPoint: null,
+            fps: getFPS(),
+            undoStack: [],
+            redoStack: [],
+            duration: 0
+          };
+          playlist.push(entry);
+
+          // Probe duration without holding a decoded buffer in memory
+          await new Promise(resolve => {
+            const tmp = document.createElement('video');
+            tmp.preload = 'metadata';
+            tmp.src = objectUrl;
+            tmp.onloadedmetadata = () => { entry.duration = tmp.duration || 0; resolve(); };
+            tmp.onerror = resolve;
+          });
+        }
         renderPlaylist();
+        fileInput.value = '';
       });
-      row.addEventListener('click', () => loadVideo(i));
-      row.appendChild(name);
-      row.appendChild(dur);
-      row.appendChild(removeBtn);
-      playlistEl.appendChild(row);
-    });
-  }
 
-  async function loadVideo(index) {
-    if (index < 0 || index >= playlist.length) return;
-    activeIndex = index;
-    const entry = playlist[index];
-    fpsInput.value = entry.fps;
-    player.fps = entry.fps;
-    player.inPoint = entry.inPoint;
-    player.outPoint = entry.outPoint;
-    player.loop = loopEnabled;
-    await player.load(entry.buffer, entry.fps);
-    player.duration = entry.duration;
-    renderPlaylist();
-    updateInOutUI();
-    updateScrubTicks();
-    resizeCanvases();
-  }
+      function renderPlaylist() {
+        playlistEl.innerHTML = '';
+        playlist.forEach((entry, i) => {
+          const row = document.createElement('div');
+          row.className = 'playlist-row' + (i === activeIndex ? ' active' : '');
 
-  // ===== CANVAS RESIZE =====
-  function resizeCanvases() {
-    const rect = videoContainer.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
-    penCanvas.width = w;
-    penCanvas.height = h;
-    laserCanvas.width = w;
-    laserCanvas.height = h;
-    redrawPenCanvas();
-    redrawLaserCanvas();
-    updateScrubTicks();
-  }
-  new ResizeObserver(() => { if (mainCanvas.width > 0) resizeCanvases(); }).observe(videoContainer);
+          const name = document.createElement('span');
+          name.className = 'playlist-name';
+          name.textContent = entry.file.name;
 
-  // ===== PLAYBACK CONTROLS =====
-  btnPlay.addEventListener('click', () => {
-    if (activeIndex < 0) return;
-    if (player.playing) {
-      player.pause();
-    } else {
-      if (loopEnabled && activeIndex >= 0) {
-        const entry = playlist[activeIndex];
-        if (entry.inPoint !== null && entry.outPoint !== null) {
-          if (player.getCurrentTime() < entry.inPoint || player.getCurrentTime() >= entry.outPoint) {
-            player.seekToTime(entry.inPoint);
+          const dur = document.createElement('span');
+          dur.className = 'playlist-duration';
+          dur.textContent = formatTime(entry.duration);
+
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'playlist-remove';
+          removeBtn.textContent = '✕';
+          removeBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            URL.revokeObjectURL(entry.objectUrl);
+            playlist.splice(i, 1);
+            if (activeIndex === i) {
+              activeIndex = -1;
+              player.pause();
+              mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+              btnPlay.textContent = '▶ Play';
+            } else if (activeIndex > i) {
+              activeIndex--;
+            }
+            renderPlaylist();
+          });
+
+          row.addEventListener('click', () => loadVideo(i));
+          row.appendChild(name);
+          row.appendChild(dur);
+          row.appendChild(removeBtn);
+          playlistEl.appendChild(row);
+        });
+      }
+
+      async function loadVideo(index) {
+        if (index < 0 || index >= playlist.length) return;
+        activeIndex = index;
+        const entry = playlist[index];
+        fpsInput.value = entry.fps;
+        player.fps = entry.fps;
+        player.inPoint = entry.inPoint;
+        player.outPoint = entry.outPoint;
+        player.loop = loopEnabled;
+        btnPlay.textContent = '▶ Play';
+
+        try {
+          await player.load(entry.objectUrl, entry.fps);
+          if (player.duration) entry.duration = player.duration;
+        } catch (err) {
+          alert(err.message);
+          return;
+        }
+
+        renderPlaylist();
+        updateInOutUI();
+        updateScrubTicks();
+        resizeCanvases();
+      }
+
+      // ===== CANVAS RESIZE =====
+      function resizeCanvases() {
+        const rect = videoContainer.getBoundingClientRect();
+        penCanvas.width = rect.width;
+        penCanvas.height = rect.height;
+        laserCanvas.width = rect.width;
+        laserCanvas.height = rect.height;
+        redrawPenCanvas();
+        redrawLaserCanvas();
+        updateScrubTicks();
+      }
+      new ResizeObserver(() => { if (mainCanvas.width > 0) resizeCanvases(); }).observe(videoContainer);
+
+      // ===== PLAYBACK CONTROLS =====
+      btnPlay.addEventListener('click', () => {
+        if (activeIndex < 0) return;
+        if (player.playing) {
+          player.pause();
+          btnPlay.textContent = '▶ Play';
+        } else {
+          if (loopEnabled) {
+            const entry = playlist[activeIndex];
+            if (entry.inPoint !== null && entry.outPoint !== null) {
+              const t = player.getCurrentTime();
+              if (t < entry.inPoint || t >= entry.outPoint) {
+                player.seekToTime(entry.inPoint);
+              }
+            }
           }
+          player.play();
+          btnPlay.textContent = '⏸ Pause';
         }
-      }
-      player.play();
-    }
-  });
-
-  btnFrameBack.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(-1); });
-  btnFrameFwd.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(1); });
-
-  btnSetIn.addEventListener('click', () => {
-    if (activeIndex < 0) return;
-    playlist[activeIndex].inPoint = player.getCurrentTime();
-    player.inPoint = playlist[activeIndex].inPoint;
-    updateInOutUI();
-    updateScrubTicks();
-  });
-
-  btnSetOut.addEventListener('click', () => {
-    if (activeIndex < 0) return;
-    playlist[activeIndex].outPoint = player.getCurrentTime();
-    player.outPoint = playlist[activeIndex].outPoint;
-    updateInOutUI();
-    updateScrubTicks();
-  });
-
-  btnClearInOut.addEventListener('click', () => {
-    if (activeIndex < 0) return;
-    playlist[activeIndex].inPoint = null;
-    playlist[activeIndex].outPoint = null;
-    player.inPoint = null;
-    player.outPoint = null;
-    updateInOutUI();
-    updateScrubTicks();
-  });
-
-  btnLoop.addEventListener('click', () => {
-    loopEnabled = !loopEnabled;
-    btnLoop.classList.toggle('active', loopEnabled);
-    if (activeIndex >= 0) player.loop = loopEnabled;
-  });
-
-  fpsInput.addEventListener('change', () => {
-    if (activeIndex >= 0) {
-      playlist[activeIndex].fps = getFPS();
-      player.fps = getFPS();
-    }
-  });
-
-  btnMute.addEventListener('click', () => {
-    btnMute.textContent = btnMute.textContent === '🔊' ? '🔇' : '🔊';
-  });
-
-  volumeSlider.addEventListener('input', () => {});
-
-  // ===== SCRUB BAR =====
-  function updateScrubBar() {
-    if (!player.duration) return;
-    const pct = (player.getCurrentTime() / player.duration) * 100;
-    scrubProgress.style.width = pct + '%';
-    scrubPlayhead.style.left = pct + '%';
-  }
-
-  function updateScrubTimes() {
-    if (!player.duration) return;
-    scrubCurrent.textContent = formatTime(player.getCurrentTime());
-    scrubTotal.textContent = formatTime(player.duration);
-  }
-
-  function scrubFromEvent(e) {
-    const rect = scrubBar.getBoundingClientRect();
-    let x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    let pct = Math.max(0, Math.min(1, x / rect.width));
-    if (player.duration) player.seekToTime(pct * player.duration);
-  }
-
-  scrubBar.addEventListener('mousedown', (e) => { isScrubbing = true; scrubFromEvent(e); });
-  document.addEventListener('mousemove', (e) => { if (isScrubbing) scrubFromEvent(e); });
-  document.addEventListener('mouseup', () => { isScrubbing = false; });
-  scrubBar.addEventListener('touchstart', (e) => { isScrubbing = true; scrubFromEvent(e); }, { passive: true });
-  document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
-  document.addEventListener('touchend', () => { isScrubbing = false; });
-
-  function updateInOutUI() {
-    const entry = getActiveVideoState();
-    if (!entry || !player.duration) return;
-    if (entry.inPoint !== null && entry.outPoint !== null) {
-      const leftPct = (entry.inPoint / player.duration) * 100;
-      const widthPct = ((entry.outPoint - entry.inPoint) / player.duration) * 100;
-      scrubInout.style.left = leftPct + '%';
-      scrubInout.style.width = widthPct + '%';
-    } else {
-      scrubInout.style.left = '0';
-      scrubInout.style.width = '0';
-    }
-  }
-
-  function updateScrubTicks() {
-    scrubTicks.innerHTML = '';
-    const entry = getActiveVideoState();
-    if (!entry || !player.duration) return;
-    Object.keys(entry.annotations).map(Number).sort((a,b)=>a-b).forEach(frame => {
-      const time = frame / getFPS();
-      if (time >= 0 && time <= player.duration) {
-        const pct = (time / player.duration) * 100;
-        const tick = document.createElement('div');
-        tick.className = 'scrub-tick';
-        tick.style.left = pct + '%';
-        scrubTicks.appendChild(tick);
-      }
-    });
-  }
-
-  // ===== TOOLS =====
-  toolBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      toolBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentTool = btn.dataset.tool;
-    });
-  });
-
-  swatches.forEach(s => {
-    s.addEventListener('click', () => {
-      drawColor = s.dataset.color;
-      colorPicker.value = drawColor;
-      swatches.forEach(sw => sw.classList.remove('selected'));
-      s.classList.add('selected');
-    });
-  });
-
-  colorPicker.addEventListener('input', () => {
-    drawColor = colorPicker.value;
-    swatches.forEach(sw => sw.classList.remove('selected'));
-  });
-
-  brushSizeSlider.addEventListener('input', () => {
-    brushSize = parseInt(brushSizeSlider.value, 10);
-    brushSizeVal.textContent = brushSize;
-  });
-
-  brushOpacitySlider.addEventListener('input', () => {
-    brushOpacity = parseFloat(brushOpacitySlider.value);
-    brushOpacityVal.textContent = brushOpacity.toFixed(2);
-  });
-
-  // ===== DRAWING =====
-  function getCanvasPos(e) {
-    const rect = penCanvas.getBoundingClientRect();
-    const cx = e.clientX || (e.touches && e.touches[0].clientX);
-    const cy = e.clientY || (e.touches && e.touches[0].clientY);
-    return { x: (cx - rect.left) / rect.width, y: (cy - rect.top) / rect.height };
-  }
-
-  function drawStrokeOnCanvas(ctx, stroke, w, h, alpha) {
-    if (!stroke.points || stroke.points.length === 0) return;
-    ctx.save();
-    ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.size;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(stroke.points[0].x * w, stroke.points[0].y * h);
-    for (let i = 1; i < stroke.points.length; i++) {
-      ctx.lineTo(stroke.points[i].x * w, stroke.points[i].y * h);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function redrawPenCanvas() {
-    const w = penCanvas.width, h = penCanvas.height;
-    penCtx.clearRect(0, 0, w, h);
-    if (activeIndex < 0) return;
-    const entry = playlist[activeIndex];
-    const frame = player.currentFrame;
-    const strokes = entry.annotations[frame];
-    if (!strokes) return;
-    strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, w, h));
-  }
-
-  function redrawLaserCanvas() {
-    const w = laserCanvas.width, h = laserCanvas.height;
-    laserCtx.clearRect(0, 0, w, h);
-    if (laserStrokes.length === 0) return;
-    laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtx, s, w, h, laserFadeOpacity));
-  }
-
-  penCanvas.addEventListener('pointerdown', (e) => {
-    if (!drawingsVisible || activeIndex < 0) return;
-    const pos = getCanvasPos(e);
-    if (currentTool === 'pen') {
-      if (player.playing) player.pause();
-      isDrawing = true;
-      currentStroke = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [pos] };
-      drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
-    } else if (currentTool === 'eraser') {
-      isErasing = true;
-      eraseAt(pos);
-    }
-  });
-
-  penCanvas.addEventListener('pointermove', (e) => {
-    if (!drawingsVisible) return;
-    const pos = getCanvasPos(e);
-    if (currentTool === 'pen' && isDrawing && currentStroke) {
-      currentStroke.points.push(pos);
-      redrawPenCanvas();
-      drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
-    } else if (currentTool === 'eraser' && isErasing) {
-      eraseAt(pos);
-    }
-  });
-
-  penCanvas.addEventListener('pointerup', () => {
-    if (currentTool === 'pen' && isDrawing && currentStroke) {
-      isDrawing = false;
-      const frame = player.currentFrame;
-      const entry = playlist[activeIndex];
-      if (!entry.annotations[frame]) entry.annotations[frame] = [];
-      entry.annotations[frame].push(currentStroke);
-      entry.undoStack.push({ type: 'add', frame, strokeIndex: entry.annotations[frame].length - 1, stroke: currentStroke });
-      entry.redoStack = [];
-      currentStroke = null;
-      redrawPenCanvas();
-      updateScrubTicks();
-    } else if (currentTool === 'eraser') {
-      isErasing = false;
-    }
-  });
-
-  laserCanvas.addEventListener('pointerdown', (e) => {
-    if (!drawingsVisible || currentTool !== 'laser') return;
-    const pos = getCanvasPos(e);
-    laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [pos] });
-    lastLaserInputTime = Date.now();
-    if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
-  });
-
-  laserCanvas.addEventListener('pointermove', (e) => {
-    if (!drawingsVisible || currentTool !== 'laser' || laserStrokes.length === 0) return;
-    const pos = getCanvasPos(e);
-    laserStrokes[laserStrokes.length - 1].points.push(pos);
-    lastLaserInputTime = Date.now();
-    if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
-  });
-
-  // ===== ERASER =====
-  function pointToSegmentDist(px, py, ax, ay, bx, by) {
-    const dx = bx - ax, dy = by - ay;
-    const lenSq = dx*dx + dy*dy;
-    if (lenSq === 0) return Math.hypot(px-ax, py-ay);
-    let t = Math.max(0, Math.min(1, ((px-ax)*dx + (py-ay)*dy) / lenSq));
-    return Math.hypot(px - (ax + t*dx), py - (ay + t*dy));
-  }
-
-  function eraseAt(pos) {
-    if (activeIndex < 0) return;
-    const frame = player.currentFrame;
-    const entry = playlist[activeIndex];
-    const strokes = entry.annotations[frame];
-    if (!strokes) return;
-    const radius = brushSize / Math.min(penCanvas.width, penCanvas.height);
-    const toRemove = [];
-    strokes.forEach((stroke, idx) => {
-      if (!stroke.points || stroke.points.length === 0) return;
-      for (let i = 0; i < stroke.points.length - 1; i++) {
-        if (pointToSegmentDist(pos.x, pos.y, stroke.points[i].x, stroke.points[i].y, stroke.points[i+1].x, stroke.points[i+1].y) <= radius) {
-          toRemove.push(idx); break;
-        }
-      }
-      if (stroke.points.length === 1 && Math.hypot(pos.x - stroke.points[0].x, pos.y - stroke.points[0].y) <= radius) toRemove.push(idx);
-    });
-    if (toRemove.length > 0) {
-      toRemove.sort((a,b)=>b-a).forEach(idx => {
-        const removed = strokes.splice(idx, 1)[0];
-        entry.undoStack.push({ type: 'remove', frame, stroke: removed, strokeIndex: idx });
       });
-      entry.redoStack = [];
-      redrawPenCanvas();
-      updateScrubTicks();
-    }
-  }
 
-  // ===== UNDO/REDO =====
-  function undo() {
-    if (activeIndex < 0) return;
-    const entry = playlist[activeIndex];
-    if (!entry.undoStack.length) return;
-    const action = entry.undoStack.pop();
-    const strokes = entry.annotations[action.frame] || [];
-    if (action.type === 'add') {
-      const removed = strokes.pop();
-      entry.redoStack.push({ type: 'add', frame: action.frame, strokeIndex: strokes.length, stroke: removed });
-    } else {
-      if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
-      entry.annotations[action.frame].push(action.stroke);
-      entry.redoStack.push({ type: 'remove', frame: action.frame, stroke: action.stroke, strokeIndex: entry.annotations[action.frame].length - 1 });
-    }
-    redrawPenCanvas();
-    updateScrubTicks();
-  }
+      btnFrameBack.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(-1); });
+      btnFrameFwd.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(1); });
 
-  function redo() {
-    if (activeIndex < 0) return;
-    const entry = playlist[activeIndex];
-    if (!entry.redoStack.length) return;
-    const action = entry.redoStack.pop();
-    const strokes = entry.annotations[action.frame] || [];
-    if (action.type === 'add') {
-      if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
-      entry.annotations[action.frame].push(action.stroke);
-      entry.undoStack.push({ type: 'add', frame: action.frame, strokeIndex: entry.annotations[action.frame].length - 1, stroke: action.stroke });
-    } else {
-      const removed = strokes.pop();
-      entry.undoStack.push({ type: 'remove', frame: action.frame, stroke: removed, strokeIndex: strokes.length });
-    }
-    redrawPenCanvas();
-    updateScrubTicks();
-  }
+      btnSetIn.addEventListener('click', () => {
+        if (activeIndex < 0) return;
+        playlist[activeIndex].inPoint = player.getCurrentTime();
+        player.inPoint = playlist[activeIndex].inPoint;
+        updateInOutUI();
+        updateScrubTicks();
+      });
 
-  btnUndo.addEventListener('click', undo);
-  btnRedo.addEventListener('click', redo);
-  document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'Z' || e.key === 'z')) { e.preventDefault(); redo(); }
-    else if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || e.key === 'z')) { e.preventDefault(); undo(); }
-    else if (e.key === ' ' && e.target.tagName !== 'INPUT') { e.preventDefault(); btnPlay.click(); }
-    else if (e.key === 'ArrowLeft' && e.target.tagName !== 'INPUT') { e.preventDefault(); btnFrameBack.click(); }
-    else if (e.key === 'ArrowRight' && e.target.tagName !== 'INPUT') { e.preventDefault(); btnFrameFwd.click(); }
-  });
+      btnSetOut.addEventListener('click', () => {
+        if (activeIndex < 0) return;
+        playlist[activeIndex].outPoint = player.getCurrentTime();
+        player.outPoint = playlist[activeIndex].outPoint;
+        updateInOutUI();
+        updateScrubTicks();
+      });
 
-  // ===== SHOW/HIDE & FULLSCREEN =====
-  btnToggleDrawings.addEventListener('click', () => {
-    drawingsVisible = !drawingsVisible;
-    penCanvas.style.display = drawingsVisible ? '' : 'none';
-    laserCanvas.style.display = drawingsVisible ? '' : 'none';
-    btnToggleDrawings.textContent = drawingsVisible ? '👁 Hide Drawings' : '👁 Show Drawings';
-  });
+      btnClearInOut.addEventListener('click', () => {
+        if (activeIndex < 0) return;
+        playlist[activeIndex].inPoint = null;
+        playlist[activeIndex].outPoint = null;
+        player.inPoint = null;
+        player.outPoint = null;
+        updateInOutUI();
+        updateScrubTicks();
+      });
 
-  btnFullscreen.addEventListener('click', () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else document.getElementById('content').requestFullscreen().catch(()=>{});
-  });
-  document.addEventListener('fullscreenchange', () => {
-    btnFullscreen.textContent = document.fullscreenElement ? '⛶ Exit Fullscreen' : '⛶ Fullscreen';
-    setTimeout(resizeCanvases, 100);
-  });
+      btnLoop.addEventListener('click', () => {
+        loopEnabled = !loopEnabled;
+        btnLoop.classList.toggle('active', loopEnabled);
+        if (activeIndex >= 0) player.loop = loopEnabled;
+      });
 
-  // ===== LASER FADE LOOP =====
-  function laserLoop() {
-    const now = Date.now();
-    if (laserFading) {
-      laserFadeOpacity = Math.max(0, 1 - (now - laserFadeStart) / LASER_FADE_DURATION);
-      if (laserFadeOpacity <= 0) { laserStrokes = []; laserFading = false; laserFadeOpacity = 1; }
-    } else if (laserStrokes.length > 0 && (now - lastLaserInputTime) >= LASER_IDLE_THRESHOLD) {
-      laserFading = true; laserFadeStart = now;
-    }
-    redrawLaserCanvas();
-    requestAnimationFrame(laserLoop);
-  }
-  requestAnimationFrame(laserLoop);
+      fpsInput.addEventListener('change', () => {
+        if (activeIndex >= 0) {
+          playlist[activeIndex].fps = getFPS();
+          player.fps = getFPS();
+        }
+      });
 
-  // ===== INIT =====
-  swatches[0].classList.add('selected');
-})();
-</script>
+      btnMute.addEventListener('click', () => {
+        player.video.muted = !player.video.muted;
+        btnMute.textContent = player.video.muted ? '🔇' : '🔊';
+      });
+
+      volumeSlider.addEventListener('input', () => {
+        player.video.volume = parseFloat(volumeSlider.value);
+        player.video.muted = player.video.volume === 0;
+        btnMute.textContent = player.video.muted ? '🔇' : '🔊';
+      });
+
+      // ===== SCRUB BAR =====
+      function updateScrubBar() {
+        if (!player.duration) return;
+        const pct = (player.getCurrentTime() / player.duration) * 100;
+        scrubProgress.style.width = pct + '%';
+        scrubPlayhead.style.left = pct + '%';
+      }
+
+      function updateScrubTimes() {
+        scrubCurrent.textContent = formatTime(player.getCurrentTime());
+        if (player.duration) scrubTotal.textContent = formatTime(player.duration);
+      }
+
+      function scrubFromEvent(e) {
+        const rect = scrubBar.getBoundingClientRect();
+        const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
+        const pct = Math.max(0, Math.min(1, x / rect.width));
+        if (player.duration) player.seekToTime(pct * player.duration);
+      }
+
+      scrubBar.addEventListener('mousedown', (e) => { isScrubbing = true; scrubFromEvent(e); });
+      document.addEventListener('mousemove', (e) => { if (isScrubbing) scrubFromEvent(e); });
+      document.addEventListener('mouseup', () => { isScrubbing = false; });
+      scrubBar.addEventListener('touchstart', (e) => { isScrubbing = true; scrubFromEvent(e); }, { passive: true });
+      document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
+      document.addEventListener('touchend', () => { isScrubbing = false; });
+
+      function updateInOutUI() {
+        const entry = getActiveVideoState();
+        if (!entry || !player.duration) return;
+        if (entry.inPoint !== null && entry.outPoint !== null) {
+          const leftPct = (entry.inPoint / player.duration) * 100;
+          const widthPct = ((entry.outPoint - entry.inPoint) / player.duration) * 100;
+          scrubInout.style.left = leftPct + '%';
+          scrubInout.style.width = widthPct + '%';
+        } else {
+          scrubInout.style.left = '0';
+          scrubInout.style.width = '0';
+        }
+      }
+
+      function updateScrubTicks() {
+        scrubTicks.innerHTML = '';
+        const entry = getActiveVideoState();
+        if (!entry || !player.duration) return;
+        Object.keys(entry.annotations).map(Number).sort((a, b) => a - b).forEach(frame => {
+          const time = frame / getFPS();
+          if (time >= 0 && time <= player.duration) {
+            const pct = (time / player.duration) * 100;
+            const tick = document.createElement('div');
+            tick.className = 'scrub-tick';
+            tick.style.left = pct + '%';
+            scrubTicks.appendChild(tick);
+          }
+        });
+      }
+
+      // ===== TOOLS =====
+      toolBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          toolBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentTool = btn.dataset.tool;
+        });
+      });
+
+      swatches.forEach(s => {
+        s.addEventListener('click', () => {
+          drawColor = s.dataset.color;
+          colorPicker.value = drawColor;
+          swatches.forEach(sw => sw.classList.remove('selected'));
+          s.classList.add('selected');
+        });
+      });
+
+      colorPicker.addEventListener('input', () => {
+        drawColor = colorPicker.value;
+        swatches.forEach(sw => sw.classList.remove('selected'));
+      });
+
+      brushSizeSlider.addEventListener('input', () => {
+        brushSize = parseInt(brushSizeSlider.value, 10);
+        brushSizeVal.textContent = brushSize;
+      });
+
+      brushOpacitySlider.addEventListener('input', () => {
+        brushOpacity = parseFloat(brushOpacitySlider.value);
+        brushOpacityVal.textContent = brushOpacity.toFixed(2);
+      });
+
+      // ===== DRAWING =====
+      function getCanvasPos(e) {
+        const rect = penCanvas.getBoundingClientRect();
+        const cx = e.clientX ?? (e.touches && e.touches[0].clientX);
+        const cy = e.clientY ?? (e.touches && e.touches[0].clientY);
+        return { x: (cx - rect.left) / rect.width, y: (cy - rect.top) / rect.height };
+      }
+
+      function drawStrokeOnCanvas(ctx, stroke, w, h, alpha) {
+        if (!stroke.points || stroke.points.length === 0) return;
+        ctx.save();
+        ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x * w, stroke.points[0].y * h);
+        for (let i = 1; i < stroke.points.length; i++) {
+          ctx.lineTo(stroke.points[i].x * w, stroke.points[i].y * h);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function redrawPenCanvas() {
+        const w = penCanvas.width, h = penCanvas.height;
+        penCtx.clearRect(0, 0, w, h);
+        if (activeIndex < 0) return;
+        const entry = playlist[activeIndex];
+        const frame = player.currentFrame;
+        const strokes = entry.annotations[frame];
+        if (!strokes) return;
+        strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, w, h));
+      }
+
+      function redrawLaserCanvas() {
+        const w = laserCanvas.width, h = laserCanvas.height;
+        laserCtx.clearRect(0, 0, w, h);
+        if (laserStrokes.length === 0) return;
+        laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtx, s, w, h, laserFadeOpacity));
+      }
+
+      penCanvas.addEventListener('pointerdown', (e) => {
+        if (!drawingsVisible || activeIndex < 0) return;
+        const pos = getCanvasPos(e);
+        if (currentTool === 'pen') {
+          if (player.playing) { player.pause(); btnPlay.textContent = '▶ Play'; }
+          isDrawing = true;
+          currentStroke = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [pos] };
+          drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
+        } else if (currentTool === 'eraser') {
+          isErasing = true;
+          eraseAt(pos);
+        }
+      });
+
+      penCanvas.addEventListener('pointermove', (e) => {
+        if (!drawingsVisible) return;
+        const pos = getCanvasPos(e);
+        if (currentTool === 'pen' && isDrawing && currentStroke) {
+          currentStroke.points.push(pos);
+          redrawPenCanvas();
+          drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
+        } else if (currentTool === 'eraser' && isErasing) {
+          eraseAt(pos);
+        }
+      });
+
+      penCanvas.addEventListener('pointerup', () => {
+        if (currentTool === 'pen' && isDrawing && currentStroke) {
+          isDrawing = false;
+          const frame = player.currentFrame;
+          const entry = playlist[activeIndex];
+          if (!entry.annotations[frame]) entry.annotations[frame] = [];
+          entry.annotations[frame].push(currentStroke);
+          entry.undoStack.push({ type: 'add', frame, strokeIndex: entry.annotations[frame].length - 1, stroke: currentStroke });
+          entry.redoStack = [];
+          currentStroke = null;
+          redrawPenCanvas();
+          updateScrubTicks();
+        } else if (currentTool === 'eraser') {
+          isErasing = false;
+        }
+      });
+
+      laserCanvas.addEventListener('pointerdown', (e) => {
+        if (!drawingsVisible || currentTool !== 'laser') return;
+        const pos = getCanvasPos(e);
+        laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [pos] });
+        lastLaserInputTime = Date.now();
+        if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+      });
+
+      laserCanvas.addEventListener('pointermove', (e) => {
+        if (!drawingsVisible || currentTool !== 'laser' || laserStrokes.length === 0) return;
+        const pos = getCanvasPos(e);
+        laserStrokes[laserStrokes.length - 1].points.push(pos);
+        lastLaserInputTime = Date.now();
+        if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+      });
+
+      // ===== ERASER =====
+      function pointToSegmentDist(px, py, ax, ay, bx, by) {
+        const dx = bx - ax, dy = by - ay;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+        return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+      }
+
+      function eraseAt(pos) {
+        if (activeIndex < 0) return;
+        const frame = player.currentFrame;
+        const entry = playlist[activeIndex];
+        const strokes = entry.annotations[frame];
+        if (!strokes) return;
+        const radius = brushSize / Math.min(penCanvas.width, penCanvas.height);
+        const toRemove = [];
+        strokes.forEach((stroke, idx) => {
+          if (!stroke.points || stroke.points.length === 0) return;
+          for (let i = 0; i < stroke.points.length - 1; i++) {
+            if (pointToSegmentDist(
+              pos.x, pos.y,
+              stroke.points[i].x, stroke.points[i].y,
+              stroke.points[i + 1].x, stroke.points[i + 1].y
+            ) <= radius) {
+              toRemove.push(idx);
+              break;
+            }
+          }
+          if (stroke.points.length === 1 && Math.hypot(pos.x - stroke.points[0].x, pos.y - stroke.points[0].y) <= radius) {
+            toRemove.push(idx);
+          }
+        });
+        if (toRemove.length > 0) {
+          toRemove.sort((a, b) => b - a).forEach(idx => {
+            const removed = strokes.splice(idx, 1)[0];
+            entry.undoStack.push({ type: 'remove', frame, stroke: removed, strokeIndex: idx });
+          });
+          entry.redoStack = [];
+          redrawPenCanvas();
+          updateScrubTicks();
+        }
+      }
+
+      // ===== UNDO/REDO =====
+      function undo() {
+        if (activeIndex < 0) return;
+        const entry = playlist[activeIndex];
+        if (!entry.undoStack.length) return;
+        const action = entry.undoStack.pop();
+        if (action.type === 'add') {
+          const removed = (entry.annotations[action.frame] || []).pop();
+          entry.redoStack.push({ type: 'add', frame: action.frame, stroke: removed });
+        } else {
+          if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
+          entry.annotations[action.frame].push(action.stroke);
+          entry.redoStack.push({ type: 'remove', frame: action.frame, stroke: action.stroke });
+        }
+        redrawPenCanvas();
+        updateScrubTicks();
+      }
+
+      function redo() {
+        if (activeIndex < 0) return;
+        const entry = playlist[activeIndex];
+        if (!entry.redoStack.length) return;
+        const action = entry.redoStack.pop();
+        if (action.type === 'add') {
+          if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
+          entry.annotations[action.frame].push(action.stroke);
+          entry.undoStack.push({ type: 'add', frame: action.frame, stroke: action.stroke });
+        } else {
+          const removed = (entry.annotations[action.frame] || []).pop();
+          entry.undoStack.push({ type: 'remove', frame: action.frame, stroke: removed });
+        }
+        redrawPenCanvas();
+        updateScrubTicks();
+      }
+
+      btnUndo.addEventListener('click', undo);
+      btnRedo.addEventListener('click', redo);
+
+      document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'Z' || e.key === 'z')) {
+          e.preventDefault(); redo();
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || e.key === 'z')) {
+          e.preventDefault(); undo();
+        } else if (e.key === ' ') {
+          e.preventDefault(); btnPlay.click();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault(); btnFrameBack.click();
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault(); btnFrameFwd.click();
+        }
+      });
+
+      // ===== SHOW/HIDE & FULLSCREEN =====
+      btnToggleDrawings.addEventListener('click', () => {
+        drawingsVisible = !drawingsVisible;
+        penCanvas.style.display = drawingsVisible ? '' : 'none';
+        laserCanvas.style.display = drawingsVisible ? '' : 'none';
+        btnToggleDrawings.textContent = drawingsVisible ? '👁 Hide Drawings' : '👁 Show Drawings';
+      });
+
+      btnFullscreen.addEventListener('click', () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.getElementById('content').requestFullscreen().catch(() => {});
+      });
+      document.addEventListener('fullscreenchange', () => {
+        btnFullscreen.textContent = document.fullscreenElement ? '⛶ Exit Fullscreen' : '⛶ Fullscreen';
+        setTimeout(resizeCanvases, 100);
+      });
+
+      // ===== LASER FADE LOOP =====
+      function laserLoop() {
+        const now = Date.now();
+        if (laserFading) {
+          laserFadeOpacity = Math.max(0, 1 - (now - laserFadeStart) / LASER_FADE_DURATION);
+          if (laserFadeOpacity <= 0) {
+            laserStrokes = [];
+            laserFading = false;
+            laserFadeOpacity = 1;
+          }
+        } else if (laserStrokes.length > 0 && (now - lastLaserInputTime) >= LASER_IDLE_THRESHOLD) {
+          laserFading = true;
+          laserFadeStart = now;
+        }
+        redrawLaserCanvas();
+        requestAnimationFrame(laserLoop);
+      }
+      requestAnimationFrame(laserLoop);
+
+      // ===== INIT =====
+      swatches[0].classList.add('selected');
+      mainCanvas.style.display = 'block';
+    })();
+  </script>
 </body>
 </html>
