@@ -106,10 +106,23 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOverLMS v1.5</span>
+          <span id="status-version">DrawOverLMS v1.6</span>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
+  <div id="welcome-overlay">
+    <div id="welcome-icon">🖌️</div>
+    <div id="welcome-title">DrawOverLMS</div>
+    <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
+    <div id="welcome-drop-zone">
+      <div id="welcome-drop-icon">🎬</div>
+      <div id="welcome-drop-label">Drop a video file here</div>
+      <div id="welcome-drop-sub">MP4, MOV, WebM supported</div>
+    </div>
+    <button id="btn-welcome-browse">Browse files…</button>
   </div>
 
   <script>
@@ -996,7 +1009,7 @@
           sidebarEl.style.minWidth = '';
         }
         sidebarEl.classList.toggle('sidebar-open', open);
-        sidebarOverlay.classList.toggle('open', open);
+        sidebarOverlay.classList.toggle('open', open && isMobile());
         btnSidebarToggle.classList.toggle('active', open);
         if (!isMobile()) resizeCanvases();
       }
@@ -1043,6 +1056,55 @@
       mainCanvas.style.display = 'block';
       setSidebarOpen(!isMobile());
       resizeCanvases();
+      // ===== WELCOME =====
+      const welcomeOverlay = document.getElementById('welcome-overlay');
+
+      function dismissWelcome() {
+        if (!welcomeOverlay || welcomeOverlay.classList.contains('hidden')) return;
+        welcomeOverlay.classList.add('dismissing');
+        welcomeOverlay.addEventListener('transitionend', () => {
+          welcomeOverlay.classList.add('hidden');
+        }, { once: true });
+      }
+
+      // Wire drop-zone click → file picker
+      document.getElementById('welcome-drop-zone').addEventListener('click', () => fileInput.click());
+      document.getElementById('btn-welcome-browse').addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+      });
+
+      // Drag-and-drop onto the welcome drop zone
+      const dropZone = document.getElementById('welcome-drop-zone');
+      dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+      dropZone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'));
+        if (!files.length) return;
+        dismissWelcome();
+        const firstNewIdx = playlist.length;
+        for (const file of files) {
+          const objectUrl = URL.createObjectURL(file);
+          const entry = { file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+          playlist.push(entry);
+          await new Promise(resolve => {
+            const tmp = document.createElement('video');
+            tmp.preload = 'metadata'; tmp.src = objectUrl;
+            tmp.onloadedmetadata = () => { entry.duration = tmp.duration || 0; resolve(); };
+            tmp.onerror = resolve;
+          });
+          entry.thumbnail = await generateThumbnail(objectUrl);
+          renderPlaylist();
+        }
+        fileInput.value = '';
+        if (firstNewIdx < playlist.length) loadVideo(firstNewIdx);
+      });
+
+      // Dismiss when a file is opened via the normal file picker too
+      fileInput.addEventListener('change', () => dismissWelcome(), { capture: true });
+
     })();
   </script>
 </body>
