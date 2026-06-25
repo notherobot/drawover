@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.7</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.8</span></div>
     </div>
 
     <div id="main-body">
@@ -29,7 +29,6 @@
             <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
             <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
             <button class="tool-btn" data-tool="eraser" title="Eraser (E)">🧹</button>
-            <button class="tool-btn" data-tool="eyedrop" title="Eyedropper — sample color from video">⊕</button>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group" id="color-swatches">
@@ -40,6 +39,7 @@
             <button class="d-swatch" data-color="#00aaff" style="background:#00aaff" title="Blue"></button>
             <button class="d-swatch" data-color="#ffffff" style="background:#ffffff" title="White"></button>
             <input type="color" id="color-custom" value="#ff3333" title="Custom color">
+            <button class="tool-btn" data-tool="eyedrop" title="Eyedropper — sample color from video">⊕</button>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group sliders">
@@ -54,9 +54,11 @@
         </div>
 
         <div id="video-container">
-          <canvas id="main-canvas"></canvas>
-          <canvas id="pen-canvas"></canvas>
-          <canvas id="laser-canvas"></canvas>
+          <div id="video-viewport">
+            <canvas id="main-canvas"></canvas>
+            <canvas id="pen-canvas"></canvas>
+            <canvas id="laser-canvas"></canvas>
+          </div>
         </div>
 
         <div id="scrub-bar-container">
@@ -107,10 +109,16 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.7</span>
+          <span id="status-version">DrawOver v1.8</span>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Eyedropper zoom preview -->
+  <div id="eyedropper-overlay">
+    <canvas id="eyedropper-canvas" width="91" height="91"></canvas>
+    <div id="eyedropper-hex">#ff3333</div>
   </div>
 
   <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
@@ -138,6 +146,10 @@
       const penCtx = penCanvas.getContext('2d');
       const laserCtx = laserCanvas.getContext('2d');
       const videoContainer = document.getElementById('video-container');
+      const videoViewport = document.getElementById('video-viewport');
+      const eyedropOverlay = document.getElementById('eyedropper-overlay');
+      const eyedropCanvas = document.getElementById('eyedropper-canvas');
+      const eyedropHex = document.getElementById('eyedropper-hex');
       const scrubBar = document.getElementById('scrub-bar');
       const scrubProgress = document.getElementById('scrub-progress');
       const scrubInout = document.getElementById('scrub-inout');
@@ -197,6 +209,10 @@
 
       let laserStrokes = [];
       let lastLaserInputTime = 0;
+
+      // ===== PAN/ZOOM STATE =====
+      let panX = 0, panY = 0, vpZoom = 1;
+      let vpDrag = null; // { type:'pan'|'zoom', startX, startY, startPanX, startPanY, startZoom, cx, cy }
       let laserFadeOpacity = 1;
       let laserFading = false;
       let laserFadeStart = 0;
@@ -710,6 +726,7 @@
 
       function activateTool(tool) {
         if (tool === 'eyedrop' && currentTool !== 'eyedrop') prevTool = currentTool;
+        if (currentTool === 'eyedrop' && tool !== 'eyedrop') hideEyedropPreview();
         currentTool = tool;
         toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
         updateToolCursor();
@@ -777,6 +794,81 @@
         return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
       }
 
+      // ===== PAN / ZOOM =====
+      function applyViewport() {
+        videoViewport.style.transform = `translate(${panX}px,${panY}px) scale(${vpZoom})`;
+      }
+
+      videoContainer.addEventListener('contextmenu', e => e.preventDefault());
+
+      videoContainer.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = videoContainer.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        const newZoom = Math.max(0.1, Math.min(20, vpZoom * factor));
+        panX = cx - (cx - panX) * (newZoom / vpZoom);
+        panY = cy - (cy - panY) * (newZoom / vpZoom);
+        vpZoom = newZoom;
+        applyViewport();
+      }, { passive: false });
+
+      // ===== EYEDROPPER PREVIEW =====
+      function showEyedropPreview(e, pos) {
+        const vw = mainCanvas.width, vh = mainCanvas.height;
+        if (!vw || !vh || !player.video || player.video.readyState < 2) {
+          eyedropOverlay.style.display = 'none'; return;
+        }
+        const cw = penCanvas.width, ch = penCanvas.height;
+        const scale = Math.min(cw / vw, ch / vh);
+        const fw = vw * scale, fh = vh * scale;
+        const ox = (cw - fw) / 2, oy = (ch - fh) / 2;
+        const px = pos.x * cw, py = pos.y * ch;
+        const mx = Math.floor((px - ox) / scale);
+        const my = Math.floor((py - oy) / scale);
+
+        const ectx = eyedropCanvas.getContext('2d');
+        ectx.imageSmoothingEnabled = false;
+        ectx.fillStyle = '#111';
+        ectx.fillRect(0, 0, 91, 91);
+        if (mx >= 0 && my >= 0 && mx < vw && my < vh) {
+          ectx.drawImage(mainCanvas, mx - 6, my - 6, 13, 13, 0, 0, 91, 91);
+        }
+        // Crosshair
+        ectx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ectx.lineWidth = 3;
+        ectx.beginPath(); ectx.moveTo(45.5, 0); ectx.lineTo(45.5, 91); ectx.stroke();
+        ectx.beginPath(); ectx.moveTo(0, 45.5); ectx.lineTo(91, 45.5); ectx.stroke();
+        ectx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ectx.lineWidth = 1;
+        ectx.beginPath(); ectx.moveTo(45.5, 0); ectx.lineTo(45.5, 91); ectx.stroke();
+        ectx.beginPath(); ectx.moveTo(0, 45.5); ectx.lineTo(91, 45.5); ectx.stroke();
+        // Center pixel border
+        ectx.strokeStyle = '#fff';
+        ectx.lineWidth = 1;
+        ectx.strokeRect(38.5, 38.5, 14, 14);
+
+        const [r, g, b] = mx >= 0 && my >= 0 && mx < vw && my < vh
+          ? mainCtx.getImageData(Math.max(0, mx), Math.max(0, my), 1, 1).data
+          : [0, 0, 0, 255];
+        const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+        eyedropHex.textContent = hex;
+
+        const W = 105, H = 128;
+        let left = e.clientX + 18;
+        let top = e.clientY + 18;
+        if (left + W > window.innerWidth) left = e.clientX - W - 10;
+        if (top + H > window.innerHeight) top = e.clientY - H - 10;
+        eyedropOverlay.style.left = left + 'px';
+        eyedropOverlay.style.top = top + 'px';
+        eyedropOverlay.style.display = 'block';
+      }
+
+      function hideEyedropPreview() {
+        eyedropOverlay.style.display = 'none';
+      }
+
       // ===== DRAWING =====
       function getCanvasPos(e) {
         const rect = penCanvas.getBoundingClientRect();
@@ -815,11 +907,29 @@
       }
 
       penCanvas.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        // MMB = pan
+        if (e.button === 1) {
+          penCanvas.setPointerCapture(e.pointerId);
+          vpDrag = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
+          videoViewport.classList.add('panning');
+          return;
+        }
+        // Right-click = zoom at click point
+        if (e.button === 2) {
+          penCanvas.setPointerCapture(e.pointerId);
+          const rect = videoContainer.getBoundingClientRect();
+          vpDrag = { type: 'zoom', startY: e.clientY, startZoom: vpZoom, startPanX: panX, startPanY: panY,
+                     cx: e.clientX - rect.left, cy: e.clientY - rect.top };
+          videoViewport.classList.add('zooming');
+          return;
+        }
         if (!drawingsVisible || activeIndex < 0) return;
         const pos = getCanvasPos(e);
         if (currentTool === 'eyedrop') {
           const hex = sampleColorFromCanvas(pos);
           if (hex) setDrawColor(hex);
+          hideEyedropPreview();
           activateTool(prevTool);
           return;
         }
@@ -841,8 +951,31 @@
       });
 
       penCanvas.addEventListener('pointermove', (e) => {
+        // Handle pan/zoom drag
+        if (vpDrag) {
+          if (vpDrag.type === 'pan') {
+            panX = vpDrag.startPanX + (e.clientX - vpDrag.startX);
+            panY = vpDrag.startPanY + (e.clientY - vpDrag.startY);
+          } else {
+            const dy = e.clientY - vpDrag.startY;
+            const newZoom = Math.max(0.1, Math.min(20, vpDrag.startZoom * Math.pow(1.005, -dy)));
+            panX = vpDrag.cx - (vpDrag.cx - vpDrag.startPanX) * (newZoom / vpDrag.startZoom);
+            panY = vpDrag.cy - (vpDrag.cy - vpDrag.startPanY) * (newZoom / vpDrag.startZoom);
+            vpZoom = newZoom;
+          }
+          applyViewport();
+          return;
+        }
+
         if (!drawingsVisible) return;
         const pos = getCanvasPos(e);
+
+        // Eyedropper preview while hovering
+        if (currentTool === 'eyedrop') {
+          showEyedropPreview(e, pos);
+          return;
+        }
+
         if (currentTool === 'pen' && isDrawing && currentStroke) {
           currentStroke.points.push(pos);
           redrawPenCanvas();
@@ -871,8 +1004,26 @@
         else if (currentTool === 'eraser') { isErasing = false; }
       };
 
-      penCanvas.addEventListener('pointerup', finishStroke);
-      penCanvas.addEventListener('pointercancel', finishStroke);
+      penCanvas.addEventListener('pointerleave', () => {
+        if (currentTool === 'eyedrop') hideEyedropPreview();
+      });
+
+      penCanvas.addEventListener('pointerup', (e) => {
+        if (vpDrag) {
+          videoViewport.classList.remove('panning', 'zooming');
+          vpDrag = null;
+          return;
+        }
+        finishStroke(e);
+      });
+      penCanvas.addEventListener('pointercancel', (e) => {
+        if (vpDrag) {
+          videoViewport.classList.remove('panning', 'zooming');
+          vpDrag = null;
+          return;
+        }
+        finishStroke(e);
+      });
 
       // ===== ERASER =====
       function pointToSegDist(px, py, ax, ay, bx, by) {

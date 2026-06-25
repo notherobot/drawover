@@ -314,7 +314,7 @@
 
     <div id="topbar">
       <button id="btn-menu">☰</button>
-      <div id="app-title">DrawOver <span>v1.7</span></div>
+      <div id="app-title">DrawOver <span>v1.8</span></div>
       <button id="btn-topbar-add">+ Video</button>
     </div>
 
@@ -355,7 +355,6 @@
       <button class="tool-btn active" data-tool="pen" title="Pen">🖌️</button>
       <button class="tool-btn" data-tool="laser" title="Laser">💫</button>
       <button class="tool-btn" data-tool="eraser" title="Eraser">🧹</button>
-      <button class="tool-btn" data-tool="eyedrop" title="Eyedropper">⊕</button>
       <div class="tool-sep"></div>
       <button id="btn-set-in">[ In</button>
       <button id="btn-set-out">Out ]</button>
@@ -363,6 +362,7 @@
       <div class="tool-sep"></div>
       <div id="color-row"></div>
       <button id="btn-custom-color" title="Custom color">＋</button>
+      <button class="tool-btn" data-tool="eyedrop" title="Eyedropper">⊕</button>
       <div class="tool-sep"></div>
       <div id="size-control">
         <button id="btn-size-down">−</button>
@@ -379,6 +379,12 @@
       <button class="speed-btn" data-speed="1.5">1.5×</button>
       <button class="speed-btn" data-speed="2">2×</button>
     </div>
+  </div>
+
+  <!-- Eyedropper zoom preview -->
+  <div id="eyedropper-overlay" style="position:fixed;z-index:9000;display:none;background:#1a1a1a;border:1px solid #444;border-radius:8px;padding:6px;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,0.6);">
+    <canvas id="eyedropper-canvas" width="91" height="91" style="display:block;border-radius:4px;image-rendering:pixelated;"></canvas>
+    <div id="eyedropper-hex" style="text-align:center;font-size:11px;font-family:monospace;color:#e0e0e0;margin-top:4px;letter-spacing:0.5px;">#ff3333</div>
   </div>
 
   <!-- Custom color modal (bottom sheet) -->
@@ -443,6 +449,11 @@
     const laserHoldSlider = document.getElementById('laser-hold');
     const laserHoldValEl = document.getElementById('laser-hold-val');
     const toolBtns = document.querySelectorAll('.tool-btn');
+
+    // Eyedropper overlay
+    const eyedropOverlay = document.getElementById('eyedropper-overlay');
+    const eyedropCanvas = document.getElementById('eyedropper-canvas');
+    const eyedropHex = document.getElementById('eyedropper-hex');
 
     // Welcome overlay
     const welcomeOverlay = document.getElementById('welcome-overlay');
@@ -913,6 +924,7 @@
     // ===== TOOLS =====
     function activateTool(tool) {
       if (tool === 'eyedrop' && currentTool !== 'eyedrop') prevTool = currentTool;
+      if (currentTool === 'eyedrop' && tool !== 'eyedrop') hideEyedropPreview();
       currentTool = tool;
       toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
       penCanvas.style.cursor = (tool === 'laser' || tool === 'eyedrop') ? 'crosshair' : 'default';
@@ -997,6 +1009,41 @@
       } catch (err) { return null; }
     }
 
+    function showEyedropPreview(e, pos) {
+      const vw = mainCanvas.width, vh = mainCanvas.height;
+      if (!vw || !vh || !player.video || player.video.readyState < 2) { eyedropOverlay.style.display = 'none'; return; }
+      const cw = penCanvas.width, ch = penCanvas.height;
+      const scale = Math.min(cw / vw, ch / vh);
+      const ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
+      const px = pos.x * cw, py = pos.y * ch;
+      const mx = Math.floor((px - ox) / scale);
+      const my = Math.floor((py - oy) / scale);
+      const ectx = eyedropCanvas.getContext('2d');
+      ectx.imageSmoothingEnabled = false;
+      ectx.fillStyle = '#111'; ectx.fillRect(0, 0, 91, 91);
+      if (mx >= 0 && my >= 0 && mx < vw && my < vh) ectx.drawImage(mainCanvas, mx - 6, my - 6, 13, 13, 0, 0, 91, 91);
+      ectx.strokeStyle = 'rgba(0,0,0,0.5)'; ectx.lineWidth = 3;
+      ectx.beginPath(); ectx.moveTo(45.5, 0); ectx.lineTo(45.5, 91); ectx.stroke();
+      ectx.beginPath(); ectx.moveTo(0, 45.5); ectx.lineTo(91, 45.5); ectx.stroke();
+      ectx.strokeStyle = 'rgba(255,255,255,0.85)'; ectx.lineWidth = 1;
+      ectx.beginPath(); ectx.moveTo(45.5, 0); ectx.lineTo(45.5, 91); ectx.stroke();
+      ectx.beginPath(); ectx.moveTo(0, 45.5); ectx.lineTo(91, 45.5); ectx.stroke();
+      ectx.strokeStyle = '#fff'; ectx.lineWidth = 1; ectx.strokeRect(38.5, 38.5, 14, 14);
+      try {
+        const [r, g, b] = mainCtx.getImageData(Math.max(0, mx), Math.max(0, my), 1, 1).data;
+        eyedropHex.textContent = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+      } catch (_) {}
+      const W = 105, H = 128;
+      let left = e.clientX + 18, top = e.clientY + 18;
+      if (left + W > window.innerWidth) left = e.clientX - W - 10;
+      if (top + H > window.innerHeight) top = e.clientY - H - 10;
+      eyedropOverlay.style.left = left + 'px';
+      eyedropOverlay.style.top = top + 'px';
+      eyedropOverlay.style.display = 'block';
+    }
+
+    function hideEyedropPreview() { eyedropOverlay.style.display = 'none'; }
+
     // ===== DRAWING =====
     function getCanvasPos(e) {
       const rect = penCanvas.getBoundingClientRect();
@@ -1041,6 +1088,7 @@
       if (currentTool === 'eyedrop') {
         const hex = sampleColorFromCanvas(pos);
         if (hex) setDrawColor(hex, null);
+        hideEyedropPreview();
         activateTool(prevTool);
         return;
       }
@@ -1064,6 +1112,7 @@
     penCanvas.addEventListener('pointermove', (e) => {
       if (!drawingsVisible) return;
       const pos = getCanvasPos(e);
+      if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
       if (currentTool === 'pen' && isDrawing && currentStroke) {
         currentStroke.points.push(pos);
         redrawPenCanvas();
