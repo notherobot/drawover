@@ -9,7 +9,7 @@
 <body>
   <div id="app">
     <div id="topbar">
-      <div id="app-title">DrawOverLMS <span id="version">v1.1</span></div>
+      <div id="app-title">DrawOverLMS <span id="version">v1.2</span></div>
       <div id="topbar-actions">
         <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
         <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
@@ -52,12 +52,18 @@
           <div class="tool-group">
             <label class="tool-label">FPS <input type="number" id="fps-input" min="1" max="120" value="24"></label>
           </div>
+          <div class="tool-sep"></div>
+          <div class="tool-group">
+            <button class="tool-btn" data-tool="crop" title="Crop — drag to define crop region">✂️</button>
+            <button id="btn-clear-crop" title="Clear Crop" style="font-size:11px;padding:3px 7px;">🗑 Crop</button>
+          </div>
         </div>
 
         <div id="video-container">
           <canvas id="main-canvas"></canvas>
           <canvas id="pen-canvas"></canvas>
           <canvas id="laser-canvas"></canvas>
+          <canvas id="crop-canvas"></canvas>
         </div>
 
         <div id="scrub-bar-container">
@@ -66,6 +72,8 @@
             <div id="scrub-inout"></div>
             <div id="scrub-ticks"></div>
             <div id="scrub-playhead"></div>
+            <div id="scrub-in-handle" class="io-handle"></div>
+            <div id="scrub-out-handle" class="io-handle"></div>
           </div>
           <div id="scrub-times">
             <span id="scrub-current">00:00</span> / <span id="scrub-total">00:00</span>
@@ -95,9 +103,11 @@
       const mainCanvas = document.getElementById('main-canvas');
       const penCanvas = document.getElementById('pen-canvas');
       const laserCanvas = document.getElementById('laser-canvas');
+      const cropCanvas = document.getElementById('crop-canvas');
       const mainCtx = mainCanvas.getContext('2d');
       const penCtx = penCanvas.getContext('2d');
       const laserCtx = laserCanvas.getContext('2d');
+      const cropCtx = cropCanvas.getContext('2d');
       const videoContainer = document.getElementById('video-container');
       const scrubBar = document.getElementById('scrub-bar');
       const scrubProgress = document.getElementById('scrub-progress');
@@ -108,6 +118,9 @@
       const scrubTotal = document.getElementById('scrub-total');
       const playlistEl = document.getElementById('playlist');
       const fileInput = document.getElementById('file-input');
+      const scrubInHandle = document.getElementById('scrub-in-handle');
+      const scrubOutHandle = document.getElementById('scrub-out-handle');
+      const btnClearCrop = document.getElementById('btn-clear-crop');
       const btnAddVideo = document.getElementById('btn-add-video');
       const btnPlay = document.getElementById('btn-play');
       const btnFrameBack = document.getElementById('btn-frame-back');
@@ -155,8 +168,14 @@
       let currentStroke = null;
       let isErasing = false;
 
+      // Crop state
+      let isCropping = false;
+      let cropStart = null;
+      let cropEnd = null;
+
       // Scrub dragging
       let isScrubbing = false;
+      let draggingHandle = null;
 
       // ===== HELPERS =====
       function formatTime(seconds) {
@@ -200,6 +219,7 @@
           this.inPoint = null;
           this.outPoint = null;
           this.loop = false;
+          this.crop = null; // {x,y,w,h} normalized 0-1
           this.onFrameChange = null;
           this.onDurationChange = null;
 
@@ -266,8 +286,17 @@
 
         _renderFrame() {
           if (this.video.readyState < 2) return;
-          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-          this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+          const cw = this.canvas.width, ch = this.canvas.height;
+          this.ctx.clearRect(0, 0, cw, ch);
+          if (this.crop) {
+            const vw = this.video.videoWidth || cw;
+            const vh = this.video.videoHeight || ch;
+            this.ctx.drawImage(this.video,
+              this.crop.x * vw, this.crop.y * vh, this.crop.w * vw, this.crop.h * vh,
+              0, 0, cw, ch);
+          } else {
+            this.ctx.drawImage(this.video, 0, 0, cw, ch);
+          }
         }
 
         _cancelRAF() {
@@ -371,6 +400,7 @@
             annotations: {},
             inPoint: null,
             outPoint: null,
+            crop: null,
             fps: getFPS(),
             undoStack: [],
             redoStack: [],
@@ -440,6 +470,7 @@
         player.inPoint = entry.inPoint;
         player.outPoint = entry.outPoint;
         player.loop = loopEnabled;
+        player.crop = entry.crop || null;
         btnPlay.textContent = '▶ Play';
 
         try {
@@ -459,15 +490,19 @@
       // ===== CANVAS RESIZE =====
       function resizeCanvases() {
         const rect = videoContainer.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
         penCanvas.width = rect.width;
         penCanvas.height = rect.height;
         laserCanvas.width = rect.width;
         laserCanvas.height = rect.height;
+        cropCanvas.width = rect.width;
+        cropCanvas.height = rect.height;
         redrawPenCanvas();
         redrawLaserCanvas();
+        redrawCropCanvas();
         updateScrubTicks();
       }
-      new ResizeObserver(() => { if (mainCanvas.width > 0) resizeCanvases(); }).observe(videoContainer);
+      new ResizeObserver(resizeCanvases).observe(videoContainer);
 
       // ===== PLAYBACK CONTROLS =====
       btnPlay.addEventListener('click', () => {
@@ -563,16 +598,58 @@
         if (player.duration) player.seekToTime(pct * player.duration);
       }
 
-      scrubBar.addEventListener('mousedown', (e) => { isScrubbing = true; scrubFromEvent(e); });
-      document.addEventListener('mousemove', (e) => { if (isScrubbing) scrubFromEvent(e); });
-      document.addEventListener('mouseup', () => { isScrubbing = false; });
+      // Handle drag helpers
+      function handleDragFromEvent(e) {
+        if (!draggingHandle || activeIndex < 0 || !player.duration) return;
+        const rect = scrubBar.getBoundingClientRect();
+        const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const time = pct * player.duration;
+        playlist[activeIndex][draggingHandle === 'in' ? 'inPoint' : 'outPoint'] = time;
+        player[draggingHandle === 'in' ? 'inPoint' : 'outPoint'] = time;
+        updateInOutUI();
+      }
+
+      scrubInHandle.addEventListener('mousedown', (e) => { e.stopPropagation(); draggingHandle = 'in'; });
+      scrubOutHandle.addEventListener('mousedown', (e) => { e.stopPropagation(); draggingHandle = 'out'; });
+
+      scrubBar.addEventListener('mousedown', (e) => {
+        if (draggingHandle) return;
+        isScrubbing = true; scrubFromEvent(e);
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (draggingHandle) { handleDragFromEvent(e); return; }
+        if (isScrubbing) scrubFromEvent(e);
+      });
+      document.addEventListener('mouseup', () => {
+        isScrubbing = false;
+        draggingHandle = null;
+      });
       scrubBar.addEventListener('touchstart', (e) => { isScrubbing = true; scrubFromEvent(e); }, { passive: true });
       document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
       document.addEventListener('touchend', () => { isScrubbing = false; });
 
       function updateInOutUI() {
         const entry = getActiveVideoState();
-        if (!entry || !player.duration) return;
+        if (!entry || !player.duration) {
+          scrubInout.style.left = '0'; scrubInout.style.width = '0';
+          scrubInHandle.style.display = 'none';
+          scrubOutHandle.style.display = 'none';
+          return;
+        }
+        if (entry.inPoint !== null) {
+          const pct = (entry.inPoint / player.duration) * 100;
+          scrubInHandle.style.left = pct + '%';
+          scrubInHandle.style.display = '';
+        } else {
+          scrubInHandle.style.display = 'none';
+        }
+        if (entry.outPoint !== null) {
+          const pct = (entry.outPoint / player.duration) * 100;
+          scrubOutHandle.style.left = pct + '%';
+          scrubOutHandle.style.display = '';
+        } else {
+          scrubOutHandle.style.display = 'none';
+        }
         if (entry.inPoint !== null && entry.outPoint !== null) {
           const leftPct = (entry.inPoint / player.duration) * 100;
           const widthPct = ((entry.outPoint - entry.inPoint) / player.duration) * 100;
@@ -606,7 +683,9 @@
           toolBtns.forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           currentTool = btn.dataset.tool;
-          penCanvas.style.cursor = currentTool === 'eraser' ? 'cell' : 'crosshair';
+          const cursors = { eraser: 'cell', crop: 'crosshair' };
+          penCanvas.style.cursor = cursors[currentTool] || 'crosshair';
+          redrawCropCanvas();
         });
       });
 
@@ -647,15 +726,23 @@
         ctx.save();
         ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
         ctx.strokeStyle = stroke.color;
+        ctx.fillStyle = stroke.color;
         ctx.lineWidth = stroke.size;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(stroke.points[0].x * w, stroke.points[0].y * h);
-        for (let i = 1; i < stroke.points.length; i++) {
-          ctx.lineTo(stroke.points[i].x * w, stroke.points[i].y * h);
+        if (stroke.points.length === 1) {
+          // Single tap — draw a filled dot
+          ctx.beginPath();
+          ctx.arc(stroke.points[0].x * w, stroke.points[0].y * h, stroke.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(stroke.points[0].x * w, stroke.points[0].y * h);
+          for (let i = 1; i < stroke.points.length; i++) {
+            ctx.lineTo(stroke.points[i].x * w, stroke.points[i].y * h);
+          }
+          ctx.stroke();
         }
-        ctx.stroke();
         ctx.restore();
       }
 
@@ -677,14 +764,60 @@
         laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtx, s, w, h, laserFadeOpacity));
       }
 
+      function redrawCropCanvas() {
+        const w = cropCanvas.width, h = cropCanvas.height;
+        cropCtx.clearRect(0, 0, w, h);
+        if (currentTool !== 'crop') return;
+
+        // Determine the crop rect to show: live drag preview OR saved crop
+        let cr = null;
+        if (isCropping && cropStart && cropEnd) {
+          cr = {
+            x: Math.min(cropStart.x, cropEnd.x),
+            y: Math.min(cropStart.y, cropEnd.y),
+            w: Math.abs(cropEnd.x - cropStart.x),
+            h: Math.abs(cropEnd.y - cropStart.y)
+          };
+        } else if (activeIndex >= 0 && playlist[activeIndex].crop) {
+          cr = playlist[activeIndex].crop;
+        }
+
+        if (!cr || cr.w < 0.001 || cr.h < 0.001) {
+          // Dim entire canvas as hint
+          cropCtx.fillStyle = 'rgba(0,0,0,0.25)';
+          cropCtx.fillRect(0, 0, w, h);
+          return;
+        }
+
+        const rx = cr.x * w, ry = cr.y * h, rw = cr.w * w, rh = cr.h * h;
+        // Dark overlay outside crop
+        cropCtx.fillStyle = 'rgba(0,0,0,0.5)';
+        cropCtx.fillRect(0, 0, w, h);
+        cropCtx.clearRect(rx, ry, rw, rh);
+        // Crop border
+        cropCtx.save();
+        cropCtx.strokeStyle = '#fff';
+        cropCtx.lineWidth = 2;
+        cropCtx.setLineDash([6, 4]);
+        cropCtx.strokeRect(rx, ry, rw, rh);
+        cropCtx.setLineDash([]);
+        cropCtx.restore();
+      }
+
       // laser-canvas has pointer-events: none in CSS so ALL drawing events
       // come through penCanvas — this is what fixes pen not working (laserCanvas
       // was on top and swallowing events) and laser not stopping (no pointerup).
       penCanvas.addEventListener('pointerdown', (e) => {
-        if (!drawingsVisible || activeIndex < 0) return;
-        e.preventDefault();
-        penCanvas.setPointerCapture(e.pointerId);
         const pos = getCanvasPos(e);
+        if (currentTool === 'crop') {
+          isCropping = true;
+          cropStart = pos;
+          cropEnd = pos;
+          redrawCropCanvas();
+          return;
+        }
+        if (!drawingsVisible || activeIndex < 0) return;
+        penCanvas.setPointerCapture(e.pointerId);
         if (currentTool === 'pen') {
           if (player.playing) { player.pause(); btnPlay.textContent = '▶ Play'; }
           isDrawing = true;
@@ -703,8 +836,12 @@
       });
 
       penCanvas.addEventListener('pointermove', (e) => {
-        if (!drawingsVisible) return;
         const pos = getCanvasPos(e);
+        if (currentTool === 'crop') {
+          if (isCropping) { cropEnd = pos; redrawCropCanvas(); }
+          return;
+        }
+        if (!drawingsVisible) return;
         if (currentTool === 'pen' && isDrawing && currentStroke) {
           currentStroke.points.push(pos);
           redrawPenCanvas();
@@ -718,7 +855,25 @@
         }
       });
 
-      const finishStroke = () => {
+      const finishStroke = (e) => {
+        if (currentTool === 'crop') {
+          if (isCropping && cropStart && cropEnd && activeIndex >= 0) {
+            const x = Math.min(cropStart.x, cropEnd.x);
+            const y = Math.min(cropStart.y, cropEnd.y);
+            const w = Math.abs(cropEnd.x - cropStart.x);
+            const h = Math.abs(cropEnd.y - cropStart.y);
+            if (w > 0.01 && h > 0.01) {
+              playlist[activeIndex].crop = {x, y, w, h};
+              player.crop = playlist[activeIndex].crop;
+              player._renderFrame();
+            }
+          }
+          isCropping = false;
+          cropStart = null;
+          cropEnd = null;
+          redrawCropCanvas();
+          return;
+        }
         if (currentTool === 'pen' && isDrawing && currentStroke) {
           isDrawing = false;
           const frame = player.currentFrame;
@@ -737,8 +892,10 @@
         }
       };
 
+      // Only pointerup and pointercancel — NOT pointerleave.
+      // setPointerCapture fires a synthetic pointerleave when capture begins,
+      // which would immediately kill the stroke with 0 dragged points.
       penCanvas.addEventListener('pointerup', finishStroke);
-      penCanvas.addEventListener('pointerleave', finishStroke);
       penCanvas.addEventListener('pointercancel', finishStroke);
 
       // ===== ERASER =====
@@ -874,9 +1031,19 @@
       }
       requestAnimationFrame(laserLoop);
 
+      // ===== CLEAR CROP =====
+      btnClearCrop.addEventListener('click', () => {
+        if (activeIndex < 0) return;
+        playlist[activeIndex].crop = null;
+        player.crop = null;
+        player._renderFrame();
+        redrawCropCanvas();
+      });
+
       // ===== INIT =====
       swatches[0].classList.add('active');
       mainCanvas.style.display = 'block';
+      resizeCanvases();
     })();
   </script>
 </body>
