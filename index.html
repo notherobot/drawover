@@ -9,7 +9,7 @@
 <body>
   <div id="app">
     <div id="topbar">
-      <div id="app-title">DrawOverLMS <span id="version">v1.2</span></div>
+      <div id="app-title">DrawOverLMS <span id="version">v1.3</span></div>
       <div id="topbar-actions">
         <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
         <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
@@ -24,6 +24,7 @@
         <input type="file" id="file-input" accept="video/mp4,video/webm" multiple hidden>
         <div id="playlist"></div>
       </div>
+      <div id="sidebar-resizer"></div>
 
       <div id="content">
         <div id="tool-row">
@@ -52,18 +53,12 @@
           <div class="tool-group">
             <label class="tool-label">FPS <input type="number" id="fps-input" min="1" max="120" value="24"></label>
           </div>
-          <div class="tool-sep"></div>
-          <div class="tool-group">
-            <button class="tool-btn" data-tool="crop" title="Crop — drag to define crop region">✂️</button>
-            <button id="btn-clear-crop" title="Clear Crop" style="font-size:11px;padding:3px 7px;">🗑 Crop</button>
-          </div>
         </div>
 
         <div id="video-container">
           <canvas id="main-canvas"></canvas>
           <canvas id="pen-canvas"></canvas>
           <canvas id="laser-canvas"></canvas>
-          <canvas id="crop-canvas"></canvas>
         </div>
 
         <div id="scrub-bar-container">
@@ -103,11 +98,9 @@
       const mainCanvas = document.getElementById('main-canvas');
       const penCanvas = document.getElementById('pen-canvas');
       const laserCanvas = document.getElementById('laser-canvas');
-      const cropCanvas = document.getElementById('crop-canvas');
       const mainCtx = mainCanvas.getContext('2d');
       const penCtx = penCanvas.getContext('2d');
       const laserCtx = laserCanvas.getContext('2d');
-      const cropCtx = cropCanvas.getContext('2d');
       const videoContainer = document.getElementById('video-container');
       const scrubBar = document.getElementById('scrub-bar');
       const scrubProgress = document.getElementById('scrub-progress');
@@ -120,7 +113,8 @@
       const fileInput = document.getElementById('file-input');
       const scrubInHandle = document.getElementById('scrub-in-handle');
       const scrubOutHandle = document.getElementById('scrub-out-handle');
-      const btnClearCrop = document.getElementById('btn-clear-crop');
+      const sidebarEl = document.getElementById('sidebar');
+      const sidebarResizer = document.getElementById('sidebar-resizer');
       const btnAddVideo = document.getElementById('btn-add-video');
       const btnPlay = document.getElementById('btn-play');
       const btnFrameBack = document.getElementById('btn-frame-back');
@@ -168,14 +162,12 @@
       let currentStroke = null;
       let isErasing = false;
 
-      // Crop state
-      let isCropping = false;
-      let cropStart = null;
-      let cropEnd = null;
-
       // Scrub dragging
       let isScrubbing = false;
       let draggingHandle = null;
+
+      // Sidebar resize
+      let isResizingSidebar = false;
 
       // ===== HELPERS =====
       function formatTime(seconds) {
@@ -219,7 +211,6 @@
           this.inPoint = null;
           this.outPoint = null;
           this.loop = false;
-          this.crop = null; // {x,y,w,h} normalized 0-1
           this.onFrameChange = null;
           this.onDurationChange = null;
 
@@ -286,17 +277,8 @@
 
         _renderFrame() {
           if (this.video.readyState < 2) return;
-          const cw = this.canvas.width, ch = this.canvas.height;
-          this.ctx.clearRect(0, 0, cw, ch);
-          if (this.crop) {
-            const vw = this.video.videoWidth || cw;
-            const vh = this.video.videoHeight || ch;
-            this.ctx.drawImage(this.video,
-              this.crop.x * vw, this.crop.y * vh, this.crop.w * vw, this.crop.h * vh,
-              0, 0, cw, ch);
-          } else {
-            this.ctx.drawImage(this.video, 0, 0, cw, ch);
-          }
+          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
         }
 
         _cancelRAF() {
@@ -390,8 +372,32 @@
       // ===== PLAYLIST =====
       btnAddVideo.addEventListener('click', () => fileInput.click());
 
+      function generateThumbnail(objectUrl) {
+        return new Promise(resolve => {
+          const vid = document.createElement('video');
+          const cnv = document.createElement('canvas');
+          vid.preload = 'metadata';
+          vid.muted = true;
+          vid.src = objectUrl;
+          vid.addEventListener('loadedmetadata', () => {
+            vid.currentTime = Math.min(1, vid.duration * 0.1);
+          }, { once: true });
+          vid.addEventListener('seeked', () => {
+            const aspect = vid.videoWidth / (vid.videoHeight || 1);
+            cnv.width = 96;
+            cnv.height = Math.round(96 / aspect);
+            cnv.getContext('2d').drawImage(vid, 0, 0, cnv.width, cnv.height);
+            vid.src = '';
+            resolve(cnv.toDataURL('image/jpeg', 0.75));
+          }, { once: true });
+          vid.addEventListener('error', () => { vid.src = ''; resolve(null); }, { once: true });
+          vid.load();
+        });
+      }
+
       fileInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files);
+        const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
           const entry = {
@@ -400,15 +406,14 @@
             annotations: {},
             inPoint: null,
             outPoint: null,
-            crop: null,
             fps: getFPS(),
             undoStack: [],
             redoStack: [],
-            duration: 0
+            duration: 0,
+            thumbnail: null
           };
           playlist.push(entry);
 
-          // Probe duration without holding a decoded buffer in memory
           await new Promise(resolve => {
             const tmp = document.createElement('video');
             tmp.preload = 'metadata';
@@ -416,9 +421,13 @@
             tmp.onloadedmetadata = () => { entry.duration = tmp.duration || 0; resolve(); };
             tmp.onerror = resolve;
           });
+
+          entry.thumbnail = await generateThumbnail(objectUrl);
+          renderPlaylist();
         }
-        renderPlaylist();
         fileInput.value = '';
+        // Auto-load the first newly added video
+        if (firstNewIdx < playlist.length) loadVideo(firstNewIdx);
       });
 
       function renderPlaylist() {
@@ -427,6 +436,20 @@
           const row = document.createElement('div');
           row.className = 'playlist-row' + (i === activeIndex ? ' active' : '');
 
+          if (entry.thumbnail) {
+            const thumb = document.createElement('img');
+            thumb.className = 'playlist-thumb';
+            thumb.src = entry.thumbnail;
+            row.appendChild(thumb);
+          } else {
+            const thumbPlaceholder = document.createElement('div');
+            thumbPlaceholder.className = 'playlist-thumb playlist-thumb-placeholder';
+            row.appendChild(thumbPlaceholder);
+          }
+
+          const info = document.createElement('div');
+          info.className = 'playlist-info';
+
           const name = document.createElement('span');
           name.className = 'playlist-name';
           name.textContent = entry.file.name;
@@ -434,6 +457,9 @@
           const dur = document.createElement('span');
           dur.className = 'playlist-duration';
           dur.textContent = formatTime(entry.duration);
+
+          info.appendChild(name);
+          info.appendChild(dur);
 
           const removeBtn = document.createElement('button');
           removeBtn.className = 'playlist-remove';
@@ -454,8 +480,7 @@
           });
 
           row.addEventListener('click', () => loadVideo(i));
-          row.appendChild(name);
-          row.appendChild(dur);
+          row.appendChild(info);
           row.appendChild(removeBtn);
           playlistEl.appendChild(row);
         });
@@ -470,7 +495,6 @@
         player.inPoint = entry.inPoint;
         player.outPoint = entry.outPoint;
         player.loop = loopEnabled;
-        player.crop = entry.crop || null;
         btnPlay.textContent = '▶ Play';
 
         try {
@@ -495,11 +519,8 @@
         penCanvas.height = rect.height;
         laserCanvas.width = rect.width;
         laserCanvas.height = rect.height;
-        cropCanvas.width = rect.width;
-        cropCanvas.height = rect.height;
         redrawPenCanvas();
         redrawLaserCanvas();
-        redrawCropCanvas();
         updateScrubTicks();
       }
       new ResizeObserver(resizeCanvases).observe(videoContainer);
@@ -683,9 +704,7 @@
           toolBtns.forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           currentTool = btn.dataset.tool;
-          const cursors = { eraser: 'cell', crop: 'crosshair' };
-          penCanvas.style.cursor = cursors[currentTool] || 'crosshair';
-          redrawCropCanvas();
+          penCanvas.style.cursor = currentTool === 'eraser' ? 'cell' : 'crosshair';
         });
       });
 
@@ -764,59 +783,12 @@
         laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtx, s, w, h, laserFadeOpacity));
       }
 
-      function redrawCropCanvas() {
-        const w = cropCanvas.width, h = cropCanvas.height;
-        cropCtx.clearRect(0, 0, w, h);
-        if (currentTool !== 'crop') return;
-
-        // Determine the crop rect to show: live drag preview OR saved crop
-        let cr = null;
-        if (isCropping && cropStart && cropEnd) {
-          cr = {
-            x: Math.min(cropStart.x, cropEnd.x),
-            y: Math.min(cropStart.y, cropEnd.y),
-            w: Math.abs(cropEnd.x - cropStart.x),
-            h: Math.abs(cropEnd.y - cropStart.y)
-          };
-        } else if (activeIndex >= 0 && playlist[activeIndex].crop) {
-          cr = playlist[activeIndex].crop;
-        }
-
-        if (!cr || cr.w < 0.001 || cr.h < 0.001) {
-          // Dim entire canvas as hint
-          cropCtx.fillStyle = 'rgba(0,0,0,0.25)';
-          cropCtx.fillRect(0, 0, w, h);
-          return;
-        }
-
-        const rx = cr.x * w, ry = cr.y * h, rw = cr.w * w, rh = cr.h * h;
-        // Dark overlay outside crop
-        cropCtx.fillStyle = 'rgba(0,0,0,0.5)';
-        cropCtx.fillRect(0, 0, w, h);
-        cropCtx.clearRect(rx, ry, rw, rh);
-        // Crop border
-        cropCtx.save();
-        cropCtx.strokeStyle = '#fff';
-        cropCtx.lineWidth = 2;
-        cropCtx.setLineDash([6, 4]);
-        cropCtx.strokeRect(rx, ry, rw, rh);
-        cropCtx.setLineDash([]);
-        cropCtx.restore();
-      }
-
       // laser-canvas has pointer-events: none in CSS so ALL drawing events
       // come through penCanvas — this is what fixes pen not working (laserCanvas
       // was on top and swallowing events) and laser not stopping (no pointerup).
       penCanvas.addEventListener('pointerdown', (e) => {
-        const pos = getCanvasPos(e);
-        if (currentTool === 'crop') {
-          isCropping = true;
-          cropStart = pos;
-          cropEnd = pos;
-          redrawCropCanvas();
-          return;
-        }
         if (!drawingsVisible || activeIndex < 0) return;
+        const pos = getCanvasPos(e);
         penCanvas.setPointerCapture(e.pointerId);
         if (currentTool === 'pen') {
           if (player.playing) { player.pause(); btnPlay.textContent = '▶ Play'; }
@@ -836,12 +808,8 @@
       });
 
       penCanvas.addEventListener('pointermove', (e) => {
-        const pos = getCanvasPos(e);
-        if (currentTool === 'crop') {
-          if (isCropping) { cropEnd = pos; redrawCropCanvas(); }
-          return;
-        }
         if (!drawingsVisible) return;
+        const pos = getCanvasPos(e);
         if (currentTool === 'pen' && isDrawing && currentStroke) {
           currentStroke.points.push(pos);
           redrawPenCanvas();
@@ -855,25 +823,7 @@
         }
       });
 
-      const finishStroke = (e) => {
-        if (currentTool === 'crop') {
-          if (isCropping && cropStart && cropEnd && activeIndex >= 0) {
-            const x = Math.min(cropStart.x, cropEnd.x);
-            const y = Math.min(cropStart.y, cropEnd.y);
-            const w = Math.abs(cropEnd.x - cropStart.x);
-            const h = Math.abs(cropEnd.y - cropStart.y);
-            if (w > 0.01 && h > 0.01) {
-              playlist[activeIndex].crop = {x, y, w, h};
-              player.crop = playlist[activeIndex].crop;
-              player._renderFrame();
-            }
-          }
-          isCropping = false;
-          cropStart = null;
-          cropEnd = null;
-          redrawCropCanvas();
-          return;
-        }
+      const finishStroke = () => {
         if (currentTool === 'pen' && isDrawing && currentStroke) {
           isDrawing = false;
           const frame = player.currentFrame;
@@ -1031,13 +981,29 @@
       }
       requestAnimationFrame(laserLoop);
 
-      // ===== CLEAR CROP =====
-      btnClearCrop.addEventListener('click', () => {
-        if (activeIndex < 0) return;
-        playlist[activeIndex].crop = null;
-        player.crop = null;
-        player._renderFrame();
-        redrawCropCanvas();
+      // ===== SIDEBAR RESIZE =====
+      sidebarResizer.addEventListener('mousedown', (e) => {
+        isResizingSidebar = true;
+        sidebarResizer.classList.add('dragging');
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (isResizingSidebar) {
+          const mainBody = document.getElementById('main-body');
+          const rect = mainBody.getBoundingClientRect();
+          const newWidth = Math.max(140, Math.min(480, e.clientX - rect.left));
+          sidebarEl.style.width = newWidth + 'px';
+          sidebarEl.style.minWidth = newWidth + 'px';
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isResizingSidebar) {
+          isResizingSidebar = false;
+          sidebarResizer.classList.remove('dragging');
+          resizeCanvases();
+        }
       });
 
       // ===== INIT =====
