@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>DrawOverLMS</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖌️</text></svg>">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      background: #000; color: #e0e0e0; font-size: 14px;
+      height: 100dvh; height: 100vh; /* dvh for modern iOS, vh fallback */
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    button {
+      font-family: inherit; background: #2a2a2a; color: #d0d0d0;
+      border: 1px solid #444; border-radius: 6px; cursor: pointer;
+      -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    }
+    button:active { opacity: 0.7; }
+    button.active { background: #1e3550; color: #3aa0ff; border-color: #3aa0ff; }
+
+    /* ===== DRAWER ===== */
+    #drawer-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 100; opacity: 0; transition: opacity 0.25s;
+    }
+    #drawer-overlay.open { display: block; opacity: 1; }
+
+    #drawer {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 80vw; max-width: 300px;
+      background: #1a1a1a; z-index: 101; display: flex; flex-direction: column;
+      transform: translateX(-100%); transition: transform 0.25s ease;
+      padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    #drawer.open { transform: translateX(0); }
+
+    #drawer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; border-bottom: 1px solid #2a2a2a; flex-shrink: 0;
+    }
+    #drawer-title { font-size: 15px; font-weight: 600; color: #3aa0ff; }
+    #btn-close-drawer { background: none; border: none; color: #888; font-size: 20px; padding: 4px 8px; }
+
+    #btn-add-video-drawer {
+      margin: 10px; padding: 12px; background: #3aa0ff; color: #fff;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
+    }
+
+    #playlist { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+    #playlist::-webkit-scrollbar { display: none; }
+
+    .playlist-row {
+      display: flex; align-items: center; padding: 8px; border-radius: 8px;
+      margin-bottom: 6px; gap: 10px; cursor: pointer; min-height: 56px;
+    }
+    .playlist-row:active { background: #2a2a2a; }
+    .playlist-row.active { background: #1e3550; border: 1px solid #3aa0ff44; }
+    .playlist-thumb { width: 72px; height: 40px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: #111; }
+    .playlist-thumb-placeholder { background: #222; border: 1px solid #333; }
+    .playlist-info { flex: 1; min-width: 0; }
+    .playlist-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .playlist-duration { font-size: 11px; color: #777; margin-top: 2px; }
+    .playlist-remove {
+      background: none; border: none; color: #555; font-size: 18px;
+      padding: 6px 8px; flex-shrink: 0; min-width: 36px; text-align: center;
+    }
+
+    /* ===== MAIN LAYOUT ===== */
+    #app {
+      display: flex; flex-direction: column;
+      height: 100dvh; height: 100vh;
+    }
+
+    /* ===== TOP BAR ===== */
+    #topbar {
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+      padding: 8px 12px;
+      padding-top: calc(8px + env(safe-area-inset-top));
+      padding-left: calc(12px + env(safe-area-inset-left));
+      padding-right: calc(12px + env(safe-area-inset-right));
+      background: #181818; border-bottom: 1px solid #2a2a2a;
+    }
+    #btn-menu { background: none; border: none; color: #aaa; font-size: 22px; padding: 2px 6px; min-width: 36px; }
+    #app-title { font-size: 15px; font-weight: 700; color: #3aa0ff; flex: 1; }
+    #app-title span { font-size: 10px; font-weight: 400; color: #555; }
+    #btn-topbar-add {
+      background: #3aa0ff; color: #fff; border: none; border-radius: 6px;
+      padding: 7px 14px; font-size: 13px; font-weight: 600;
+    }
+
+    /* ===== VIDEO ===== */
+    #video-container {
+      flex: 1; position: relative; background: #000; overflow: hidden;
+      min-height: 0; display: flex; align-items: center; justify-content: center;
+    }
+    #main-canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #pen-canvas, #laser-canvas {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    }
+    #pen-canvas { touch-action: none; cursor: crosshair; }
+    #laser-canvas { pointer-events: none; }
+
+    /* ===== SCRUB BAR ===== */
+    #scrub-bar-container {
+      flex-shrink: 0; background: #181818;
+      padding: 4px 12px 2px;
+      padding-left: calc(12px + env(safe-area-inset-left));
+      padding-right: calc(12px + env(safe-area-inset-right));
+    }
+    #scrub-times {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: #666; padding: 2px 0;
+      font-variant-numeric: tabular-nums;
+    }
+    #scrub-bar {
+      position: relative; height: 36px; background: #252525;
+      border-radius: 4px; cursor: pointer; overflow: visible; margin-bottom: 2px;
+    }
+    #scrub-progress {
+      position: absolute; top: 0; left: 0; height: 100%;
+      background: #2e2e2e; border-radius: 4px 0 0 4px; pointer-events: none;
+    }
+    #scrub-inout {
+      position: absolute; top: 0; height: 100%;
+      background: rgba(58,160,255,0.15);
+      border-left: 2px solid #30c060; border-right: 2px solid #e05030;
+      pointer-events: none;
+    }
+    #scrub-ticks { position: absolute; inset: 0; pointer-events: none; }
+    .scrub-tick {
+      position: absolute; top: 6px; width: 2px; height: 14px;
+      background: #ffcc00; border-radius: 1px; transform: translateX(-1px);
+    }
+    #scrub-playhead {
+      position: absolute; top: -4px; width: 2px; height: calc(100% + 4px);
+      background: #fff; transform: translateX(-1px); pointer-events: none; z-index: 3;
+    }
+    #scrub-playhead::before {
+      content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      border-left: 5px solid transparent; border-right: 5px solid transparent;
+      border-top: 5px solid #fff;
+    }
+
+    /* ===== PLAYBACK ROW ===== */
+    #playback-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 2px; flex-shrink: 0;
+      padding: 4px 10px;
+      padding-left: calc(10px + env(safe-area-inset-left));
+      padding-right: calc(10px + env(safe-area-inset-right));
+      background: #181818; border-top: 1px solid #222;
+    }
+    #playback-row button {
+      min-width: 44px; height: 36px; font-size: 13px; padding: 0 6px; border-radius: 6px;
+    }
+    #btn-play {
+      width: 48px; height: 44px; border-radius: 50%; font-size: 18px;
+      background: #2a2a2a; border-color: #555; flex-shrink: 0;
+    }
+    .pb-sep { width: 1px; height: 20px; background: #333; margin: 0 2px; flex-shrink: 0; }
+    #btn-toggle-drawings { min-width: 32px; padding: 0 6px; font-size: 16px; }
+    #btn-toggle-drawings.active { background: #5c3a00; color: #ffaa00; border-color: #7a5000; }
+
+    /* ===== TOOL ROW ===== */
+    #tool-row {
+      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+      padding: 6px 10px;
+      padding-left: calc(10px + env(safe-area-inset-left));
+      padding-right: calc(10px + env(safe-area-inset-right));
+      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      background: #1e1e1e; border-top: 1px solid #2a2a2a;
+      overflow-x: auto;
+    }
+    #tool-row::-webkit-scrollbar { display: none; }
+    .tool-btn {
+      width: 44px; height: 44px; font-size: 18px; flex-shrink: 0;
+      padding: 0; display: flex; align-items: center; justify-content: center;
+      border-radius: 8px;
+    }
+    .tool-btn.active { background: #1e3550; border-color: #3aa0ff; }
+    .tool-sep { width: 1px; height: 28px; background: #333; flex-shrink: 0; margin: 0 2px; }
+
+    /* ===== COLOR SWATCHES (inline row) ===== */
+    #color-row { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .m-swatch {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid transparent; cursor: pointer; padding: 0;
+      transition: transform 0.1s;
+    }
+    .m-swatch.active { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
+    .m-swatch:active { transform: scale(1.2); }
+
+    /* Custom color button */
+    #btn-custom-color {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      background: #333; border: 2px solid #555; font-size: 14px;
+      display: flex; align-items: center; justify-content: center; color: #aaa; padding: 0;
+    }
+
+    /* Custom color modal */
+    #color-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6); z-index: 200;
+      align-items: flex-end; justify-content: center;
+    }
+    #color-modal-overlay.open { display: flex; }
+    #color-modal {
+      background: #1e1e1e; border-radius: 16px 16px 0 0;
+      padding: 20px; width: 100%; max-width: 400px;
+      padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    }
+    #color-modal h3 { font-size: 14px; color: #aaa; margin-bottom: 14px; }
+    #color-modal-input {
+      width: 60px; height: 44px; border-radius: 8px; border: 2px solid #555;
+      background: #2a2a2a; cursor: pointer; padding: 0; margin-bottom: 14px;
+    }
+    #color-modal-input::-webkit-color-swatch-wrapper { padding: 0; border-radius: 6px; }
+    #color-modal-input::-webkit-color-swatch { border: none; border-radius: 4px; }
+    #btn-color-modal-close {
+      width: 100%; padding: 12px; font-size: 15px; font-weight: 600;
+      background: #3aa0ff; color: #fff; border: none; border-radius: 10px; margin-top: 6px;
+    }
+
+    /* ===== SIZE CONTROL ===== */
+    #size-control { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    #btn-size-down, #btn-size-up {
+      width: 36px; height: 36px; font-size: 20px; font-weight: 300;
+      padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    }
+    #size-display {
+      min-width: 28px; text-align: center; font-size: 13px; color: #ccc; font-variant-numeric: tabular-nums;
+    }
+
+    /* ===== LASER HOLD ===== */
+    #laser-hold-group { display: flex; align-items: center; gap: 4px; flex-shrink: 0; font-size: 11px; color: #888; }
+    #laser-hold-group input[type="range"] {
+      width: 60px; height: 20px; accent-color: #3aa0ff; cursor: pointer;
+    }
+    #laser-hold-group span { min-width: 18px; color: #ccc; }
+
+    /* ===== SCROLLBARS ===== */
+    ::-webkit-scrollbar { display: none; }
+
+    /* ===== LANDSCAPE ===== */
+    @media (orientation: landscape) and (max-height: 500px) {
+      #topbar { padding-top: 4px; padding-bottom: 4px; }
+      #scrub-bar { height: 24px; }
+      #playback-row button { height: 30px; min-width: 36px; font-size: 12px; }
+      #btn-play { width: 38px; height: 38px; font-size: 15px; }
+      .tool-btn { width: 38px; height: 38px; font-size: 16px; }
+      .m-swatch { width: 26px; height: 26px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Drawer overlay -->
+  <div id="drawer-overlay"></div>
+
+  <!-- Slide-in playlist drawer -->
+  <div id="drawer">
+    <div id="drawer-header">
+      <span id="drawer-title">Videos</span>
+      <button id="btn-close-drawer">✕</button>
+    </div>
+    <button id="btn-add-video-drawer">+ Add Video</button>
+    <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*" multiple hidden>
+    <div id="playlist"></div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app">
+
+    <div id="topbar">
+      <button id="btn-menu">☰</button>
+      <div id="app-title">DrawOverLMS <span>v1.5</span></div>
+      <button id="btn-topbar-add">+ Video</button>
+    </div>
+
+    <div id="video-container">
+      <canvas id="main-canvas"></canvas>
+      <canvas id="pen-canvas"></canvas>
+      <canvas id="laser-canvas"></canvas>
+    </div>
+
+    <div id="scrub-bar-container">
+      <div id="scrub-times">
+        <span id="scrub-current">0:00.000</span>
+        <span id="scrub-frame">F: 0</span>
+        <span id="scrub-total">0:00.000</span>
+      </div>
+      <div id="scrub-bar">
+        <div id="scrub-progress"></div>
+        <div id="scrub-inout"></div>
+        <div id="scrub-ticks"></div>
+        <div id="scrub-playhead"></div>
+      </div>
+    </div>
+
+    <div id="playback-row">
+      <button id="btn-undo" title="Undo">↩</button>
+      <button id="btn-redo" title="Redo">↪</button>
+      <button id="btn-toggle-drawings" class="active">👁</button>
+      <div class="pb-sep"></div>
+      <button id="btn-to-start">|◀</button>
+      <button id="btn-frame-back">◄◄</button>
+      <button id="btn-play">▶</button>
+      <button id="btn-frame-fwd">▶▶</button>
+      <button id="btn-to-end">▶|</button>
+      <div class="pb-sep"></div>
+      <button id="btn-set-in">[ In</button>
+      <button id="btn-set-out">Out ]</button>
+      <button id="btn-loop">↺</button>
+    </div>
+
+    <div id="tool-row">
+      <!-- Draw tools -->
+      <button class="tool-btn active" data-tool="pen" title="Pen">🖌️</button>
+      <button class="tool-btn" data-tool="laser" title="Laser">💫</button>
+      <button class="tool-btn" data-tool="eraser" title="Eraser">🧹</button>
+      <button class="tool-btn" data-tool="eyedrop" title="Eyedropper">⊕</button>
+      <div class="tool-sep"></div>
+      <!-- Colors -->
+      <div id="color-row"></div>
+      <button id="btn-custom-color" title="Custom color">＋</button>
+      <div class="tool-sep"></div>
+      <!-- Size -->
+      <div id="size-control">
+        <button id="btn-size-down">−</button>
+        <span id="size-display">4</span>
+        <button id="btn-size-up">+</button>
+      </div>
+      <div class="tool-sep"></div>
+      <!-- Laser hold -->
+      <div id="laser-hold-group">
+        💫<input type="range" id="laser-hold" min="0" max="5" step="0.5" value="3"><span id="laser-hold-val">3</span>s
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom color modal (bottom sheet) -->
+  <div id="color-modal-overlay">
+    <div id="color-modal">
+      <h3>Custom Color</h3>
+      <input type="color" id="color-modal-input" value="#ff3333">
+      <br>
+      <button id="btn-color-modal-close">Done</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // ===== DOM REFS =====
+    const mainCanvas = document.getElementById('main-canvas');
+    const penCanvas = document.getElementById('pen-canvas');
+    const laserCanvas = document.getElementById('laser-canvas');
+    const mainCtx = mainCanvas.getContext('2d');
+    const penCtx = penCanvas.getContext('2d');
+    const laserCtx = laserCanvas.getContext('2d');
+    const videoContainer = document.getElementById('video-container');
+    const scrubBar = document.getElementById('scrub-bar');
+    const scrubProgress = document.getElementById('scrub-progress');
+    const scrubInout = document.getElementById('scrub-inout');
+    const scrubTicks = document.getElementById('scrub-ticks');
+    const scrubPlayhead = document.getElementById('scrub-playhead');
+    const scrubCurrent = document.getElementById('scrub-current');
+    const scrubFrame = document.getElementById('scrub-frame');
+    const scrubTotal = document.getElementById('scrub-total');
+    const playlistEl = document.getElementById('playlist');
+    const fileInput = document.getElementById('file-input');
+    const btnPlay = document.getElementById('btn-play');
+    const btnFrameBack = document.getElementById('btn-frame-back');
+    const btnFrameFwd = document.getElementById('btn-frame-fwd');
+    const btnToStart = document.getElementById('btn-to-start');
+    const btnToEnd = document.getElementById('btn-to-end');
+    const btnSetIn = document.getElementById('btn-set-in');
+    const btnSetOut = document.getElementById('btn-set-out');
+    const btnLoop = document.getElementById('btn-loop');
+    const btnUndo = document.getElementById('btn-undo');
+    const btnRedo = document.getElementById('btn-redo');
+    const btnToggleDrawings = document.getElementById('btn-toggle-drawings');
+    const colorRow = document.getElementById('color-row');
+    const btnCustomColor = document.getElementById('btn-custom-color');
+    const colorModalOverlay = document.getElementById('color-modal-overlay');
+    const colorModalInput = document.getElementById('color-modal-input');
+    const btnColorModalClose = document.getElementById('btn-color-modal-close');
+    const btnSizeDown = document.getElementById('btn-size-down');
+    const btnSizeUp = document.getElementById('btn-size-up');
+    const sizeDisplay = document.getElementById('size-display');
+    const laserHoldSlider = document.getElementById('laser-hold');
+    const laserHoldValEl = document.getElementById('laser-hold-val');
+    const toolBtns = document.querySelectorAll('.tool-btn');
+
+    // Drawer
+    const drawer = document.getElementById('drawer');
+    const drawerOverlay = document.getElementById('drawer-overlay');
+    const btnMenu = document.getElementById('btn-menu');
+    const btnCloseDrawer = document.getElementById('btn-close-drawer');
+    const btnAddVideoDrawer = document.getElementById('btn-add-video-drawer');
+    const btnTopbarAdd = document.getElementById('btn-topbar-add');
+
+    // ===== STATE =====
+    let playlist = [];
+    let activeIndex = -1;
+    let currentTool = 'pen';
+    let prevTool = 'pen';
+    let drawColor = '#ff3333';
+    let brushSize = 4;
+    let brushOpacity = 1;
+    let drawingsVisible = true;
+    let loopEnabled = false;
+    let laserHoldMs = 3000;
+
+    let laserStrokes = [];
+    let lastLaserInputTime = 0;
+    let laserFadeOpacity = 1;
+    let laserFading = false;
+    let laserFadeStart = 0;
+    const LASER_FADE_DURATION = 500;
+
+    let isDrawing = false;
+    let currentStroke = null;
+    let isErasing = false;
+    let isScrubbing = false;
+
+    // ===== HELPERS =====
+    function formatTimecode(s) {
+      if (isNaN(s) || !isFinite(s)) return '0:00.000';
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      const ms = Math.floor((s % 1) * 1000);
+      return m + ':' + String(sec).padStart(2, '0') + '.' + String(ms).padStart(3, '0');
+    }
+
+    function formatTime(s) {
+      if (isNaN(s) || !isFinite(s)) return '00:00';
+      return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+    }
+
+    function getActiveEntry() {
+      return (activeIndex >= 0 && activeIndex < playlist.length) ? playlist[activeIndex] : null;
+    }
+
+    // ===== FRAME PLAYER =====
+    class FramePlayer {
+      constructor(canvas, ctx) {
+        this.canvas = canvas;
+        this.ctx = ctx;
+        this.video = document.createElement('video');
+        this.video.preload = 'auto';
+        this.video.playsInline = true;
+        this.video.setAttribute('webkit-playsinline', '');
+        this.video.style.display = 'none';
+        document.body.appendChild(this.video);
+
+        this.fps = 24;
+        this.playing = false;
+        this.duration = 0;
+        this.inPoint = null;
+        this.outPoint = null;
+        this.loop = false;
+        this.onFrameChange = null;
+        this.onDurationChange = null;
+        this._frameNum = 0;
+        this._rafId = null;
+        this._hasVFCB = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+
+        this.video.addEventListener('seeked', () => {
+          this._frameNum = Math.round(this.video.currentTime * this.fps);
+          this._renderFrame();
+          if (this.onFrameChange) this.onFrameChange(this._frameNum);
+        });
+        this.video.addEventListener('ended', () => {
+          this.playing = false;
+          this._cancelRAF();
+          btnPlay.textContent = '▶';
+          if (this.onFrameChange) this.onFrameChange(this._frameNum);
+        });
+      }
+
+      get currentFrame() { return this._frameNum; }
+      _frameToTime(f) { return f / this.fps + 1e-5; }
+
+      async load(objectUrl, fps) {
+        this.pause();
+        this.fps = fps || 24;
+        this._frameNum = 0;
+        this.video.src = objectUrl;
+        return new Promise((resolve, reject) => {
+          const onReady = () => {
+            cleanup();
+            this.duration = this.video.duration;
+            this.canvas.width = this.video.videoWidth || 1280;
+            this.canvas.height = this.video.videoHeight || 720;
+            if (this.onDurationChange) this.onDurationChange(this.duration);
+            this._renderFrame();
+            if (this.onFrameChange) this.onFrameChange(0);
+            resolve();
+          };
+          const onError = () => { cleanup(); reject(new Error('Failed to load video.')); };
+          const cleanup = () => {
+            this.video.removeEventListener('loadeddata', onReady);
+            this.video.removeEventListener('error', onError);
+          };
+          this.video.addEventListener('loadeddata', onReady);
+          this.video.addEventListener('error', onError);
+          this.video.load();
+        });
+      }
+
+      _renderFrame() {
+        if (this.video.readyState < 2) return;
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+      }
+
+      _cancelRAF() {
+        if (this._rafId !== null) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+      }
+
+      _scheduleVFCB() {
+        if (!this.playing) return;
+        this.video.requestVideoFrameCallback((_, meta) => {
+          if (!this.playing) return;
+          this._frameNum = Math.round(meta.mediaTime * this.fps);
+          this._renderFrame();
+          if (this.onFrameChange) this.onFrameChange(this._frameNum);
+          if (this.loop && this.inPoint !== null && this.outPoint !== null && meta.mediaTime >= this.outPoint) {
+            this.video.currentTime = this.inPoint; return;
+          }
+          this._scheduleVFCB();
+        });
+      }
+
+      _rafLoop() {
+        if (!this.playing) return;
+        this._frameNum = Math.round(this.video.currentTime * this.fps);
+        this._renderFrame();
+        if (this.onFrameChange) this.onFrameChange(this._frameNum);
+        if (this.loop && this.inPoint !== null && this.outPoint !== null && this.video.currentTime >= this.outPoint) {
+          this.video.currentTime = this.inPoint;
+        }
+        this._rafId = requestAnimationFrame(() => this._rafLoop());
+      }
+
+      play() {
+        if (!this.video.src) return;
+        this.playing = true;
+        this.video.play().catch(() => {});
+        if (this._hasVFCB) this._scheduleVFCB();
+        else { this._cancelRAF(); this._rafLoop(); }
+      }
+
+      pause() {
+        this.playing = false;
+        this.video.pause();
+        this._cancelRAF();
+      }
+
+      stepFrame(dir) {
+        this.pause();
+        const maxFrame = Math.ceil(this.duration * this.fps) - 1;
+        const target = Math.max(0, Math.min(maxFrame, this._frameNum + dir));
+        this.video.currentTime = this._frameToTime(target);
+      }
+
+      seekToTime(t) {
+        this.video.currentTime = Math.max(0, Math.min(this.duration, t));
+      }
+
+      getCurrentTime() { return this.video.currentTime; }
+    }
+
+    const player = new FramePlayer(mainCanvas, mainCtx);
+    player.onFrameChange = () => { redrawPenCanvas(); updateScrubBar(); updateScrubTimes(); };
+    player.onDurationChange = (dur) => { scrubTotal.textContent = formatTimecode(dur); updateScrubTicks(); };
+
+    // ===== DRAWER =====
+    function openDrawer() {
+      drawer.classList.add('open');
+      drawerOverlay.classList.add('open');
+    }
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      drawerOverlay.classList.remove('open');
+    }
+
+    btnMenu.addEventListener('click', openDrawer);
+    btnCloseDrawer.addEventListener('click', closeDrawer);
+    drawerOverlay.addEventListener('click', closeDrawer);
+    btnAddVideoDrawer.addEventListener('click', () => { fileInput.click(); closeDrawer(); });
+    btnTopbarAdd.addEventListener('click', () => fileInput.click());
+
+    // Swipe-to-close drawer
+    let drawerTouchStartX = 0;
+    drawer.addEventListener('touchstart', (e) => { drawerTouchStartX = e.touches[0].clientX; }, { passive: true });
+    drawer.addEventListener('touchend', (e) => {
+      if (drawerTouchStartX - e.changedTouches[0].clientX > 60) closeDrawer();
+    }, { passive: true });
+
+    // ===== PLAYLIST =====
+    function generateThumbnail(objectUrl) {
+      return new Promise(resolve => {
+        const vid = document.createElement('video');
+        const cnv = document.createElement('canvas');
+        vid.preload = 'metadata'; vid.muted = true; vid.src = objectUrl;
+        vid.addEventListener('loadedmetadata', () => { vid.currentTime = Math.min(1, vid.duration * 0.1); }, { once: true });
+        vid.addEventListener('seeked', () => {
+          cnv.width = 96; cnv.height = Math.round(96 / (vid.videoWidth / (vid.videoHeight || 1)));
+          cnv.getContext('2d').drawImage(vid, 0, 0, cnv.width, cnv.height);
+          vid.src = '';
+          resolve(cnv.toDataURL('image/jpeg', 0.75));
+        }, { once: true });
+        vid.addEventListener('error', () => { vid.src = ''; resolve(null); }, { once: true });
+        vid.load();
+      });
+    }
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files);
+      const firstNewIdx = playlist.length;
+      for (const file of files) {
+        const objectUrl = URL.createObjectURL(file);
+        const entry = { file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: 24, undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+        playlist.push(entry);
+        await new Promise(resolve => {
+          const tmp = document.createElement('video');
+          tmp.preload = 'metadata'; tmp.src = objectUrl;
+          tmp.onloadedmetadata = () => { entry.duration = tmp.duration || 0; resolve(); };
+          tmp.onerror = resolve;
+        });
+        entry.thumbnail = await generateThumbnail(objectUrl);
+        renderPlaylist();
+      }
+      fileInput.value = '';
+      if (firstNewIdx < playlist.length) loadVideo(firstNewIdx);
+    });
+
+    function renderPlaylist() {
+      playlistEl.innerHTML = '';
+      playlist.forEach((entry, i) => {
+        const row = document.createElement('div');
+        row.className = 'playlist-row' + (i === activeIndex ? ' active' : '');
+
+        const thumbEl = document.createElement(entry.thumbnail ? 'img' : 'div');
+        thumbEl.className = 'playlist-thumb' + (entry.thumbnail ? '' : ' playlist-thumb-placeholder');
+        if (entry.thumbnail) thumbEl.src = entry.thumbnail;
+        row.appendChild(thumbEl);
+
+        const info = document.createElement('div');
+        info.className = 'playlist-info';
+        const name = document.createElement('div');
+        name.className = 'playlist-name';
+        name.textContent = entry.file.name;
+        const dur = document.createElement('div');
+        dur.className = 'playlist-duration';
+        dur.textContent = formatTime(entry.duration);
+        info.appendChild(name); info.appendChild(dur);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'playlist-remove';
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          URL.revokeObjectURL(entry.objectUrl);
+          playlist.splice(i, 1);
+          if (activeIndex === i) {
+            activeIndex = -1; player.pause();
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            btnPlay.textContent = '▶';
+          } else if (activeIndex > i) activeIndex--;
+          renderPlaylist();
+        });
+
+        row.addEventListener('click', () => { loadVideo(i); closeDrawer(); });
+        row.appendChild(info); row.appendChild(removeBtn);
+        playlistEl.appendChild(row);
+      });
+    }
+
+    async function loadVideo(index) {
+      if (index < 0 || index >= playlist.length) return;
+      activeIndex = index;
+      const entry = playlist[index];
+      player.fps = entry.fps;
+      player.inPoint = entry.inPoint;
+      player.outPoint = entry.outPoint;
+      player.loop = loopEnabled;
+      btnPlay.textContent = '▶';
+      try {
+        await player.load(entry.objectUrl, entry.fps);
+        if (player.duration) entry.duration = player.duration;
+      } catch (err) { alert(err.message); return; }
+      renderPlaylist();
+      updateInOutUI();
+      updateScrubTicks();
+      resizeCanvases();
+    }
+
+    // ===== CANVAS RESIZE =====
+    function resizeCanvases() {
+      const rect = videoContainer.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      penCanvas.width = rect.width; penCanvas.height = rect.height;
+      laserCanvas.width = rect.width; laserCanvas.height = rect.height;
+      redrawPenCanvas(); redrawLaserCanvas(); updateScrubTicks();
+    }
+    new ResizeObserver(resizeCanvases).observe(videoContainer);
+
+    // ===== PLAYBACK =====
+    btnPlay.addEventListener('click', () => {
+      if (activeIndex < 0) return;
+      if (player.playing) {
+        player.pause(); btnPlay.textContent = '▶';
+      } else {
+        if (loopEnabled) {
+          const entry = playlist[activeIndex];
+          if (entry.inPoint !== null && entry.outPoint !== null) {
+            const t = player.getCurrentTime();
+            if (t < entry.inPoint || t >= entry.outPoint) player.seekToTime(entry.inPoint);
+          }
+        }
+        player.play(); btnPlay.textContent = '⏸';
+      }
+    });
+
+    btnFrameBack.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(-1); });
+    btnFrameFwd.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(1); });
+
+    btnToStart.addEventListener('click', () => {
+      if (activeIndex < 0) return;
+      const e = playlist[activeIndex];
+      player.seekToTime(e.inPoint !== null ? e.inPoint : 0);
+    });
+
+    btnToEnd.addEventListener('click', () => {
+      if (activeIndex < 0) return;
+      const e = playlist[activeIndex];
+      player.seekToTime(e.outPoint !== null ? e.outPoint : player.duration);
+    });
+
+    function setAutoLoop() {
+      const e = playlist[activeIndex];
+      if (e && e.inPoint !== null && e.outPoint !== null) {
+        loopEnabled = true; btnLoop.classList.add('active'); player.loop = true;
+      }
+    }
+
+    btnSetIn.addEventListener('click', () => {
+      if (activeIndex < 0) return;
+      playlist[activeIndex].inPoint = player.getCurrentTime();
+      player.inPoint = playlist[activeIndex].inPoint;
+      setAutoLoop(); updateInOutUI(); updateScrubTicks();
+    });
+
+    btnSetOut.addEventListener('click', () => {
+      if (activeIndex < 0) return;
+      playlist[activeIndex].outPoint = player.getCurrentTime();
+      player.outPoint = playlist[activeIndex].outPoint;
+      setAutoLoop(); updateInOutUI(); updateScrubTicks();
+    });
+
+    btnLoop.addEventListener('click', () => {
+      loopEnabled = !loopEnabled;
+      btnLoop.classList.toggle('active', loopEnabled);
+      if (activeIndex >= 0) player.loop = loopEnabled;
+    });
+
+    // ===== SCRUB BAR =====
+    function updateScrubBar() {
+      if (!player.duration) return;
+      const pct = (player.getCurrentTime() / player.duration) * 100;
+      scrubProgress.style.width = pct + '%';
+      scrubPlayhead.style.left = pct + '%';
+    }
+
+    function updateScrubTimes() {
+      scrubCurrent.textContent = formatTimecode(player.getCurrentTime());
+      scrubFrame.textContent = 'F: ' + player.currentFrame;
+      if (player.duration) scrubTotal.textContent = formatTimecode(player.duration);
+    }
+
+    function scrubFromEvent(e) {
+      const rect = scrubBar.getBoundingClientRect();
+      const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      if (player.duration) player.seekToTime(pct * player.duration);
+    }
+
+    scrubBar.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      scrubBar.setPointerCapture(e.pointerId);
+      isScrubbing = true;
+      scrubFromEvent(e);
+    });
+    scrubBar.addEventListener('pointermove', (e) => {
+      if (!isScrubbing || !scrubBar.hasPointerCapture(e.pointerId)) return;
+      scrubFromEvent(e);
+    });
+    scrubBar.addEventListener('pointerup', () => { isScrubbing = false; });
+    scrubBar.addEventListener('pointercancel', () => { isScrubbing = false; });
+
+    function updateInOutUI() {
+      const entry = getActiveEntry();
+      if (!entry || !player.duration) {
+        scrubInout.style.cssText = 'left:0;width:0';
+        return;
+      }
+      if (entry.inPoint !== null && entry.outPoint !== null) {
+        const lp = entry.inPoint / player.duration * 100;
+        const wp = (entry.outPoint - entry.inPoint) / player.duration * 100;
+        scrubInout.style.left = lp + '%'; scrubInout.style.width = wp + '%';
+      } else { scrubInout.style.left = '0'; scrubInout.style.width = '0'; }
+    }
+
+    function updateScrubTicks() {
+      scrubTicks.innerHTML = '';
+      const entry = getActiveEntry();
+      if (!entry || !player.duration) return;
+      Object.keys(entry.annotations).map(Number).forEach(frame => {
+        const pct = (frame / (entry.fps || 24) / player.duration) * 100;
+        if (pct >= 0 && pct <= 100) {
+          const tick = document.createElement('div');
+          tick.className = 'scrub-tick';
+          tick.style.left = pct + '%';
+          scrubTicks.appendChild(tick);
+        }
+      });
+    }
+
+    // ===== TOOLS =====
+    function activateTool(tool) {
+      if (tool === 'eyedrop' && currentTool !== 'eyedrop') prevTool = currentTool;
+      currentTool = tool;
+      toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+      penCanvas.style.cursor = (tool === 'laser' || tool === 'eyedrop') ? 'crosshair' : 'default';
+    }
+
+    toolBtns.forEach(btn => btn.addEventListener('click', () => activateTool(btn.dataset.tool)));
+
+    // Size controls
+    function setSize(v) {
+      brushSize = Math.max(1, Math.min(40, v));
+      sizeDisplay.textContent = brushSize;
+    }
+    btnSizeDown.addEventListener('click', () => setSize(brushSize - 1));
+    btnSizeUp.addEventListener('click', () => setSize(brushSize + 1));
+
+    laserHoldSlider.addEventListener('input', () => {
+      laserHoldMs = parseFloat(laserHoldSlider.value) * 1000;
+      laserHoldValEl.textContent = laserHoldSlider.value;
+    });
+
+    // ===== COLORS =====
+    const PALETTE = [
+      '#ff3333', '#ff8800', '#ffee00', '#33cc33',
+      '#00aaff', '#cc33cc', '#ffffff', '#000000',
+    ];
+
+    let activeSwatchEl = null;
+
+    PALETTE.forEach(hex => {
+      const btn = document.createElement('button');
+      btn.className = 'm-swatch';
+      btn.style.background = hex;
+      btn.dataset.color = hex;
+      btn.addEventListener('click', () => setDrawColor(hex, btn));
+      colorRow.appendChild(btn);
+    });
+
+    function setDrawColor(hex, swatchEl) {
+      drawColor = hex;
+      if (activeSwatchEl) activeSwatchEl.classList.remove('active');
+      activeSwatchEl = swatchEl || null;
+      if (activeSwatchEl) activeSwatchEl.classList.add('active');
+      colorModalInput.value = hex;
+    }
+
+    // Custom color via modal
+    btnCustomColor.addEventListener('click', () => {
+      colorModalOverlay.classList.add('open');
+    });
+    btnColorModalClose.addEventListener('click', () => {
+      setDrawColor(colorModalInput.value, null);
+      colorModalOverlay.classList.remove('open');
+    });
+    colorModalOverlay.addEventListener('click', (e) => {
+      if (e.target === colorModalOverlay) colorModalOverlay.classList.remove('open');
+    });
+    colorModalInput.addEventListener('input', () => { setDrawColor(colorModalInput.value, null); });
+
+    // ===== EYEDROPPER =====
+    function sampleColorFromCanvas(pos) {
+      const vw = mainCanvas.width, vh = mainCanvas.height;
+      if (!vw || !vh || player.video.readyState < 2) return null;
+      const cw = penCanvas.width, ch = penCanvas.height;
+      const scale = Math.min(cw / vw, ch / vh);
+      const fw = vw * scale, fh = vh * scale;
+      const ox = (cw - fw) / 2, oy = (ch - fh) / 2;
+      const px = pos.x * cw, py = pos.y * ch;
+      if (px < ox || px > ox + fw || py < oy || py > oy + fh) return null;
+      const mx = Math.floor((px - ox) / scale);
+      const my = Math.floor((py - oy) / scale);
+      try {
+        const [r, g, b] = mainCtx.getImageData(mx, my, 1, 1).data;
+        return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+      } catch (err) { return null; }
+    }
+
+    // ===== DRAWING =====
+    function getCanvasPos(e) {
+      const rect = penCanvas.getBoundingClientRect();
+      return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+    }
+
+    function drawStrokeOnCanvas(ctx, stroke, w, h, alpha) {
+      if (!stroke.points || !stroke.points.length) return;
+      ctx.save();
+      ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
+      ctx.strokeStyle = ctx.fillStyle = stroke.color;
+      ctx.lineWidth = stroke.size; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (stroke.points.length === 1) {
+        ctx.beginPath();
+        ctx.arc(stroke.points[0].x * w, stroke.points[0].y * h, stroke.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x * w, stroke.points[0].y * h);
+        for (let i = 1; i < stroke.points.length; i++) ctx.lineTo(stroke.points[i].x * w, stroke.points[i].y * h);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function redrawPenCanvas() {
+      penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
+      const entry = getActiveEntry(); if (!entry) return;
+      const strokes = entry.annotations[player.currentFrame];
+      if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
+    }
+
+    function redrawLaserCanvas() {
+      laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
+      laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtx, s, laserCanvas.width, laserCanvas.height, laserFadeOpacity));
+    }
+
+    penCanvas.addEventListener('pointerdown', (e) => {
+      if (!drawingsVisible || activeIndex < 0) return;
+      e.preventDefault();
+      const pos = getCanvasPos(e);
+      if (currentTool === 'eyedrop') {
+        const hex = sampleColorFromCanvas(pos);
+        if (hex) setDrawColor(hex, null);
+        activateTool(prevTool);
+        return;
+      }
+      penCanvas.setPointerCapture(e.pointerId);
+      if (currentTool === 'pen') {
+        if (player.playing) { player.pause(); btnPlay.textContent = '▶'; }
+        isDrawing = true;
+        currentStroke = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [pos] };
+        redrawPenCanvas();
+        drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
+      } else if (currentTool === 'laser') {
+        isDrawing = true;
+        laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [pos] });
+        lastLaserInputTime = Date.now();
+        if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+      } else if (currentTool === 'eraser') {
+        isErasing = true; eraseAt(pos);
+      }
+    });
+
+    penCanvas.addEventListener('pointermove', (e) => {
+      if (!drawingsVisible) return;
+      const pos = getCanvasPos(e);
+      if (currentTool === 'pen' && isDrawing && currentStroke) {
+        currentStroke.points.push(pos);
+        redrawPenCanvas();
+        drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
+      } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
+        laserStrokes[laserStrokes.length - 1].points.push(pos);
+        lastLaserInputTime = Date.now();
+        if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+      } else if (currentTool === 'eraser' && isErasing) {
+        eraseAt(pos);
+      }
+    });
+
+    const finishStroke = () => {
+      if (currentTool === 'pen' && isDrawing && currentStroke) {
+        isDrawing = false;
+        const frame = player.currentFrame;
+        const entry = playlist[activeIndex];
+        if (!entry.annotations[frame]) entry.annotations[frame] = [];
+        entry.annotations[frame].push(currentStroke);
+        entry.undoStack.push({ type: 'add', frame, stroke: currentStroke });
+        entry.redoStack = [];
+        currentStroke = null;
+        redrawPenCanvas(); updateScrubTicks();
+      } else if (currentTool === 'laser') { isDrawing = false; }
+      else if (currentTool === 'eraser') { isErasing = false; }
+    };
+
+    penCanvas.addEventListener('pointerup', finishStroke);
+    penCanvas.addEventListener('pointercancel', finishStroke);
+
+    // ===== ERASER =====
+    function pointToSegDist(px, py, ax, ay, bx, by) {
+      const dx = bx - ax, dy = by - ay, lenSq = dx * dx + dy * dy;
+      if (!lenSq) return Math.hypot(px - ax, py - ay);
+      const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+      return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    }
+
+    function eraseAt(pos) {
+      const entry = getActiveEntry(); if (!entry) return;
+      const strokes = entry.annotations[player.currentFrame]; if (!strokes) return;
+      const r = brushSize / Math.min(penCanvas.width, penCanvas.height);
+      const toRemove = [];
+      strokes.forEach((stroke, idx) => {
+        if (!stroke.points.length) return;
+        if (stroke.points.length === 1) {
+          if (Math.hypot(pos.x - stroke.points[0].x, pos.y - stroke.points[0].y) <= r) toRemove.push(idx);
+        } else {
+          for (let i = 0; i < stroke.points.length - 1; i++) {
+            if (pointToSegDist(pos.x, pos.y, stroke.points[i].x, stroke.points[i].y, stroke.points[i+1].x, stroke.points[i+1].y) <= r) {
+              toRemove.push(idx); break;
+            }
+          }
+        }
+      });
+      if (toRemove.length) {
+        toRemove.sort((a, b) => b - a).forEach(idx => {
+          const removed = strokes.splice(idx, 1)[0];
+          entry.undoStack.push({ type: 'remove', frame: player.currentFrame, stroke: removed, strokeIndex: idx });
+        });
+        entry.redoStack = [];
+        redrawPenCanvas(); updateScrubTicks();
+      }
+    }
+
+    // ===== UNDO/REDO =====
+    function undo() {
+      const entry = getActiveEntry(); if (!entry || !entry.undoStack.length) return;
+      const action = entry.undoStack.pop();
+      if (action.type === 'add') {
+        const removed = (entry.annotations[action.frame] || []).pop();
+        entry.redoStack.push({ type: 'add', frame: action.frame, stroke: removed });
+      } else {
+        if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
+        entry.annotations[action.frame].push(action.stroke);
+        entry.redoStack.push({ type: 'remove', frame: action.frame, stroke: action.stroke });
+      }
+      redrawPenCanvas(); updateScrubTicks();
+    }
+
+    function redo() {
+      const entry = getActiveEntry(); if (!entry || !entry.redoStack.length) return;
+      const action = entry.redoStack.pop();
+      if (action.type === 'add') {
+        if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
+        entry.annotations[action.frame].push(action.stroke);
+        entry.undoStack.push({ type: 'add', frame: action.frame, stroke: action.stroke });
+      } else {
+        const removed = (entry.annotations[action.frame] || []).pop();
+        entry.undoStack.push({ type: 'remove', frame: action.frame, stroke: removed });
+      }
+      redrawPenCanvas(); updateScrubTicks();
+    }
+
+    btnUndo.addEventListener('click', undo);
+    btnRedo.addEventListener('click', redo);
+
+    // ===== DRAWOVERS TOGGLE =====
+    btnToggleDrawings.addEventListener('click', () => {
+      drawingsVisible = !drawingsVisible;
+      penCanvas.style.display = laserCanvas.style.display = drawingsVisible ? '' : 'none';
+      btnToggleDrawings.classList.toggle('active', drawingsVisible);
+    });
+
+    // ===== LASER FADE =====
+    function laserLoop() {
+      const now = Date.now();
+      if (laserFading) {
+        laserFadeOpacity = Math.max(0, 1 - (now - laserFadeStart) / LASER_FADE_DURATION);
+        if (laserFadeOpacity <= 0) { laserStrokes = []; laserFading = false; laserFadeOpacity = 1; }
+      } else if (laserStrokes.length && (now - lastLaserInputTime) >= laserHoldMs) {
+        laserFading = true; laserFadeStart = now;
+      }
+      redrawLaserCanvas();
+      requestAnimationFrame(laserLoop);
+    }
+    requestAnimationFrame(laserLoop);
+
+    // ===== INIT =====
+    const firstSwatch = colorRow.querySelector('.m-swatch');
+    if (firstSwatch) { firstSwatch.classList.add('active'); activeSwatchEl = firstSwatch; }
+    mainCanvas.style.display = 'block';
+    resizeCanvases();
+  })();
+  </script>
+</body>
+</html>
