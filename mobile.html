@@ -151,59 +151,56 @@
       border-top: 5px solid #fff;
     }
 
-    /* ===== PLAYBACK ROW ===== */
+    /* ===== PLAYBACK ROW (row 1 — full width, no scroll) ===== */
     #playback-row {
-      display: flex; align-items: center; justify-content: center;
-      gap: 2px; flex-shrink: 0;
-      padding: 4px 10px;
-      padding-left: calc(10px + env(safe-area-inset-left));
-      padding-right: calc(10px + env(safe-area-inset-right));
+      display: flex; align-items: center; justify-content: space-evenly;
+      flex-shrink: 0;
+      padding: 4px calc(6px + env(safe-area-inset-left)) 4px calc(6px + env(safe-area-inset-right));
       background: #181818; border-top: 1px solid #222;
     }
     #playback-row button {
-      min-width: 44px; height: 36px; font-size: 13px; padding: 0 6px; border-radius: 6px;
+      flex: 1; height: 50px; max-width: 62px; min-width: 0;
+      font-size: 15px; padding: 0; border-radius: 10px;
     }
     #btn-play {
-      width: 48px; height: 44px; border-radius: 50%; font-size: 18px;
-      background: #2a2a2a; border-color: #555; flex-shrink: 0;
+      flex: 0 0 54px; width: 54px; height: 54px; border-radius: 50%;
+      font-size: 22px; background: #2a2a2a; border-color: #555;
     }
-    .pb-sep { width: 1px; height: 20px; background: #333; margin: 0 2px; flex-shrink: 0; }
-    #btn-toggle-drawings { min-width: 32px; padding: 0 6px; font-size: 16px; }
+    #btn-toggle-drawings { font-size: 18px; }
     #btn-toggle-drawings.active { background: #5c3a00; color: #ffaa00; border-color: #7a5000; }
 
-    /* ===== TOOL ROW ===== */
+    /* ===== TOOL ROW (row 2 — scrollable for colors/size) ===== */
     #tool-row {
-      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-      padding: 6px 10px;
-      padding-left: calc(10px + env(safe-area-inset-left));
-      padding-right: calc(10px + env(safe-area-inset-right));
-      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+      padding: 5px calc(8px + env(safe-area-inset-left));
+      padding-right: calc(8px + env(safe-area-inset-right));
+      padding-bottom: calc(7px + env(safe-area-inset-bottom));
       background: #1e1e1e; border-top: 1px solid #2a2a2a;
       overflow-x: auto;
     }
     #tool-row::-webkit-scrollbar { display: none; }
     .tool-btn {
-      width: 44px; height: 44px; font-size: 18px; flex-shrink: 0;
+      width: 50px; height: 50px; font-size: 20px; flex-shrink: 0;
       padding: 0; display: flex; align-items: center; justify-content: center;
-      border-radius: 8px;
+      border-radius: 10px;
     }
     .tool-btn.active { background: #1e3550; border-color: #3aa0ff; }
-    .tool-sep { width: 1px; height: 28px; background: #333; flex-shrink: 0; margin: 0 2px; }
+    .tool-sep { width: 1px; height: 30px; background: #333; flex-shrink: 0; margin: 0 1px; }
 
     /* ===== COLOR SWATCHES (inline row) ===== */
-    #color-row { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    #color-row { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
     .m-swatch {
-      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
       border: 2px solid transparent; cursor: pointer; padding: 0;
       transition: transform 0.1s;
     }
     .m-swatch.active { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
-    .m-swatch:active { transform: scale(1.2); }
+    .m-swatch:active { transform: scale(1.15); }
 
     /* Custom color button */
     #btn-custom-color {
-      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
-      background: #333; border: 2px solid #555; font-size: 14px;
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      background: #333; border: 2px solid #555; font-size: 15px;
       display: flex; align-items: center; justify-content: center; color: #aaa; padding: 0;
     }
 
@@ -234,11 +231,16 @@
     /* ===== SIZE CONTROL ===== */
     #size-control { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
     #btn-size-down, #btn-size-up {
-      width: 36px; height: 36px; font-size: 20px; font-weight: 300;
+      width: 42px; height: 42px; font-size: 22px; font-weight: 300;
       padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center;
     }
     #size-display {
-      min-width: 28px; text-align: center; font-size: 13px; color: #ccc; font-variant-numeric: tabular-nums;
+      min-width: 30px; text-align: center; font-size: 14px; color: #ccc; font-variant-numeric: tabular-nums;
+    }
+
+    /* Range + loop buttons in tool row */
+    #btn-set-in, #btn-set-out, #btn-loop {
+      height: 44px; padding: 0 10px; font-size: 13px; flex-shrink: 0; white-space: nowrap;
     }
 
     /* ===== LASER HOLD ===== */
@@ -254,11 +256,13 @@
     /* ===== LANDSCAPE ===== */
     @media (orientation: landscape) and (max-height: 500px) {
       #topbar { padding-top: 4px; padding-bottom: 4px; }
-      #scrub-bar { height: 24px; }
-      #playback-row button { height: 30px; min-width: 36px; font-size: 12px; }
-      #btn-play { width: 38px; height: 38px; font-size: 15px; }
-      .tool-btn { width: 38px; height: 38px; font-size: 16px; }
-      .m-swatch { width: 26px; height: 26px; }
+      #scrub-bar { height: 22px; }
+      #playback-row button { height: 36px; font-size: 13px; }
+      #btn-play { flex: 0 0 40px; width: 40px; height: 40px; font-size: 16px; }
+      .tool-btn { width: 40px; height: 40px; font-size: 17px; }
+      .m-swatch { width: 28px; height: 28px; }
+      #btn-set-in, #btn-set-out, #btn-loop { height: 36px; padding: 0 8px; }
+      #btn-size-down, #btn-size-up { width: 34px; height: 34px; }
     }
   </style>
 </head>
@@ -307,41 +311,38 @@
       </div>
     </div>
 
+    <!-- Row 1: transport + undo/toggle — full width, no scroll -->
     <div id="playback-row">
-      <button id="btn-undo" title="Undo">↩</button>
-      <button id="btn-redo" title="Redo">↪</button>
-      <button id="btn-toggle-drawings" class="active">👁</button>
-      <div class="pb-sep"></div>
       <button id="btn-to-start">|◀</button>
       <button id="btn-frame-back">◄◄</button>
       <button id="btn-play">▶</button>
       <button id="btn-frame-fwd">▶▶</button>
       <button id="btn-to-end">▶|</button>
-      <div class="pb-sep"></div>
-      <button id="btn-set-in">[ In</button>
-      <button id="btn-set-out">Out ]</button>
-      <button id="btn-loop">↺</button>
+      <button id="btn-undo">↩</button>
+      <button id="btn-redo">↪</button>
+      <button id="btn-toggle-drawings" class="active">👁</button>
     </div>
 
+    <!-- Row 2: draw tools + range + colors + size — scrollable -->
     <div id="tool-row">
-      <!-- Draw tools -->
       <button class="tool-btn active" data-tool="pen" title="Pen">🖌️</button>
       <button class="tool-btn" data-tool="laser" title="Laser">💫</button>
       <button class="tool-btn" data-tool="eraser" title="Eraser">🧹</button>
       <button class="tool-btn" data-tool="eyedrop" title="Eyedropper">⊕</button>
       <div class="tool-sep"></div>
-      <!-- Colors -->
+      <button id="btn-set-in">[ In</button>
+      <button id="btn-set-out">Out ]</button>
+      <button id="btn-loop">↺</button>
+      <div class="tool-sep"></div>
       <div id="color-row"></div>
       <button id="btn-custom-color" title="Custom color">＋</button>
       <div class="tool-sep"></div>
-      <!-- Size -->
       <div id="size-control">
         <button id="btn-size-down">−</button>
         <span id="size-display">4</span>
         <button id="btn-size-up">+</button>
       </div>
       <div class="tool-sep"></div>
-      <!-- Laser hold -->
       <div id="laser-hold-group">
         💫<input type="range" id="laser-hold" min="0" max="5" step="0.5" value="3"><span id="laser-hold-val">3</span>s
       </div>
@@ -629,6 +630,7 @@
     }
 
     fileInput.addEventListener('change', async (e) => {
+      closeDrawer();
       const files = Array.from(e.target.files);
       const firstNewIdx = playlist.length;
       for (const file of files) {
