@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.95</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.96</span></div>
     </div>
 
     <div id="main-body">
@@ -134,7 +134,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.95</span>
+          <span id="status-version">DrawOver v1.96</span>
         </div>
       </div>
     </div>
@@ -175,7 +175,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.95</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.96</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -1241,7 +1241,10 @@
 
       // Returns 0.05–1.0 for stylus, always 1.0 for mouse/touch (preserves existing feel)
       function getPressure(e) {
-        return e.pointerType === 'pen' ? Math.max(0.05, e.pressure) : 1.0;
+        if (e.pointerType !== 'pen') return 1.0;
+        // Raise the floor and apply a gentle curve so light touches aren't so thin
+        const p = Math.max(0.15, e.pressure);
+        return Math.pow(p, 0.6); // <1 exponent biases toward heavier values
       }
 
       function drawStrokeOnCanvas(ctx, stroke, w, h, alpha) {
@@ -1291,9 +1294,24 @@
         if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
       }
 
+      // Persistent offscreen canvases for laser compositing (prevents alpha compounding on overlap)
+      let _laserOff = null, _laserOffCtx = null;
+
       function redrawLaserCanvas() {
         laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
-        laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtx, s, laserCanvas.width, laserCanvas.height, laserFadeOpacity));
+        if (!laserStrokes.length) return;
+        const w = laserCanvas.width, h = laserCanvas.height;
+        if (!_laserOff || _laserOff.width !== w || _laserOff.height !== h) {
+          _laserOff = document.createElement('canvas');
+          _laserOff.width = w; _laserOff.height = h;
+          _laserOffCtx = _laserOff.getContext('2d');
+        }
+        _laserOffCtx.clearRect(0, 0, w, h);
+        laserStrokes.forEach(s => drawStrokeOnCanvas(_laserOffCtx, s, w, h));
+        laserCtx.save();
+        laserCtx.globalAlpha = laserFadeOpacity;
+        laserCtx.drawImage(_laserOff, 0, 0);
+        laserCtx.restore();
       }
 
       function redrawPenCanvasB() {
@@ -1303,9 +1321,23 @@
         if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtxB, s, penCanvasB.width, penCanvasB.height));
       }
 
+      let _laserOffB = null, _laserOffCtxB = null;
+
       function redrawLaserCanvasB() {
         laserCtxB.clearRect(0, 0, laserCanvasB.width, laserCanvasB.height);
-        laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtxB, s, laserCanvasB.width, laserCanvasB.height, laserFadeOpacity));
+        if (!laserStrokes.length) return;
+        const w = laserCanvasB.width, h = laserCanvasB.height;
+        if (!_laserOffB || _laserOffB.width !== w || _laserOffB.height !== h) {
+          _laserOffB = document.createElement('canvas');
+          _laserOffB.width = w; _laserOffB.height = h;
+          _laserOffCtxB = _laserOffB.getContext('2d');
+        }
+        _laserOffCtxB.clearRect(0, 0, w, h);
+        laserStrokes.forEach(s => drawStrokeOnCanvas(_laserOffCtxB, s, w, h));
+        laserCtxB.save();
+        laserCtxB.globalAlpha = laserFadeOpacity;
+        laserCtxB.drawImage(_laserOffB, 0, 0);
+        laserCtxB.restore();
       }
 
       function resizeCanvasesB() {
