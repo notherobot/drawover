@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.94</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.95</span></div>
     </div>
 
     <div id="main-body">
@@ -134,7 +134,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.94</span>
+          <span id="status-version">DrawOver v1.95</span>
         </div>
       </div>
     </div>
@@ -175,7 +175,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.94</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.95</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -604,7 +604,14 @@
               if (this.onFrameChange) this.onFrameChange(0);
               resolve();
             };
-            const onError = () => { cleanup(); reject(new Error('Failed to load video.')); };
+            const onError = () => {
+            cleanup();
+            const err = this.video.error;
+            const isCodec = err && (err.code === 4 || err.code === 3);
+            reject(new Error(isCodec
+              ? 'This browser can\'t play that file. MOV files need H.264 encoding — HEVC/ProRes MOV and most MKV/AVI files aren\'t supported. Try re-exporting as H.264 MP4.'
+              : 'Failed to load video.'));
+          };
             const cleanup = () => {
               this.video.removeEventListener('loadeddata', onReady);
               this.video.removeEventListener('error', onError);
@@ -1914,7 +1921,8 @@
       dropZone.addEventListener('drop', async (e) => {
         e.preventDefault();
         dropZone.classList.remove('drag-over');
-        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/'));
+        const isVideo = f => f.type.startsWith('video/') || (!f.type && /\.(mp4|mov|m4v|webm|mkv|avi|mts|m2ts)$/i.test(f.name));
+        const files = Array.from(e.dataTransfer.files).filter(isVideo);
         if (!files.length) return;
         dismissWelcome();
         const firstNewIdx = playlist.length;
