@@ -248,6 +248,106 @@
       let isScrubbing = false;
       let draggingHandle = null;
 
+      // ===== INDEXEDDB PERSISTENCE =====
+      const DB_NAME = 'drawover', DB_VERSION = 1, DB_STORE = 'videos';
+      let _db = null;
+
+      function openDB() {
+        if (_db) return Promise.resolve(_db);
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open(DB_NAME, DB_VERSION);
+          req.onupgradeneeded = ev => ev.target.result.createObjectStore(DB_STORE, { keyPath: 'id' });
+          req.onsuccess = ev => { _db = ev.target.result; resolve(_db); };
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function dbPut(record) {
+        return openDB().then(db => new Promise((resolve, reject) => {
+          const tx = db.transaction(DB_STORE, 'readwrite');
+          const req = tx.objectStore(DB_STORE).put(record);
+          req.onsuccess = resolve;
+          tx.onerror = () => reject(tx.error);
+        }));
+      }
+
+      function dbDelete(id) {
+        return openDB().then(db => new Promise((resolve, reject) => {
+          const tx = db.transaction(DB_STORE, 'readwrite');
+          const req = tx.objectStore(DB_STORE).delete(id);
+          req.onsuccess = resolve;
+          tx.onerror = () => reject(tx.error);
+        }));
+      }
+
+      function dbGetAll() {
+        return openDB().then(db => new Promise((resolve, reject) => {
+          const req = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).getAll();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        }));
+      }
+
+      function uuid() { return crypto.randomUUID(); }
+
+      function persistEntry(entry) {
+        return dbPut({
+          id: entry.id, name: entry.name, blob: entry.blob,
+          annotations: entry.annotations,
+          inPoint: entry.inPoint, outPoint: entry.outPoint,
+          fps: entry.fps, duration: entry.duration,
+          thumbnail: entry.thumbnail
+        });
+      }
+
+      function savePlaylistState() {
+        try {
+          localStorage.setItem('drawover_playlist', JSON.stringify(playlist.map(e => e.id)));
+          localStorage.setItem('drawover_active', activeIndex >= 0 ? playlist[activeIndex].id : '');
+        } catch (_) {}
+      }
+
+      let _annoSaveTimer = null;
+      function scheduleAnnotationSave() {
+        const entry = getActiveEntry(); if (!entry) return;
+        clearTimeout(_annoSaveTimer);
+        _annoSaveTimer = setTimeout(() => {
+          const e = getActiveEntry(); if (e) persistEntry(e).catch(() => {});
+        }, 1500);
+      }
+
+      async function restorePlaylist() {
+        try {
+          const allRecords = await dbGetAll();
+          if (!allRecords.length) return;
+          const savedIds = JSON.parse(localStorage.getItem('drawover_playlist') || '[]');
+          const savedActiveId = localStorage.getItem('drawover_active') || '';
+          const byId = Object.fromEntries(allRecords.map(r => [r.id, r]));
+          const ordered = savedIds.map(id => byId[id]).filter(Boolean);
+          const orphans = allRecords.filter(r => !savedIds.includes(r.id));
+          const toRestore = [...ordered, ...orphans];
+          if (!toRestore.length) return;
+          for (const rec of toRestore) {
+            const objectUrl = URL.createObjectURL(rec.blob);
+            playlist.push({
+              id: rec.id, name: rec.name, blob: rec.blob, objectUrl,
+              annotations: rec.annotations || {},
+              inPoint: rec.inPoint ?? null, outPoint: rec.outPoint ?? null,
+              fps: rec.fps || 24, duration: rec.duration || 0,
+              thumbnail: rec.thumbnail || null,
+              undoStack: [], redoStack: []
+            });
+          }
+          renderPlaylist();
+          let targetIdx = playlist.findIndex(e => e.id === savedActiveId);
+          if (targetIdx < 0) targetIdx = 0;
+          await loadVideo(targetIdx);
+          dismissWelcome();
+        } catch (err) {
+          console.warn('DrawOver: restore failed', err);
+        }
+      }
+
       // ===== HELPERS =====
       function formatTimecode(s) {
         if (isNaN(s) || !isFinite(s)) return '0:00.000';
@@ -436,7 +536,7 @@
         const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
           playlist.push(entry);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
@@ -445,10 +545,11 @@
             tmp.onerror = resolve;
           });
           entry.thumbnail = await generateThumbnail(objectUrl);
+          persistEntry(entry).catch(() => {});
           renderPlaylist();
         }
         fileInput.value = '';
-        if (firstNewIdx < playlist.length) loadVideo(firstNewIdx);
+        if (firstNewIdx < playlist.length) { await loadVideo(firstNewIdx); savePlaylistState(); }
       });
 
       function renderPlaylist() {
@@ -466,7 +567,7 @@
           info.className = 'playlist-info';
           const name = document.createElement('span');
           name.className = 'playlist-name';
-          name.textContent = entry.file.name;
+          name.textContent = entry.name || entry.file?.name || 'Video';
           const dur = document.createElement('span');
           dur.className = 'playlist-duration';
           dur.textContent = formatTime(entry.duration);
@@ -477,10 +578,12 @@
           removeBtn.textContent = '✕';
           removeBtn.addEventListener('click', (ev) => {
             ev.stopPropagation();
+            dbDelete(entry.id).catch(() => {});
             URL.revokeObjectURL(entry.objectUrl);
             playlist.splice(i, 1);
             if (activeIndex === i) { activeIndex = -1; player.pause(); mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); btnPlay.textContent = '▶'; }
             else if (activeIndex > i) activeIndex--;
+            savePlaylistState();
             renderPlaylist();
           });
 
@@ -508,6 +611,7 @@
         updateInOutUI();
         updateScrubTicks();
         resizeCanvases();
+        savePlaylistState();
       }
 
       // ===== CANVAS RESIZE =====
@@ -569,7 +673,7 @@
         playlist[activeIndex].inPoint = player.getCurrentTime();
         player.inPoint = playlist[activeIndex].inPoint;
         setAutoLoop();
-        updateInOutUI(); updateScrubTicks();
+        updateInOutUI(); updateScrubTicks(); scheduleAnnotationSave();
       });
 
       btnSetOut.addEventListener('click', () => {
@@ -577,7 +681,7 @@
         playlist[activeIndex].outPoint = player.getCurrentTime();
         player.outPoint = playlist[activeIndex].outPoint;
         setAutoLoop();
-        updateInOutUI(); updateScrubTicks();
+        updateInOutUI(); updateScrubTicks(); scheduleAnnotationSave();
       });
 
       btnClearInOut.addEventListener('click', () => {
@@ -586,7 +690,7 @@
         playlist[activeIndex].outPoint = null;
         player.inPoint = null; player.outPoint = null;
         loopEnabled = false; btnLoop.classList.remove('active'); player.loop = false;
-        updateInOutUI(); updateScrubTicks();
+        updateInOutUI(); updateScrubTicks(); scheduleAnnotationSave();
       });
 
       btnLoop.addEventListener('click', () => {
@@ -596,7 +700,7 @@
       });
 
       fpsInput.addEventListener('change', () => {
-        if (activeIndex >= 0) { playlist[activeIndex].fps = getFPS(); player.fps = getFPS(); }
+        if (activeIndex >= 0) { playlist[activeIndex].fps = getFPS(); player.fps = getFPS(); scheduleAnnotationSave(); }
       });
 
       btnMute.addEventListener('click', () => {
@@ -1050,7 +1154,7 @@
           entry.undoStack.push({ type: 'add', frame, stroke: currentStroke });
           entry.redoStack = [];
           currentStroke = null;
-          redrawPenCanvas(); updateScrubTicks();
+          redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
         } else if (currentTool === 'laser') { isDrawing = false; }
         else if (currentTool === 'eraser') { isErasing = false; }
       };
@@ -1107,7 +1211,7 @@
             entry.undoStack.push({ type: 'remove', frame: player.currentFrame, stroke: removed, strokeIndex: idx });
           });
           entry.redoStack = [];
-          redrawPenCanvas(); updateScrubTicks();
+          redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
         }
       }
 
@@ -1126,7 +1230,7 @@
           entry.annotations[action.frame].push(action.stroke);
           entry.redoStack.push({ type: 'remove', frame: action.frame, stroke: action.stroke });
         }
-        redrawPenCanvas(); updateScrubTicks();
+        redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
       }
 
       function redo() {
@@ -1143,7 +1247,7 @@
           const removed = (entry.annotations[action.frame] || []).pop();
           entry.undoStack.push({ type: 'remove', frame: action.frame, stroke: removed });
         }
-        redrawPenCanvas(); updateScrubTicks();
+        redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
       }
 
       btnUndo.addEventListener('click', undo);
@@ -1177,7 +1281,7 @@
         entry.undoStack.push({ type: 'clearFrame', frame, strokes: strokes.slice() });
         entry.redoStack = [];
         entry.annotations[frame] = [];
-        redrawPenCanvas(); updateScrubTicks();
+        redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
       });
 
       // ===== DRAWOVERS TOGGLE & FULLSCREEN =====
@@ -1283,6 +1387,7 @@
       mainCanvas.style.display = 'block';
       setSidebarOpen(!isMobile());
       resizeCanvases();
+
       // ===== WELCOME =====
       const welcomeOverlay = document.getElementById('welcome-overlay');
 
@@ -1314,7 +1419,7 @@
         const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
           playlist.push(entry);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
@@ -1323,14 +1428,18 @@
             tmp.onerror = resolve;
           });
           entry.thumbnail = await generateThumbnail(objectUrl);
+          persistEntry(entry).catch(() => {});
           renderPlaylist();
         }
         fileInput.value = '';
-        if (firstNewIdx < playlist.length) loadVideo(firstNewIdx);
+        if (firstNewIdx < playlist.length) { await loadVideo(firstNewIdx); savePlaylistState(); }
       });
 
       // Dismiss when a file is opened via the normal file picker too
       fileInput.addEventListener('change', () => dismissWelcome(), { capture: true });
+
+      // Restore persisted videos from last session
+      restorePlaylist().catch(() => {});
 
     })();
   </script>
