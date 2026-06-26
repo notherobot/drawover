@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.9</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.91</span></div>
     </div>
 
     <div id="main-body">
@@ -110,7 +110,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.9</span>
+          <span id="status-version">DrawOver v1.91</span>
         </div>
       </div>
     </div>
@@ -148,7 +148,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.9</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.91</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -357,6 +357,45 @@
         } catch (err) {
           console.warn('DrawOver: restore failed', err);
         }
+      }
+
+      // ===== DELETE CONFIRMATION =====
+      function hasDrawings(entry) {
+        return Object.values(entry.annotations).some(s => s && s.length > 0);
+      }
+
+      function confirmDelete(entry) {
+        return new Promise(resolve => {
+          if (!hasDrawings(entry) || localStorage.getItem('drawover_skip_delete_confirm') === '1') {
+            resolve(true); return;
+          }
+          const overlay = document.createElement('div');
+          overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10000;display:flex;align-items:center;justify-content:center;';
+          const box = document.createElement('div');
+          box.style.cssText = 'background:#1e1e1e;border:1px solid #3a3a3a;border-radius:10px;padding:24px 28px;max-width:360px;width:90%;color:#e0e0e0;font-size:14px;box-shadow:0 8px 32px rgba(0,0,0,0.7);';
+          box.innerHTML = `
+            <div style="font-size:15px;font-weight:600;margin-bottom:10px;">Delete video?</div>
+            <div style="color:#aaa;margin-bottom:18px;line-height:1.5;">This video has drawovers. Are you sure you want to delete it, including its drawovers?</div>
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:20px;cursor:pointer;color:#888;font-size:13px;">
+              <input type="checkbox" id="_del_skip"> Don't ask me again
+            </label>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+              <button id="_del_cancel" style="padding:7px 16px;border-radius:6px;border:1px solid #444;background:#2a2a2a;color:#e0e0e0;cursor:pointer;font-size:13px;">Cancel</button>
+              <button id="_del_confirm" style="padding:7px 16px;border-radius:6px;border:none;background:#c0392b;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">Delete</button>
+            </div>`;
+          overlay.appendChild(box);
+          document.body.appendChild(overlay);
+          const cleanup = (result) => {
+            if (document.getElementById('_del_skip').checked) {
+              localStorage.setItem('drawover_skip_delete_confirm', '1');
+            }
+            document.body.removeChild(overlay);
+            resolve(result);
+          };
+          document.getElementById('_del_confirm').addEventListener('click', () => cleanup(true));
+          document.getElementById('_del_cancel').addEventListener('click', () => cleanup(false));
+          overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(false); });
+        });
       }
 
       // ===== HELPERS =====
@@ -587,13 +626,31 @@
           const removeBtn = document.createElement('button');
           removeBtn.className = 'playlist-remove';
           removeBtn.textContent = '✕';
-          removeBtn.addEventListener('click', (ev) => {
+          removeBtn.addEventListener('click', async (ev) => {
             ev.stopPropagation();
+            const ok = await confirmDelete(entry);
+            if (!ok) return;
             dbDelete(entry.id).catch(() => {});
             URL.revokeObjectURL(entry.objectUrl);
             playlist.splice(i, 1);
-            if (activeIndex === i) { activeIndex = -1; player.pause(); player.video.src = ''; mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height); btnPlay.textContent = '▶'; }
-            else if (activeIndex > i) activeIndex--;
+            if (activeIndex === i) {
+              activeIndex = -1;
+              player.pause();
+              player.video.src = '';
+              player.duration = 0;
+              player.inPoint = null;
+              player.outPoint = null;
+              mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+              penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
+              btnPlay.textContent = '▶';
+              scrubProgress.style.width = '0%';
+              scrubPlayhead.style.left = '0%';
+              scrubCurrent.textContent = '0:00.000';
+              scrubFrame.textContent = 'F: 0';
+              scrubTotal.textContent = '0:00.000';
+              updateInOutUI();
+              updateScrubTicks();
+            } else if (activeIndex > i) activeIndex--;
             savePlaylistState();
             renderPlaylist();
           });
