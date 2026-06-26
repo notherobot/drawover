@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.92</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.93</span></div>
     </div>
 
     <div id="main-body">
@@ -50,24 +50,44 @@
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
-        <div id="video-container">
-          <div id="video-viewport">
-            <canvas id="main-canvas"></canvas>
-            <canvas id="pen-canvas"></canvas>
-            <canvas id="laser-canvas"></canvas>
+        <div id="video-area">
+          <div id="panel-left" class="compare-panel">
+            <div class="panel-label" id="panel-left-label">
+              <span class="panel-label-name"></span>
+            </div>
+            <div id="video-container">
+              <div id="video-viewport">
+                <canvas id="main-canvas"></canvas>
+                <canvas id="pen-canvas"></canvas>
+                <canvas id="laser-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+          <div id="panel-right" class="compare-panel" style="display:none">
+            <div class="panel-label" id="panel-right-label">
+              <span class="panel-label-name"></span>
+              <button class="panel-close-btn" id="btn-compare-close" title="Exit compare">✕</button>
+            </div>
+            <div id="video-container-b">
+              <div id="video-viewport-b">
+                <canvas id="main-canvas-b"></canvas>
+                <canvas id="pen-canvas-b"></canvas>
+                <canvas id="laser-canvas-b"></canvas>
+              </div>
+            </div>
           </div>
         </div>
 
         <div id="scrub-bar-container">
           <div id="scrub-times-top">
             <span id="scrub-current">0:00.000</span>
-            <span id="scrub-frame">F: 0</span>
             <span id="scrub-total">0:00.000</span>
           </div>
           <div id="scrub-bar">
             <div id="scrub-progress"></div>
             <div id="scrub-inout"></div>
             <div id="scrub-ticks"></div>
+            <div id="scrub-frame">F: 0</div>
             <div id="scrub-playhead"></div>
             <div id="scrub-in-handle" class="io-handle"></div>
             <div id="scrub-out-handle" class="io-handle"></div>
@@ -94,24 +114,27 @@
           <button id="btn-clear-inout" title="Clear In/Out">✕ Range</button>
           <button id="btn-loop" title="Loop In/Out">↺ Loop</button>
           <div class="pb-sep"></div>
-          <button class="speed-btn" data-speed="0.1">0.1×</button>
-          <button class="speed-btn" data-speed="0.25">0.25×</button>
-          <button class="speed-btn" data-speed="0.5">0.5×</button>
-          <button class="speed-btn active" data-speed="1">1×</button>
-          <button class="speed-btn" data-speed="1.5">1.5×</button>
-          <button class="speed-btn" data-speed="2">2×</button>
+          <select id="speed-select" title="Playback speed">
+            <option value="0.1">0.1×</option>
+            <option value="0.25">0.25×</option>
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
           <div class="pb-sep"></div>
           <button id="btn-mute" title="Mute">🔊</button>
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
           <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡</button>
+          <button id="btn-compare" title="Compare two videos side-by-side">⧉</button>
           <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
         </div>
 
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.92</span>
+          <span id="status-version">DrawOver v1.93</span>
         </div>
       </div>
     </div>
@@ -152,7 +175,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.92</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.93</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -175,6 +198,19 @@
       const laserCtx = laserCanvas.getContext('2d');
       const videoContainer = document.getElementById('video-container');
       const videoViewport = document.getElementById('video-viewport');
+      const mainCanvasB = document.getElementById('main-canvas-b');
+      const penCanvasB = document.getElementById('pen-canvas-b');
+      const laserCanvasB = document.getElementById('laser-canvas-b');
+      const mainCtxB = mainCanvasB.getContext('2d');
+      const penCtxB = penCanvasB.getContext('2d');
+      const laserCtxB = laserCanvasB.getContext('2d');
+      const videoContainerB = document.getElementById('video-container-b');
+      const videoViewportB = document.getElementById('video-viewport-b');
+      const videoArea = document.getElementById('video-area');
+      const panelLeft = document.getElementById('panel-left');
+      const panelRight = document.getElementById('panel-right');
+      const panelLeftLabel = document.getElementById('panel-left-label');
+      const panelRightLabel = document.getElementById('panel-right-label');
       const eyedropOverlay = document.getElementById('eyedropper-overlay');
       const eyedropCanvas = document.getElementById('eyedropper-canvas');
       const eyedropHex = document.getElementById('eyedropper-hex');
@@ -241,6 +277,17 @@
       // ===== PAN/ZOOM STATE =====
       let panX = 0, panY = 0, vpZoom = 1;
       let vpDrag = null; // { type:'pan'|'zoom', startX, startY, startPanX, startPanY, startZoom, cx, cy }
+
+      // ===== COMPARE MODE STATE =====
+      let compareMode = false;
+      let comparePanelLeft = true; // true = left panel is active for drawing/undo
+      let compareIndex = -1;
+      let playerB = null;
+      let panXB = 0, panYB = 0, vpZoomB = 1;
+      let vpDragB = null;
+      let isDrawingB = false, currentStrokeB = null, isErasingB = false;
+      let _annoSaveTimerB = null;
+
       let laserFadeOpacity = 1;
       let laserFading = false;
       let laserFadeStart = 0;
@@ -425,15 +472,42 @@
         return (activeIndex >= 0 && activeIndex < playlist.length) ? playlist[activeIndex] : null;
       }
 
-      function getVideoBounds() {
-        const vw = mainCanvas.width, vh = mainCanvas.height;
-        const cw = penCanvas.width, ch = penCanvas.height;
+      function getCompareEntry() {
+        return (compareIndex >= 0 && compareIndex < playlist.length) ? playlist[compareIndex] : null;
+      }
+
+      function getActivePanelEntry() {
+        return (compareMode && !comparePanelLeft) ? getCompareEntry() : getActiveEntry();
+      }
+
+      function getActivePanelPlayer() {
+        return (compareMode && !comparePanelLeft && playerB) ? playerB : player;
+      }
+
+      function setActivePanel(isLeft) {
+        comparePanelLeft = isLeft;
+        panelLeft.classList.toggle('active-compare-panel', isLeft);
+        panelRight.classList.toggle('active-compare-panel', !isLeft);
+      }
+
+      function updatePanelLabels() {
+        const le = getActiveEntry();
+        panelLeftLabel.querySelector('.panel-label-name').textContent = le ? le.name : 'No video';
+        const re = getCompareEntry();
+        panelRightLabel.querySelector('.panel-label-name').textContent = re ? re.name : 'Click a video in the sidebar';
+      }
+
+      function getVideoBoundsFor(mc, pc) {
+        const vw = mc.width, vh = mc.height;
+        const cw = pc.width, ch = pc.height;
         if (!vw || !vh || !cw || !ch) return { x0: 0, y0: 0, x1: 1, y1: 1 };
         const scale = Math.min(cw / vw, ch / vh);
         const fw = vw * scale, fh = vh * scale;
         const ox = (cw - fw) / 2, oy = (ch - fh) / 2;
         return { x0: ox / cw, y0: oy / ch, x1: (ox + fw) / cw, y1: (oy + fh) / ch };
       }
+
+      function getVideoBounds() { return getVideoBoundsFor(mainCanvas, penCanvas); }
 
       function clampToVideo(pos) {
         if (!mainCanvas.width) return pos;
@@ -444,6 +518,25 @@
       function isInVideoBounds(pos) {
         const b = getVideoBounds();
         return pos.x >= b.x0 && pos.x <= b.x1 && pos.y >= b.y0 && pos.y <= b.y1;
+      }
+
+      function clampToVideoB(pos) {
+        if (!mainCanvasB.width) return pos;
+        const b = getVideoBoundsFor(mainCanvasB, penCanvasB);
+        return { x: Math.max(b.x0, Math.min(b.x1, pos.x)), y: Math.max(b.y0, Math.min(b.y1, pos.y)) };
+      }
+
+      function isInVideoBoundsB(pos) {
+        const b = getVideoBoundsFor(mainCanvasB, penCanvasB);
+        return pos.x >= b.x0 && pos.x <= b.x1 && pos.y >= b.y0 && pos.y <= b.y1;
+      }
+
+      function scheduleAnnotationSaveB() {
+        const entry = getCompareEntry(); if (!entry) return;
+        clearTimeout(_annoSaveTimerB);
+        _annoSaveTimerB = setTimeout(() => {
+          const e = getCompareEntry(); if (e) persistEntry(e).catch(() => {});
+        }, 1500);
       }
 
       // ===== FRAME PLAYER =====
@@ -639,7 +732,7 @@
         playlistEl.innerHTML = '';
         playlist.forEach((entry, i) => {
           const row = document.createElement('div');
-          row.className = 'playlist-row' + (i === activeIndex ? ' active' : '');
+          row.className = 'playlist-row' + (i === activeIndex ? ' active' : '') + (compareMode && i === compareIndex && i !== activeIndex ? ' compare-active' : '');
 
           const thumbEl = document.createElement(entry.thumbnail ? 'img' : 'div');
           thumbEl.className = 'playlist-thumb' + (entry.thumbnail ? '' : ' playlist-thumb-placeholder');
@@ -683,12 +776,15 @@
               scrubTotal.textContent = '0:00.000';
               updateInOutUI();
               updateScrubTicks();
+              updateControlAvailability();
             } else if (activeIndex > i) activeIndex--;
             savePlaylistState();
             renderPlaylist();
           });
 
-          row.addEventListener('click', () => loadVideo(i));
+          row.addEventListener('click', () => {
+            if (compareMode && !comparePanelLeft) { loadVideoB(i); } else { loadVideo(i); }
+          });
           row.appendChild(info); row.appendChild(removeBtn);
           playlistEl.appendChild(row);
         });
@@ -713,6 +809,8 @@
         updateScrubTicks();
         resizeCanvases();
         savePlaylistState();
+        if (compareMode) updatePanelLabels();
+        updateControlAvailability();
       }
 
       // ===== CANVAS RESIZE =====
@@ -730,7 +828,9 @@
       btnPlay.addEventListener('click', () => {
         if (activeIndex < 0) return;
         if (player.playing) {
-          player.pause(); btnPlay.textContent = '▶';
+          player.pause();
+          if (compareMode && playerB) playerB.pause();
+          btnPlay.textContent = '▶';
         } else {
           if (loopEnabled) {
             const entry = playlist[activeIndex];
@@ -741,23 +841,36 @@
               if (t < effIn || t >= effOut) player.seekToTime(effIn);
             }
           }
-          player.play(); btnPlay.textContent = '⏸';
+          player.play();
+          if (compareMode && playerB && playerB.video.src) {
+            playerB.seekToTime(player.getCurrentTime());
+            playerB.play();
+          }
+          btnPlay.textContent = '⏸';
         }
       });
 
-      btnFrameBack.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(-1); });
-      btnFrameFwd.addEventListener('click', () => { if (activeIndex >= 0) player.stepFrame(1); });
+      btnFrameBack.addEventListener('click', () => {
+        if (activeIndex >= 0) { player.stepFrame(-1); if (compareMode && playerB) playerB.stepFrame(-1); }
+      });
+      btnFrameFwd.addEventListener('click', () => {
+        if (activeIndex >= 0) { player.stepFrame(1); if (compareMode && playerB) playerB.stepFrame(1); }
+      });
 
       btnToStart.addEventListener('click', () => {
         if (activeIndex < 0) return;
         const e = playlist[activeIndex];
-        player.seekToTime(e.inPoint !== null ? e.inPoint : 0);
+        const t = e.inPoint !== null ? e.inPoint : 0;
+        player.seekToTime(t);
+        if (compareMode && playerB) playerB.seekToTime(t);
       });
 
       btnToEnd.addEventListener('click', () => {
         if (activeIndex < 0) return;
         const e = playlist[activeIndex];
-        player.seekToTime(e.outPoint !== null ? e.outPoint : player.duration);
+        const t = e.outPoint !== null ? e.outPoint : player.duration;
+        player.seekToTime(t);
+        if (compareMode && playerB) playerB.seekToTime(t);
       });
 
       function setAutoLoop() {
@@ -842,6 +955,9 @@
         const pct = (player.getCurrentTime() / player.duration) * 100;
         scrubProgress.style.width = pct + '%';
         scrubPlayhead.style.left = pct + '%';
+        // Clamp frame label so it doesn't overflow the bar edges
+        const clampedPct = Math.max(3, Math.min(97, pct));
+        scrubFrame.style.left = clampedPct + '%';
       }
 
       function updateScrubTimes() {
@@ -854,7 +970,10 @@
         const rect = scrubBar.getBoundingClientRect();
         const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
         const pct = Math.max(0, Math.min(1, x / rect.width));
-        if (player.duration) player.seekToTime(pct * player.duration);
+        if (player.duration) {
+          player.seekToTime(pct * player.duration);
+          if (compareMode && playerB && playerB.duration) playerB.seekToTime(pct * playerB.duration);
+        }
       }
 
       function handleDragFromEvent(e) {
@@ -932,7 +1051,7 @@
       // ===== TOOLS =====
       function updateToolCursor() {
         if (currentTool === 'laser' || currentTool === 'eyedrop') {
-          penCanvas.style.cursor = 'crosshair';
+          penCanvas.style.cursor = penCanvasB.style.cursor = 'crosshair';
           return;
         }
         const size = Math.max(brushSize, 4);
@@ -957,7 +1076,9 @@
           cx.lineWidth = 1.5;
           cx.strokeRect(pad, pad, dim - 2 * pad, dim - 2 * pad);
         }
-        penCanvas.style.cursor = `url(${c.toDataURL()}) ${half} ${half}, crosshair`;
+        const cur = `url(${c.toDataURL()}) ${half} ${half}, crosshair`;
+        penCanvas.style.cursor = cur;
+        penCanvasB.style.cursor = cur;
       }
 
       function activateTool(tool) {
@@ -1004,11 +1125,10 @@
       colorCustom.addEventListener('change', () => setDrawColor(colorCustom.value));
 
       // ===== PLAYBACK SPEED =====
-      document.querySelectorAll('.speed-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          player.video.playbackRate = parseFloat(btn.dataset.speed);
-          document.querySelectorAll('.speed-btn').forEach(b => b.classList.toggle('active', b === btn));
-        });
+      document.getElementById('speed-select').addEventListener('change', (e) => {
+        const rate = parseFloat(e.target.value);
+        player.video.playbackRate = rate;
+        if (compareMode && playerB) playerB.video.playbackRate = rate;
       });
 
       // ===== EYEDROPPER =====
@@ -1168,7 +1288,211 @@
         laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtx, s, laserCanvas.width, laserCanvas.height, laserFadeOpacity));
       }
 
+      function redrawPenCanvasB() {
+        penCtxB.clearRect(0, 0, penCanvasB.width, penCanvasB.height);
+        const entry = getCompareEntry(); if (!entry || !playerB) return;
+        const strokes = entry.annotations[playerB.currentFrame];
+        if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtxB, s, penCanvasB.width, penCanvasB.height));
+      }
+
+      function redrawLaserCanvasB() {
+        laserCtxB.clearRect(0, 0, laserCanvasB.width, laserCanvasB.height);
+        laserStrokes.forEach(s => drawStrokeOnCanvas(laserCtxB, s, laserCanvasB.width, laserCanvasB.height, laserFadeOpacity));
+      }
+
+      function resizeCanvasesB() {
+        const rect = videoContainerB.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        penCanvasB.width = rect.width; penCanvasB.height = rect.height;
+        laserCanvasB.width = rect.width; laserCanvasB.height = rect.height;
+        redrawPenCanvasB();
+      }
+
+      function applyViewportB() {
+        videoViewportB.style.transform = `translate(${panXB}px,${panYB}px) scale(${vpZoomB})`;
+      }
+
+      function getCanvasPosB(e) {
+        const rect = penCanvasB.getBoundingClientRect();
+        return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+      }
+
+      function eraseAtB(pos) {
+        const entry = getCompareEntry(); if (!entry || !playerB) return;
+        const strokes = entry.annotations[playerB.currentFrame]; if (!strokes) return;
+        const r = brushSize / Math.min(penCanvasB.width, penCanvasB.height);
+        const toRemove = [];
+        strokes.forEach((stroke, idx) => {
+          if (!stroke.points.length) return;
+          if (stroke.points.length === 1) {
+            if (Math.hypot(pos.x - stroke.points[0].x, pos.y - stroke.points[0].y) <= r) toRemove.push(idx);
+          } else {
+            for (let i = 0; i < stroke.points.length - 1; i++) {
+              if (pointToSegDist(pos.x, pos.y, stroke.points[i].x, stroke.points[i].y, stroke.points[i+1].x, stroke.points[i+1].y) <= r) {
+                toRemove.push(idx); break;
+              }
+            }
+          }
+        });
+        if (toRemove.length) {
+          toRemove.sort((a, b) => b - a).forEach(idx => {
+            const removed = strokes.splice(idx, 1)[0];
+            entry.undoStack.push({ type: 'remove', frame: playerB.currentFrame, stroke: removed, strokeIndex: idx });
+          });
+          entry.redoStack = [];
+          redrawPenCanvasB(); updateScrubTicks(); scheduleAnnotationSaveB();
+        }
+      }
+
+      function setupPanelBPointerEvents() {
+        penCanvasB.addEventListener('pointerdown', (e) => {
+          setActivePanel(false);
+          e.preventDefault();
+          if (e.button === 1) {
+            penCanvasB.setPointerCapture(e.pointerId);
+            vpDragB = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
+            videoViewportB.classList.add('panning'); return;
+          }
+          if (e.button === 2) {
+            penCanvasB.setPointerCapture(e.pointerId);
+            const rect = videoContainerB.getBoundingClientRect();
+            vpDragB = { type: 'zoom', startY: e.clientY, startZoom: vpZoomB, startPanX: panXB, startPanY: panYB,
+                        cx: e.clientX - rect.left, cy: e.clientY - rect.top };
+            videoViewportB.classList.add('zooming'); return;
+          }
+          if (!drawingsVisible || compareIndex < 0) return;
+          const pos = getCanvasPosB(e);
+          if (currentTool === 'eyedrop') {
+            const vw = mainCanvasB.width, vh = mainCanvasB.height;
+            if (vw && vh && playerB && playerB.video.readyState >= 2) {
+              const cw = penCanvasB.width, ch = penCanvasB.height;
+              const scale = Math.min(cw / vw, ch / vh);
+              const ox = (cw - vw * scale) / 2, oy = (ch - vh * scale) / 2;
+              const px = pos.x * cw, py = pos.y * ch;
+              if (px >= ox && px <= ox + vw * scale && py >= oy && py <= oy + vh * scale) {
+                const mx = Math.floor((px - ox) / scale), my = Math.floor((py - oy) / scale);
+                const [r, g, b] = mainCtxB.getImageData(Math.max(0, mx), Math.max(0, my), 1, 1).data;
+                setDrawColor('#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''));
+              }
+            }
+            hideEyedropPreview(); activateTool(prevTool); return;
+          }
+          if (!isInVideoBoundsB(pos)) return;
+          penCanvasB.setPointerCapture(e.pointerId);
+          if (currentTool === 'pen') {
+            if (playerB.playing) { playerB.pause(); player.pause(); btnPlay.textContent = '▶'; }
+            isDrawingB = true;
+            currentStrokeB = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] };
+            redrawPenCanvasB();
+            drawStrokeOnCanvas(penCtxB, currentStrokeB, penCanvasB.width, penCanvasB.height);
+          } else if (currentTool === 'laser') {
+            isDrawingB = true;
+            laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] });
+            lastLaserInputTime = Date.now();
+            if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+          } else if (currentTool === 'eraser') {
+            isErasingB = true; eraseAtB(pos);
+          }
+        });
+
+        penCanvasB.addEventListener('pointermove', (e) => {
+          if (vpDragB) {
+            if (vpDragB.type === 'pan') {
+              panXB = vpDragB.startPanX + (e.clientX - vpDragB.startX);
+              panYB = vpDragB.startPanY + (e.clientY - vpDragB.startY);
+            } else {
+              const dy = e.clientY - vpDragB.startY;
+              const newZoom = Math.max(0.1, Math.min(20, vpDragB.startZoom * Math.pow(1.005, -dy)));
+              panXB = vpDragB.cx - (vpDragB.cx - vpDragB.startPanX) * (newZoom / vpDragB.startZoom);
+              panYB = vpDragB.cy - (vpDragB.cy - vpDragB.startPanY) * (newZoom / vpDragB.startZoom);
+              vpZoomB = newZoom;
+            }
+            applyViewportB(); return;
+          }
+          if (!drawingsVisible) return;
+          const pos = getCanvasPosB(e);
+          if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
+          if (currentTool === 'pen' && isDrawingB && currentStrokeB) {
+            const cpos = clampToVideoB(pos);
+            currentStrokeB.points.push({ ...cpos, p: getPressure(e) });
+            redrawPenCanvasB();
+            drawStrokeOnCanvas(penCtxB, currentStrokeB, penCanvasB.width, penCanvasB.height);
+          } else if (currentTool === 'laser' && isDrawingB && laserStrokes.length) {
+            laserStrokes[laserStrokes.length - 1].points.push({ ...clampToVideoB(pos), p: getPressure(e) });
+            lastLaserInputTime = Date.now();
+            if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+          } else if (currentTool === 'eraser' && isErasingB) {
+            eraseAtB(pos);
+          }
+        });
+
+        const finishStrokeB = () => {
+          if (currentTool === 'pen' && isDrawingB && currentStrokeB) {
+            isDrawingB = false;
+            const frame = playerB ? playerB.currentFrame : 0;
+            const entry = playlist[compareIndex]; if (!entry) return;
+            if (!entry.annotations[frame]) entry.annotations[frame] = [];
+            entry.annotations[frame].push(currentStrokeB);
+            entry.undoStack.push({ type: 'add', frame, stroke: currentStrokeB });
+            entry.redoStack = [];
+            currentStrokeB = null;
+            redrawPenCanvasB(); updateScrubTicks(); scheduleAnnotationSaveB();
+          } else if (currentTool === 'laser') { isDrawingB = false; }
+          else if (currentTool === 'eraser') { isErasingB = false; }
+        };
+
+        penCanvasB.addEventListener('pointerup', (e) => {
+          if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
+          finishStrokeB();
+        });
+        penCanvasB.addEventListener('pointercancel', (e) => {
+          if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
+          finishStrokeB();
+        });
+        penCanvasB.addEventListener('pointerleave', () => {
+          if (currentTool === 'eyedrop') hideEyedropPreview();
+        });
+
+        videoContainerB.addEventListener('contextmenu', e => e.preventDefault());
+        videoContainerB.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const rect = videoContainerB.getBoundingClientRect();
+          const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+          const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+          const newZoom = Math.max(0.1, Math.min(20, vpZoomB * factor));
+          panXB = cx - (cx - panXB) * (newZoom / vpZoomB);
+          panYB = cy - (cy - panYB) * (newZoom / vpZoomB);
+          vpZoomB = newZoom; applyViewportB();
+        }, { passive: false });
+
+        new ResizeObserver(resizeCanvasesB).observe(videoContainerB);
+      }
+
+      async function loadVideoB(index) {
+        if (index < 0 || index >= playlist.length) return;
+        compareIndex = index;
+        const entry = playlist[index];
+        if (!playerB) {
+          playerB = new FramePlayer(mainCanvasB, mainCtxB);
+          playerB.onFrameChange = () => { redrawPenCanvasB(); };
+          setupPanelBPointerEvents();
+        }
+        playerB.fps = entry.fps;
+        playerB.inPoint = entry.inPoint;
+        playerB.outPoint = entry.outPoint;
+        playerB.loop = loopEnabled;
+        try {
+          await playerB.load(entry.objectUrl, entry.fps);
+          if (playerB.duration) entry.duration = playerB.duration;
+        } catch (err) { alert(err.message); return; }
+        playerB.seekToTime(player.getCurrentTime());
+        resizeCanvasesB();
+        updatePanelLabels();
+        renderPlaylist();
+      }
+
       penCanvas.addEventListener('pointerdown', (e) => {
+        if (compareMode) setActivePanel(true);
         e.preventDefault();
         // MMB = pan
         if (e.button === 1) {
@@ -1263,7 +1587,7 @@
           entry.undoStack.push({ type: 'add', frame, stroke: currentStroke });
           entry.redoStack = [];
           currentStroke = null;
-          redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
+          redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave(); updateControlAvailability();
         } else if (currentTool === 'laser') { isDrawing = false; }
         else if (currentTool === 'eraser') { isErasing = false; }
       };
@@ -1320,13 +1644,13 @@
             entry.undoStack.push({ type: 'remove', frame: player.currentFrame, stroke: removed, strokeIndex: idx });
           });
           entry.redoStack = [];
-          redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
+          redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave(); updateControlAvailability();
         }
       }
 
       // ===== UNDO/REDO =====
       function undo() {
-        const entry = getActiveEntry(); if (!entry || !entry.undoStack.length) return;
+        const entry = getActivePanelEntry(); if (!entry || !entry.undoStack.length) return;
         const action = entry.undoStack.pop();
         if (action.type === 'add') {
           const removed = (entry.annotations[action.frame] || []).pop();
@@ -1339,11 +1663,12 @@
           entry.annotations[action.frame].push(action.stroke);
           entry.redoStack.push({ type: 'remove', frame: action.frame, stroke: action.stroke });
         }
-        redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
+        if (compareMode && !comparePanelLeft) { redrawPenCanvasB(); } else { redrawPenCanvas(); }
+        updateScrubTicks(); scheduleAnnotationSave(); updateControlAvailability();
       }
 
       function redo() {
-        const entry = getActiveEntry(); if (!entry || !entry.redoStack.length) return;
+        const entry = getActivePanelEntry(); if (!entry || !entry.redoStack.length) return;
         const action = entry.redoStack.pop();
         if (action.type === 'add') {
           if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
@@ -1356,7 +1681,32 @@
           const removed = (entry.annotations[action.frame] || []).pop();
           entry.undoStack.push({ type: 'remove', frame: action.frame, stroke: removed });
         }
-        redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
+        if (compareMode && !comparePanelLeft) { redrawPenCanvasB(); } else { redrawPenCanvas(); }
+        updateScrubTicks(); scheduleAnnotationSave(); updateControlAvailability();
+      }
+
+      // ===== CONTROL AVAILABILITY =====
+      function updateControlAvailability() {
+        const entry = getActiveEntry();
+        const hasVideo = activeIndex >= 0;
+        const noVideo = !hasVideo;
+        // No-video group
+        [btnPlay, btnFrameBack, btnFrameFwd, btnToStart, btnToEnd,
+         btnSetIn, btnSetOut, btnClearInOut, btnLoop, btnToggleDrawings,
+         btnMute, volumeSlider, btnPrevAnnotation, btnNextAnnotation,
+         btnClearFrame, document.getElementById('speed-select')
+        ].forEach(el => { if (el) el.disabled = noVideo; });
+        // Undo/redo
+        btnUndo.disabled = !entry || !entry.undoStack.length;
+        btnRedo.disabled = !entry || !entry.redoStack.length;
+        // Prev/next annotation — check if frames exist before/after
+        if (entry) {
+          const frames = Object.keys(entry.annotations).map(Number)
+            .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
+            .sort((a, b) => a - b);
+          btnPrevAnnotation.disabled = frames.length === 0;
+          btnNextAnnotation.disabled = frames.length === 0;
+        }
       }
 
       btnUndo.addEventListener('click', undo);
@@ -1377,20 +1727,25 @@
           else if (e.key === 'l' || e.key === 'L') activateTool('laser');
           else if (e.key === 'i' || e.key === 'I') btnSetIn.click();
           else if (e.key === 'o' || e.key === 'O') btnSetOut.click();
-          else if (e.key === 'a' || e.key === 'A') { panX = 0; panY = 0; vpZoom = 1; applyViewport(); }
+          else if (e.key === 'a' || e.key === 'A') {
+            if (compareMode && !comparePanelLeft) { panXB = 0; panYB = 0; vpZoomB = 1; applyViewportB(); }
+            else { panX = 0; panY = 0; vpZoom = 1; applyViewport(); }
+          }
         }
       });
 
       // ===== CLEAR FRAME =====
       document.getElementById('btn-clear-frame').addEventListener('click', () => {
-        const entry = getActiveEntry(); if (!entry) return;
-        const frame = player.currentFrame;
+        const entry = getActivePanelEntry(); if (!entry) return;
+        const pplayer = getActivePanelPlayer();
+        const frame = pplayer.currentFrame;
         const strokes = entry.annotations[frame];
         if (!strokes || !strokes.length) return;
         entry.undoStack.push({ type: 'clearFrame', frame, strokes: strokes.slice() });
         entry.redoStack = [];
         entry.annotations[frame] = [];
-        redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave();
+        if (compareMode && !comparePanelLeft) { redrawPenCanvasB(); } else { redrawPenCanvas(); }
+        updateScrubTicks(); scheduleAnnotationSave(); updateControlAvailability();
       });
 
       // ===== DRAWOVERS TOGGLE & FULLSCREEN =====
@@ -1411,8 +1766,38 @@
       });
 
       document.getElementById('btn-reset-view').addEventListener('click', () => {
-        panX = 0; panY = 0; vpZoom = 1; applyViewport();
+        if (compareMode && !comparePanelLeft) { panXB = 0; panYB = 0; vpZoomB = 1; applyViewportB(); }
+        else { panX = 0; panY = 0; vpZoom = 1; applyViewport(); }
       });
+
+      // ===== COMPARE MODE =====
+      function exitCompareMode() {
+        compareMode = false;
+        document.getElementById('btn-compare').classList.remove('active');
+        panelRight.style.display = 'none';
+        document.getElementById('content').classList.remove('compare-mode');
+        panelLeft.classList.remove('active-compare-panel');
+        panelRight.classList.remove('active-compare-panel');
+        comparePanelLeft = true;
+        compareIndex = -1;
+        if (playerB) { playerB.pause(); }
+        resizeCanvases();
+        renderPlaylist();
+      }
+
+      document.getElementById('btn-compare').addEventListener('click', () => {
+        if (compareMode) { exitCompareMode(); return; }
+        compareMode = true;
+        document.getElementById('btn-compare').classList.add('active');
+        panelRight.style.display = '';
+        document.getElementById('content').classList.add('compare-mode');
+        setActivePanel(true);
+        updatePanelLabels();
+        const secondIdx = playlist.findIndex((_, i) => i !== activeIndex);
+        if (secondIdx >= 0) loadVideoB(secondIdx); else { resizeCanvases(); renderPlaylist(); }
+      });
+
+      document.getElementById('btn-compare-close').addEventListener('click', () => exitCompareMode());
 
       // ===== LASER FADE =====
       function laserLoop() {
@@ -1424,6 +1809,7 @@
           laserFading = true; laserFadeStart = now;
         }
         redrawLaserCanvas();
+        if (compareMode) redrawLaserCanvasB();
         requestAnimationFrame(laserLoop);
       }
       requestAnimationFrame(laserLoop);
@@ -1500,6 +1886,7 @@
       mainCanvas.style.display = 'block';
       setSidebarOpen(!isMobile());
       resizeCanvases();
+      updateControlAvailability();
 
       // ===== WELCOME =====
       const welcomeOverlay = document.getElementById('welcome-overlay');
