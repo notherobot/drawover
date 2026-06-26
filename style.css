@@ -226,9 +226,12 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #playback-row input[type="range"] { width: 70px; height: 16px; }
 .pb-sep { width: 1px; height: 20px; background: #303030; margin: 0 4px; flex-shrink: 0; }
 
+.transport-btn {
+  font-size: 14px; padding: 5px 11px; flex-shrink: 0;
+}
 #btn-play {
-  width: 36px; height: 36px; border-radius: 50%; padding: 0;
-  font-size: 15px; background: #333; border-color: #4a4a4a; flex-shrink: 0;
+  width: 42px; height: 42px; border-radius: 50%; padding: 0;
+  font-size: 18px; background: #333; border-color: #4a4a4a; flex-shrink: 0;
 }
 #btn-play:hover { background: #444; }
 
@@ -331,7 +334,8 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   /* Playback row: allow wrapping on very small screens */
   #playback-row { gap: 2px; padding: 4px 6px; }
   #playback-row button { padding: 4px 6px; font-size: 10px; }
-  #btn-play { width: 34px; height: 34px; font-size: 14px; }
+  .transport-btn { font-size: 12px; padding: 4px 8px; }
+  #btn-play { width: 38px; height: 38px; font-size: 16px; }
 
   /* Status bar: hide the note text, keep storage + version */
   #status-note { display: none; }
