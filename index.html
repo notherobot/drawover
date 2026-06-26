@@ -78,6 +78,7 @@
           <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
           <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
           <button id="btn-toggle-drawings" class="active" title="Show/Hide Drawovers">Drawovers ON</button>
+          <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
           <div class="pb-sep"></div>
           <button id="btn-to-start" title="Go to In / Start">|◀</button>
           <button id="btn-frame-back" title="Frame Back (←)">◄◄</button>
@@ -705,6 +706,7 @@
         const entry = getActiveEntry();
         if (!entry || !player.duration) return;
         Object.keys(entry.annotations).map(Number).forEach(frame => {
+          if (!entry.annotations[frame] || !entry.annotations[frame].length) return;
           const pct = (frame / getFPS() / player.duration) * 100;
           if (pct >= 0 && pct <= 100) {
             const tick = document.createElement('div');
@@ -1089,6 +1091,9 @@
         if (action.type === 'add') {
           const removed = (entry.annotations[action.frame] || []).pop();
           entry.redoStack.push({ type: 'add', frame: action.frame, stroke: removed });
+        } else if (action.type === 'clearFrame') {
+          entry.annotations[action.frame] = action.strokes.slice();
+          entry.redoStack.push({ type: 'clearFrame', frame: action.frame, strokes: action.strokes });
         } else {
           if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
           entry.annotations[action.frame].push(action.stroke);
@@ -1104,6 +1109,9 @@
           if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
           entry.annotations[action.frame].push(action.stroke);
           entry.undoStack.push({ type: 'add', frame: action.frame, stroke: action.stroke });
+        } else if (action.type === 'clearFrame') {
+          entry.annotations[action.frame] = [];
+          entry.undoStack.push({ type: 'clearFrame', frame: action.frame, strokes: action.strokes });
         } else {
           const removed = (entry.annotations[action.frame] || []).pop();
           entry.undoStack.push({ type: 'remove', frame: action.frame, stroke: removed });
@@ -1131,6 +1139,18 @@
           else if (e.key === 'o' || e.key === 'O') btnSetOut.click();
           else if (e.key === 'a' || e.key === 'A') { panX = 0; panY = 0; vpZoom = 1; applyViewport(); }
         }
+      });
+
+      // ===== CLEAR FRAME =====
+      document.getElementById('btn-clear-frame').addEventListener('click', () => {
+        const entry = getActiveEntry(); if (!entry) return;
+        const frame = player.currentFrame;
+        const strokes = entry.annotations[frame];
+        if (!strokes || !strokes.length) return;
+        entry.undoStack.push({ type: 'clearFrame', frame, strokes: strokes.slice() });
+        entry.redoStack = [];
+        entry.annotations[frame] = [];
+        redrawPenCanvas(); updateScrubTicks();
       });
 
       // ===== DRAWOVERS TOGGLE & FULLSCREEN =====
