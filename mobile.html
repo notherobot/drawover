@@ -599,7 +599,7 @@
           const effOut = this.outPoint !== null ? this.outPoint : this.duration;
           const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
           if (this.loop && (this.inPoint !== null || this.outPoint !== null) && meta.mediaTime >= effOut) {
-            this.video.currentTime = effIn; return;
+            this.video.currentTime = effIn;
           }
           this._scheduleVFCB();
         });
