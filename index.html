@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.91</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.92</span></div>
     </div>
 
     <div id="main-body">
@@ -104,13 +104,14 @@
           <button id="btn-mute" title="Mute">🔊</button>
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
+          <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡</button>
           <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
         </div>
 
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.91</span>
+          <span id="status-version">DrawOver v1.92</span>
         </div>
       </div>
     </div>
@@ -120,17 +121,20 @@
   <div id="shortcuts-panel">
     <h3>Keyboard Shortcuts</h3>
     <table>
+      <tr class="sc-section"><td colspan="2">Playback</td></tr>
       <tr><td>Space</td><td>Play / Pause</td></tr>
       <tr><td>← / →</td><td>Frame back / forward</td></tr>
-      <tr><td>↑ / ↓</td><td>Prev / next annotation</td></tr>
+      <tr><td>↑ / ↓</td><td>Prev / next drawover (wraps to start / end)</td></tr>
+      <tr class="sc-section"><td colspan="2">Drawing</td></tr>
       <tr><td>B</td><td>Pen tool</td></tr>
       <tr><td>E</td><td>Eraser tool</td></tr>
       <tr><td>L</td><td>Laser tool</td></tr>
-      <tr><td>I</td><td>Set In point</td></tr>
-      <tr><td>O</td><td>Set Out point</td></tr>
       <tr><td>Ctrl+Z</td><td>Undo</td></tr>
       <tr><td>Ctrl+⇧+Z</td><td>Redo</td></tr>
+      <tr class="sc-section"><td colspan="2">Range &amp; View</td></tr>
       <tr><td>A</td><td>Reset pan &amp; zoom</td></tr>
+      <tr><td>I</td><td>Set In point</td></tr>
+      <tr><td>O</td><td>Set Out point</td></tr>
       <tr class="sc-section"><td colspan="2">Mouse</td></tr>
       <tr><td>Right-drag</td><td>Zoom at click point</td></tr>
       <tr><td>MMB drag</td><td>Pan</td></tr>
@@ -148,7 +152,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.91</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.92</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -421,6 +425,27 @@
         return (activeIndex >= 0 && activeIndex < playlist.length) ? playlist[activeIndex] : null;
       }
 
+      function getVideoBounds() {
+        const vw = mainCanvas.width, vh = mainCanvas.height;
+        const cw = penCanvas.width, ch = penCanvas.height;
+        if (!vw || !vh || !cw || !ch) return { x0: 0, y0: 0, x1: 1, y1: 1 };
+        const scale = Math.min(cw / vw, ch / vh);
+        const fw = vw * scale, fh = vh * scale;
+        const ox = (cw - fw) / 2, oy = (ch - fh) / 2;
+        return { x0: ox / cw, y0: oy / ch, x1: (ox + fw) / cw, y1: (oy + fh) / ch };
+      }
+
+      function clampToVideo(pos) {
+        if (!mainCanvas.width) return pos;
+        const b = getVideoBounds();
+        return { x: Math.max(b.x0, Math.min(b.x1, pos.x)), y: Math.max(b.y0, Math.min(b.y1, pos.y)) };
+      }
+
+      function isInVideoBounds(pos) {
+        const b = getVideoBounds();
+        return pos.x >= b.x0 && pos.x <= b.x1 && pos.y >= b.y0 && pos.y <= b.y1;
+      }
+
       // ===== FRAME PLAYER =====
       class FramePlayer {
         constructor(canvas, ctx) {
@@ -450,6 +475,14 @@
             if (this.onFrameChange) this.onFrameChange(this._frameNum);
           });
           this.video.addEventListener('ended', () => {
+            if (this.loop) {
+              const effIn = this.inPoint !== null ? this.inPoint : 0;
+              this.video.currentTime = effIn;
+              this.video.play().catch(() => {});
+              if (this._hasVFCB) this._scheduleVFCB();
+              else { this._cancelRAF(); this._rafLoop(); }
+              return;
+            }
             this.playing = false;
             this._cancelRAF();
             btnPlay.textContent = '▶';
@@ -507,7 +540,7 @@
             if (this.onFrameChange) this.onFrameChange(this._frameNum);
             const effOut = this.outPoint !== null ? this.outPoint : this.duration;
             const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
-            if (this.loop && (this.inPoint !== null || this.outPoint !== null) && meta.mediaTime >= effOut) {
+            if (this.loop && meta.mediaTime >= effOut) {
               this.video.currentTime = effIn;
             }
             this._scheduleVFCB();
@@ -521,7 +554,7 @@
           if (this.onFrameChange) this.onFrameChange(this._frameNum);
           const effOut = this.outPoint !== null ? this.outPoint : this.duration;
           const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
-          if (this.loop && (this.inPoint !== null || this.outPoint !== null) && this.video.currentTime >= effOut) {
+          if (this.loop && this.video.currentTime >= effOut) {
             this.video.currentTime = effIn;
           }
           this._rafId = requestAnimationFrame(() => this._rafLoop());
@@ -785,16 +818,22 @@
       // ===== ANNOTATION NAVIGATION =====
       btnPrevAnnotation.addEventListener('click', () => {
         const entry = getActiveEntry(); if (!entry) return;
-        const frames = Object.keys(entry.annotations).map(Number).sort((a, b) => a - b);
+        const frames = Object.keys(entry.annotations).map(Number)
+          .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
+          .sort((a, b) => a - b);
         const prev = frames.filter(f => f < player.currentFrame).pop();
         if (prev !== undefined) player.stepFrame(prev - player.currentFrame);
+        else player.seekToTime(entry.inPoint !== null ? entry.inPoint : 0);
       });
 
       btnNextAnnotation.addEventListener('click', () => {
         const entry = getActiveEntry(); if (!entry) return;
-        const frames = Object.keys(entry.annotations).map(Number).sort((a, b) => a - b);
+        const frames = Object.keys(entry.annotations).map(Number)
+          .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
+          .sort((a, b) => a - b);
         const next = frames.find(f => f > player.currentFrame);
         if (next !== undefined) player.stepFrame(next - player.currentFrame);
+        else player.seekToTime(entry.outPoint !== null ? entry.outPoint : player.duration);
       });
 
       // ===== SCRUB BAR =====
@@ -1156,6 +1195,7 @@
           activateTool(prevTool);
           return;
         }
+        if (!isInVideoBounds(pos)) return;
         penCanvas.setPointerCapture(e.pointerId);
         if (currentTool === 'pen') {
           if (player.playing) { player.pause(); btnPlay.textContent = '▶'; }
@@ -1200,11 +1240,12 @@
         }
 
         if (currentTool === 'pen' && isDrawing && currentStroke) {
-          currentStroke.points.push({ ...pos, p: getPressure(e) });
+          const cpos = clampToVideo(pos);
+          currentStroke.points.push({ ...cpos, p: getPressure(e) });
           redrawPenCanvas();
           drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
         } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
-          laserStrokes[laserStrokes.length - 1].points.push({ ...pos, p: getPressure(e) });
+          laserStrokes[laserStrokes.length - 1].points.push({ ...clampToVideo(pos), p: getPressure(e) });
           lastLaserInputTime = Date.now();
           if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
         } else if (currentTool === 'eraser' && isErasing) {
@@ -1367,6 +1408,10 @@
       document.addEventListener('fullscreenchange', () => {
         btnFullscreen.textContent = document.fullscreenElement ? '⛶ Exit' : '⛶';
         setTimeout(resizeCanvases, 100);
+      });
+
+      document.getElementById('btn-reset-view').addEventListener('click', () => {
+        panX = 0; panY = 0; vpZoom = 1; applyViewport();
       });
 
       // ===== LASER FADE =====

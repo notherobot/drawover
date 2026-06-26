@@ -103,6 +103,10 @@
       flex: 1; position: relative; background: #2a2a2a; overflow: hidden;
       min-height: 0; display: flex; align-items: center; justify-content: center;
     }
+    #video-viewport {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      transform-origin: 0 0; will-change: transform;
+    }
     #main-canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
     #pen-canvas, #laser-canvas {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -314,14 +318,16 @@
 
     <div id="topbar">
       <button id="btn-menu">☰</button>
-      <div id="app-title">DrawOver <span>v1.9</span></div>
+      <div id="app-title">DrawOver <span>v1.92</span></div>
       <button id="btn-topbar-add">+ Video</button>
     </div>
 
     <div id="video-container">
-      <canvas id="main-canvas"></canvas>
-      <canvas id="pen-canvas"></canvas>
-      <canvas id="laser-canvas"></canvas>
+      <div id="video-viewport">
+        <canvas id="main-canvas"></canvas>
+        <canvas id="pen-canvas"></canvas>
+        <canvas id="laser-canvas"></canvas>
+      </div>
     </div>
 
     <div id="scrub-bar-container">
@@ -349,6 +355,7 @@
       <button id="btn-redo">↪</button>
       <button id="btn-toggle-drawings" class="active">👁</button>
       <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
+      <button id="btn-reset-view" title="Reset pan &amp; zoom">⊡</button>
     </div>
 
     <!-- Row 2: draw tools + range + colors + size — scrollable -->
@@ -404,7 +411,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:12px;font-weight:400;color:#555;margin-bottom:16px;">v1.9</div>
+    <div style="font-size:12px;font-weight:400;color:#555;margin-bottom:16px;">v1.92</div>
     <div id="welcome-sub">Draw annotations over your videos, frame by frame. Open a video to get started.</div>
     <button id="btn-welcome-open">Open a Video</button>
   </div>
@@ -495,6 +502,18 @@
     let isErasing = false;
     let isScrubbing = false;
 
+    // ===== PAN/ZOOM STATE =====
+    let panX = 0, panY = 0, vpZoom = 1;
+    let activePointers = new Map();
+    let isGesturing = false;
+    let gestureStart = null;
+
+    const videoViewport = document.getElementById('video-viewport');
+
+    function applyViewport() {
+      videoViewport.style.transform = `translate(${panX}px,${panY}px) scale(${vpZoom})`;
+    }
+
     // ===== HELPERS =====
     function formatTimecode(s) {
       if (isNaN(s) || !isFinite(s)) return '0:00.000';
@@ -511,6 +530,27 @@
 
     function getActiveEntry() {
       return (activeIndex >= 0 && activeIndex < playlist.length) ? playlist[activeIndex] : null;
+    }
+
+    function getVideoBounds() {
+      const vw = mainCanvas.width, vh = mainCanvas.height;
+      const cw = penCanvas.width, ch = penCanvas.height;
+      if (!vw || !vh || !cw || !ch) return { x0: 0, y0: 0, x1: 1, y1: 1 };
+      const scale = Math.min(cw / vw, ch / vh);
+      const fw = vw * scale, fh = vh * scale;
+      const ox = (cw - fw) / 2, oy = (ch - fh) / 2;
+      return { x0: ox / cw, y0: oy / ch, x1: (ox + fw) / cw, y1: (oy + fh) / ch };
+    }
+
+    function clampToVideo(pos) {
+      if (!mainCanvas.width) return pos;
+      const b = getVideoBounds();
+      return { x: Math.max(b.x0, Math.min(b.x1, pos.x)), y: Math.max(b.y0, Math.min(b.y1, pos.y)) };
+    }
+
+    function isInVideoBounds(pos) {
+      const b = getVideoBounds();
+      return pos.x >= b.x0 && pos.x <= b.x1 && pos.y >= b.y0 && pos.y <= b.y1;
     }
 
     // ===== FRAME PLAYER =====
@@ -543,6 +583,14 @@
           if (this.onFrameChange) this.onFrameChange(this._frameNum);
         });
         this.video.addEventListener('ended', () => {
+          if (this.loop) {
+            const effIn = this.inPoint !== null ? this.inPoint : 0;
+            this.video.currentTime = effIn;
+            this.video.play().catch(() => {});
+            if (this._hasVFCB) this._scheduleVFCB();
+            else { this._cancelRAF(); this._rafLoop(); }
+            return;
+          }
           this.playing = false;
           this._cancelRAF();
           btnPlay.textContent = '▶';
@@ -599,7 +647,7 @@
           if (this.onFrameChange) this.onFrameChange(this._frameNum);
           const effOut = this.outPoint !== null ? this.outPoint : this.duration;
           const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
-          if (this.loop && (this.inPoint !== null || this.outPoint !== null) && meta.mediaTime >= effOut) {
+          if (this.loop && meta.mediaTime >= effOut) {
             this.video.currentTime = effIn;
           }
           this._scheduleVFCB();
@@ -613,7 +661,7 @@
         if (this.onFrameChange) this.onFrameChange(this._frameNum);
         const effOut = this.outPoint !== null ? this.outPoint : this.duration;
         const effIn  = this.inPoint  !== null ? this.inPoint  : 0;
-        if (this.loop && (this.inPoint !== null || this.outPoint !== null) && this.video.currentTime >= effOut) {
+        if (this.loop && this.video.currentTime >= effOut) {
           this.video.currentTime = effIn;
         }
         this._rafId = requestAnimationFrame(() => this._rafLoop());
@@ -1110,8 +1158,26 @@
     }
 
     penCanvas.addEventListener('pointerdown', (e) => {
-      if (!drawingsVisible || activeIndex < 0) return;
       e.preventDefault();
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      penCanvas.setPointerCapture(e.pointerId);
+
+      if (activePointers.size === 2) {
+        // Second finger down — switch to pan/zoom gesture, cancel any drawing
+        isDrawing = false; currentStroke = null; isErasing = false;
+        isGesturing = true;
+        const pts = [...activePointers.values()];
+        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        gestureStart = {
+          dist: Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y),
+          midX: mid.x, midY: mid.y,
+          panX, panY, zoom: vpZoom,
+          containerRect: videoContainer.getBoundingClientRect()
+        };
+        return;
+      }
+
+      if (isGesturing || !drawingsVisible || activeIndex < 0) return;
       const pos = getCanvasPos(e);
       if (currentTool === 'eyedrop') {
         const hex = sampleColorFromCanvas(pos);
@@ -1120,7 +1186,7 @@
         activateTool(prevTool);
         return;
       }
-      penCanvas.setPointerCapture(e.pointerId);
+      if (!isInVideoBounds(pos)) return;
       if (currentTool === 'pen') {
         if (player.playing) { player.pause(); btnPlay.textContent = '▶'; }
         isDrawing = true;
@@ -1138,15 +1204,37 @@
     });
 
     penCanvas.addEventListener('pointermove', (e) => {
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      if (isGesturing && activePointers.size >= 2) {
+        e.preventDefault();
+        const pts = [...activePointers.values()];
+        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const rect = gestureStart.containerRect;
+        const cmx0 = gestureStart.midX - rect.left, cmy0 = gestureStart.midY - rect.top;
+        const cmx = mid.x - rect.left, cmy = mid.y - rect.top;
+        const scaleRatio = dist / gestureStart.dist;
+        const newZoom = Math.max(0.1, Math.min(20, gestureStart.zoom * scaleRatio));
+        panX = cmx - (cmx0 - gestureStart.panX) / gestureStart.zoom * newZoom;
+        panY = cmy - (cmy0 - gestureStart.panY) / gestureStart.zoom * newZoom;
+        vpZoom = newZoom;
+        applyViewport();
+        return;
+      }
+
       if (!drawingsVisible) return;
       const pos = getCanvasPos(e);
       if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
       if (currentTool === 'pen' && isDrawing && currentStroke) {
-        currentStroke.points.push({ ...pos, p: getPressure(e) });
+        const cpos = clampToVideo(pos);
+        currentStroke.points.push({ ...cpos, p: getPressure(e) });
         redrawPenCanvas();
         drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
       } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
-        laserStrokes[laserStrokes.length - 1].points.push({ ...pos, p: getPressure(e) });
+        laserStrokes[laserStrokes.length - 1].points.push({ ...clampToVideo(pos), p: getPressure(e) });
         lastLaserInputTime = Date.now();
         if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
       } else if (currentTool === 'eraser' && isErasing) {
@@ -1169,8 +1257,16 @@
       else if (currentTool === 'eraser') { isErasing = false; }
     };
 
-    penCanvas.addEventListener('pointerup', finishStroke);
-    penCanvas.addEventListener('pointercancel', finishStroke);
+    penCanvas.addEventListener('pointerup', (e) => {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) isGesturing = false;
+      if (activePointers.size === 0) finishStroke();
+    });
+    penCanvas.addEventListener('pointercancel', (e) => {
+      activePointers.delete(e.pointerId);
+      if (activePointers.size < 2) isGesturing = false;
+      if (activePointers.size === 0) finishStroke();
+    });
 
     // ===== ERASER =====
     function pointToSegDist(px, py, ax, ay, bx, by) {
@@ -1256,6 +1352,9 @@
 
     btnUndo.addEventListener('click', undo);
     btnRedo.addEventListener('click', redo);
+    document.getElementById('btn-reset-view').addEventListener('click', () => {
+      panX = 0; panY = 0; vpZoom = 1; applyViewport();
+    });
 
     // ===== DRAWOVERS TOGGLE =====
     btnToggleDrawings.addEventListener('click', () => {
