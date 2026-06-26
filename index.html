@@ -318,6 +318,17 @@
 
       async function restorePlaylist() {
         try {
+          // sessionStorage survives refreshes but is wiped on tab close.
+          // If there's no session flag this is a fresh open — clear IDB so we start blank.
+          const isRefresh = sessionStorage.getItem('drawover_session');
+          sessionStorage.setItem('drawover_session', '1');
+          if (!isRefresh) {
+            const stale = await dbGetAll();
+            await Promise.all(stale.map(r => dbDelete(r.id)));
+            localStorage.removeItem('drawover_playlist');
+            localStorage.removeItem('drawover_active');
+            return;
+          }
           const allRecords = await dbGetAll();
           if (!allRecords.length) return;
           const savedIds = JSON.parse(localStorage.getItem('drawover_playlist') || '[]');
@@ -581,7 +592,7 @@
             dbDelete(entry.id).catch(() => {});
             URL.revokeObjectURL(entry.objectUrl);
             playlist.splice(i, 1);
-            if (activeIndex === i) { activeIndex = -1; player.pause(); mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); btnPlay.textContent = '▶'; }
+            if (activeIndex === i) { activeIndex = -1; player.pause(); player.video.src = ''; mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height); penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height); btnPlay.textContent = '▶'; }
             else if (activeIndex > i) activeIndex--;
             savePlaylistState();
             renderPlaylist();
