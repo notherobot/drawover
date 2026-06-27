@@ -1239,12 +1239,9 @@
         return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
       }
 
-      // Returns 0.05–1.0 for stylus, always 1.0 for mouse/touch (preserves existing feel)
       function getPressure(e) {
         if (e.pointerType !== 'pen') return 1.0;
-        // Raise the floor and apply a gentle curve so light touches aren't so thin
-        const p = Math.max(0.15, e.pressure);
-        return Math.pow(p, 0.6); // <1 exponent biases toward heavier values
+        return Math.pow(Math.max(0.02, e.pressure), 2);
       }
 
       function drawStrokeOnCanvas(ctx, stroke, w, h, alpha) {
@@ -1300,18 +1297,23 @@
         ctx.save();
         ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
         ctx.strokeStyle = stroke.color;
+        ctx.fillStyle = stroke.color;
         ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = stroke.size;
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x * w, pts[0].y * h);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x * w, pts[i].y * h);
         if (pts.length === 1) {
-          ctx.arc(pts[0].x * w, pts[0].y * h, stroke.size / 2, 0, Math.PI * 2);
-          ctx.fillStyle = stroke.color;
+          const r = Math.max(0.5, stroke.size * (pts[0].p !== undefined ? pts[0].p : 1) / 2);
+          ctx.beginPath();
+          ctx.arc(pts[0].x * w, pts[0].y * h, r, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          ctx.stroke();
+          for (let i = 0; i < pts.length - 1; i++) {
+            const pA = pts[i].p !== undefined ? pts[i].p : 1;
+            const pB = pts[i+1].p !== undefined ? pts[i+1].p : 1;
+            ctx.beginPath();
+            ctx.lineWidth = Math.max(0.5, stroke.size * (pA + pB) / 2);
+            ctx.moveTo(pts[i].x * w, pts[i].y * h);
+            ctx.lineTo(pts[i+1].x * w, pts[i+1].y * h);
+            ctx.stroke();
+          }
         }
         ctx.restore();
       }
