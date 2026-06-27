@@ -1244,16 +1244,38 @@
         return Math.pow(Math.max(0.02, e.pressure), 2);
       }
 
+      // Catmull-Rom interpolation: inserts `steps-1` extra points between each pair
+      function smoothPoints(pts, steps) {
+        if (pts.length < 2) return pts;
+        const out = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p0 = pts[Math.max(0, i - 1)];
+          const p1 = pts[i];
+          const p2 = pts[i + 1];
+          const p3 = pts[Math.min(pts.length - 1, i + 2)];
+          out.push(p1);
+          for (let s = 1; s < steps; s++) {
+            const t = s / steps, t2 = t * t, t3 = t2 * t;
+            out.push({
+              x: 0.5 * ((2*p1.x) + (-p0.x+p2.x)*t + (2*p0.x-5*p1.x+4*p2.x-p3.x)*t2 + (-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+              y: 0.5 * ((2*p1.y) + (-p0.y+p2.y)*t + (2*p0.y-5*p1.y+4*p2.y-p3.y)*t2 + (-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
+              p: p1.p + (p2.p - p1.p) * t,
+            });
+          }
+        }
+        out.push(pts[pts.length - 1]);
+        return out;
+      }
+
       function drawStrokeOnCanvas(ctx, stroke, w, h, alpha) {
         if (!stroke.points || !stroke.points.length) return;
         ctx.save();
         ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
         ctx.fillStyle = stroke.color;
 
-        const pts = stroke.points;
+        const pts = smoothPoints(stroke.points, 4);
         const size = stroke.size;
 
-        // Filled circle at every point — smooth joins and end caps
         for (let i = 0; i < pts.length; i++) {
           const p = pts[i].p !== undefined ? pts[i].p : 1;
           const r = Math.max(0.5, size * p / 2);
@@ -1262,7 +1284,6 @@
           ctx.fill();
         }
 
-        // Filled trapezoid between each pair of adjacent points
         for (let i = 0; i < pts.length - 1; i++) {
           const ax = pts[i].x * w,   ay = pts[i].y * h;
           const bx = pts[i+1].x * w, by = pts[i+1].y * h;
@@ -1271,7 +1292,7 @@
           const dx = bx - ax, dy = by - ay;
           const len = Math.sqrt(dx * dx + dy * dy);
           if (len < 0.5) continue;
-          const nx = -dy / len, ny = dx / len; // perpendicular unit vector
+          const nx = -dy / len, ny = dx / len;
           ctx.beginPath();
           ctx.moveTo(ax + nx * rA, ay + ny * rA);
           ctx.lineTo(bx + nx * rB, by + ny * rB);
@@ -1291,36 +1312,73 @@
         if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
       }
 
-      function drawLaserStroke(ctx, stroke, w, h, alpha) {
-        const pts = stroke.points;
-        if (!pts || !pts.length) return;
+      // Draws laser stroke at full opacity — caller composites at fade opacity
+      function drawLaserStroke(ctx, stroke, w, h) {
+        const raw = stroke.points;
+        if (!raw || !raw.length) return;
+        const pts = smoothPoints(raw, 3);
         ctx.save();
-        ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
         ctx.strokeStyle = stroke.color;
         ctx.fillStyle = stroke.color;
         ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         if (pts.length === 1) {
-          const r = Math.max(0.5, stroke.size * (pts[0].p !== undefined ? pts[0].p : 1) / 2);
+          const r = Math.max(0.5, stroke.size * (pts[0].p ?? 1) / 2);
           ctx.beginPath();
           ctx.arc(pts[0].x * w, pts[0].y * h, r, 0, Math.PI * 2);
           ctx.fill();
         } else {
           for (let i = 0; i < pts.length - 1; i++) {
-            const pA = pts[i].p !== undefined ? pts[i].p : 1;
-            const pB = pts[i+1].p !== undefined ? pts[i+1].p : 1;
+            const x1 = pts[i].x * w,     y1 = pts[i].y * h;
+            const x2 = pts[i+1].x * w,   y2 = pts[i+1].y * h;
+            const pA = pts[i].p ?? 1, pB = pts[i+1].p ?? 1;
+            const sx = i === 0 ? x1 : (pts[i-1].x * w + x1) / 2;
+            const sy = i === 0 ? y1 : (pts[i-1].y * h + y1) / 2;
+            const ex = i === pts.length - 2 ? x2 : (x1 + x2) / 2;
+            const ey = i === pts.length - 2 ? y2 : (y1 + y2) / 2;
             ctx.beginPath();
             ctx.lineWidth = Math.max(0.5, stroke.size * (pA + pB) / 2);
-            ctx.moveTo(pts[i].x * w, pts[i].y * h);
-            ctx.lineTo(pts[i+1].x * w, pts[i+1].y * h);
+            ctx.moveTo(sx, sy);
+            ctx.quadraticCurveTo(x1, y1, ex, ey);
             ctx.stroke();
           }
         }
         ctx.restore();
       }
 
+      let _laserOff = null, _laserOffCtx = null;
+      let _laserOffB = null, _laserOffCtxB = null;
+
+      function _getLaserOff(w, h, isB) {
+        if (isB) {
+          if (!_laserOffB || _laserOffB.width !== w || _laserOffB.height !== h) {
+            _laserOffB = document.createElement('canvas');
+            _laserOffB.width = w; _laserOffB.height = h;
+            _laserOffCtxB = _laserOffB.getContext('2d');
+          }
+          return [_laserOffB, _laserOffCtxB];
+        }
+        if (!_laserOff || _laserOff.width !== w || _laserOff.height !== h) {
+          _laserOff = document.createElement('canvas');
+          _laserOff.width = w; _laserOff.height = h;
+          _laserOffCtx = _laserOff.getContext('2d');
+        }
+        return [_laserOff, _laserOffCtx];
+      }
+
       function redrawLaserCanvas() {
         laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
-        laserStrokes.forEach(s => drawLaserStroke(laserCtx, s, laserCanvas.width, laserCanvas.height, laserFadeOpacity));
+        if (!laserStrokes.length) return;
+        const w = laserCanvas.width, h = laserCanvas.height;
+        if (!w || !h) return;
+        const [off, offCtx] = _getLaserOff(w, h, false);
+        if (!offCtx) return;
+        offCtx.clearRect(0, 0, w, h);
+        laserStrokes.forEach(s => drawLaserStroke(offCtx, s, w, h));
+        laserCtx.save();
+        laserCtx.globalAlpha = laserFadeOpacity;
+        laserCtx.drawImage(off, 0, 0);
+        laserCtx.restore();
       }
 
       function redrawPenCanvasB() {
@@ -1332,7 +1390,17 @@
 
       function redrawLaserCanvasB() {
         laserCtxB.clearRect(0, 0, laserCanvasB.width, laserCanvasB.height);
-        laserStrokes.forEach(s => drawLaserStroke(laserCtxB, s, laserCanvasB.width, laserCanvasB.height, laserFadeOpacity));
+        if (!laserStrokes.length) return;
+        const w = laserCanvasB.width, h = laserCanvasB.height;
+        if (!w || !h) return;
+        const [off, offCtx] = _getLaserOff(w, h, true);
+        if (!offCtx) return;
+        offCtx.clearRect(0, 0, w, h);
+        laserStrokes.forEach(s => drawLaserStroke(offCtx, s, w, h));
+        laserCtxB.save();
+        laserCtxB.globalAlpha = laserFadeOpacity;
+        laserCtxB.drawImage(off, 0, 0);
+        laserCtxB.restore();
       }
 
       function resizeCanvasesB() {
