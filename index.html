@@ -1294,24 +1294,31 @@
         if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
       }
 
-      // Persistent offscreen canvases for laser compositing (prevents alpha compounding on overlap)
-      let _laserOff = null, _laserOffCtx = null;
+      function drawLaserStroke(ctx, stroke, w, h, alpha) {
+        const pts = stroke.points;
+        if (!pts || !pts.length) return;
+        ctx.save();
+        ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
+        ctx.strokeStyle = stroke.color;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = stroke.size;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x * w, pts[0].y * h);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x * w, pts[i].y * h);
+        if (pts.length === 1) {
+          ctx.arc(pts[0].x * w, pts[0].y * h, stroke.size / 2, 0, Math.PI * 2);
+          ctx.fillStyle = stroke.color;
+          ctx.fill();
+        } else {
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       function redrawLaserCanvas() {
         laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
-        if (!laserStrokes.length) return;
-        const w = laserCanvas.width, h = laserCanvas.height;
-        if (!_laserOff || _laserOff.width !== w || _laserOff.height !== h) {
-          _laserOff = document.createElement('canvas');
-          _laserOff.width = w; _laserOff.height = h;
-          _laserOffCtx = _laserOff.getContext('2d');
-        }
-        _laserOffCtx.clearRect(0, 0, w, h);
-        laserStrokes.forEach(s => drawStrokeOnCanvas(_laserOffCtx, s, w, h));
-        laserCtx.save();
-        laserCtx.globalAlpha = laserFadeOpacity;
-        laserCtx.drawImage(_laserOff, 0, 0);
-        laserCtx.restore();
+        laserStrokes.forEach(s => drawLaserStroke(laserCtx, s, laserCanvas.width, laserCanvas.height, laserFadeOpacity));
       }
 
       function redrawPenCanvasB() {
@@ -1321,23 +1328,9 @@
         if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtxB, s, penCanvasB.width, penCanvasB.height));
       }
 
-      let _laserOffB = null, _laserOffCtxB = null;
-
       function redrawLaserCanvasB() {
         laserCtxB.clearRect(0, 0, laserCanvasB.width, laserCanvasB.height);
-        if (!laserStrokes.length) return;
-        const w = laserCanvasB.width, h = laserCanvasB.height;
-        if (!_laserOffB || _laserOffB.width !== w || _laserOffB.height !== h) {
-          _laserOffB = document.createElement('canvas');
-          _laserOffB.width = w; _laserOffB.height = h;
-          _laserOffCtxB = _laserOffB.getContext('2d');
-        }
-        _laserOffCtxB.clearRect(0, 0, w, h);
-        laserStrokes.forEach(s => drawStrokeOnCanvas(_laserOffCtxB, s, w, h));
-        laserCtxB.save();
-        laserCtxB.globalAlpha = laserFadeOpacity;
-        laserCtxB.drawImage(_laserOffB, 0, 0);
-        laserCtxB.restore();
+        laserStrokes.forEach(s => drawLaserStroke(laserCtxB, s, laserCanvasB.width, laserCanvasB.height, laserFadeOpacity));
       }
 
       function resizeCanvasesB() {
