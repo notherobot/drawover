@@ -29,6 +29,7 @@
             <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
             <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
             <button class="tool-btn" data-tool="eraser" title="Eraser (E)">🧹</button>
+            <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)" style="width:auto;padding:0 8px">Arc Tracer</button>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group" id="color-swatches">
@@ -55,7 +56,6 @@
             <button id="btn-clear-arc" style="font-size:11px;padding:0 6px">Clear</button>
             <button id="btn-arc-done" style="font-size:11px;padding:0 8px;background:#1e3520;border-color:#3aa060">✓ Done</button>
           </div>
-          <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)">⊙</button>
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
@@ -2093,10 +2093,13 @@
             e.preventDefault();
             btn.setPointerCapture(e.pointerId);
             const isB = compareMode && !comparePanelLeft;
+            const container = isB ? videoViewportB : videoViewport;
+            const rect = container ? container.getBoundingClientRect() : { width: 0, height: 0 };
             vdState = { type, isB,
               sx: e.clientX, sy: e.clientY,
               px: isB ? panXB : panX, py: isB ? panYB : panY,
-              zoom: isB ? vpZoomB : vpZoom };
+              zoom: isB ? vpZoomB : vpZoom,
+              cx: rect.width / 2, cy: rect.height / 2 };
             btn.classList.add('active');
           });
           btn.addEventListener('pointermove', (e) => {
@@ -2108,15 +2111,16 @@
             } else {
               const newZoom = Math.max(0.1, Math.min(20, vdState.zoom * Math.pow(1.005, -dy)));
               const ratio = newZoom / vdState.zoom;
+              const cx = vdState.cx, cy = vdState.cy;
               if (vdState.isB) {
                 vpZoomB = newZoom;
-                panXB = vdState.px * ratio + (1 - ratio) * 0; // zoom around origin; fine for now
-                panYB = vdState.py * ratio;
+                panXB = cx - (cx - vdState.px) * ratio;
+                panYB = cy - (cy - vdState.py) * ratio;
                 applyViewportB();
               } else {
                 vpZoom = newZoom;
-                panX = vdState.px * ratio;
-                panY = vdState.py * ratio;
+                panX = cx - (cx - vdState.px) * ratio;
+                panY = cy - (cy - vdState.py) * ratio;
                 applyViewport();
               }
             }

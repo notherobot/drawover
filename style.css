@@ -101,7 +101,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 
 /* ===== TOOL ROW ===== */
 #tool-row {
-  display: flex; align-items: center; gap: 0; padding: 0 10px;
+  display: flex; align-items: center; justify-content: center; gap: 0; padding: 0 10px;
   background: #1e1e1e; border-bottom: 1px solid #2a2a2a; flex-shrink: 0;
   height: 42px; overflow-x: auto;
 }
@@ -111,7 +111,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 .tool-sep { width: 1px; height: 22px; background: #2a2a2a; margin: 0 8px; flex-shrink: 0; }
 #arc-controls { display: none; align-items: center; gap: 6px; font-size: 12px; color: #ccc; }
 #arc-controls input[type=number] { width: 42px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 3px; font-size: 12px; text-align: center; padding: 1px 4px; }
-#btn-arc-tracer { margin-left: auto; flex-shrink: 0; }
+#btn-arc-tracer { flex-shrink: 0; }
 .scrub-arc-tick { position: absolute; top: 0; height: 4px; width: 4px; background: #ff4444; transform: translateX(-50%); border-radius: 0 0 2px 2px; }
 #arc-magnifier { display: none; position: fixed; z-index: 9000; background: #1a1a1a; border: 1px solid #555; border-radius: 8px; padding: 6px; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
 #arc-magnifier canvas { display: block; border-radius: 3px; image-rendering: pixelated; }
