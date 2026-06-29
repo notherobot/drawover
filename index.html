@@ -1368,6 +1368,7 @@
 
       playlistEl.addEventListener('drop', async e => {
         e.preventDefault();
+        e.stopPropagation();
         sidebarEl.classList.remove('sidebar-file-drop');
         if (!dragInfo) {
           if (e.dataTransfer.files.length) await addFiles(e.dataTransfer.files);
