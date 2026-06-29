@@ -335,6 +335,7 @@
       // ===== COMPARE MODE STATE =====
       let arcWindow = 5;
       let arcCrosshairPos = null;
+      let arcLastEvent = null;
       let arcHoverFrame = null;
       let arcDragFrame = null;
 
@@ -785,7 +786,10 @@
       }
 
       const player = new FramePlayer(mainCanvas, mainCtx);
-      player.onFrameChange = () => { redrawPenCanvas(); redrawArcCanvas(); updateScrubBar(); updateScrubTimes(); };
+      player.onFrameChange = () => {
+        redrawPenCanvas(); redrawArcCanvas(); updateScrubBar(); updateScrubTimes();
+        if (currentTool === 'arc-tracer' && arcLastEvent && arcCrosshairPos) showArcMagnifier(arcLastEvent, arcCrosshairPos);
+      };
       window.addEventListener('beforeunload', () => { if (activeIndex >= 0) savePlaylistState(); });
       player.onDurationChange = (dur) => { scrubTotal.textContent = formatSMPTE(dur, player.fps); updateScrubTicks(); updateArcTicks(); };
 
@@ -2648,6 +2652,7 @@
 
         if (currentTool === 'arc-tracer') {
           arcCrosshairPos = pos;
+          arcLastEvent = e;
           const prevHover = arcHoverFrame;
           arcHoverFrame = getArcHitFrame(pos);
           if (arcHoverFrame !== prevHover) updateToolCursor();
@@ -2706,7 +2711,7 @@
       penCanvas.addEventListener('pointerleave', () => {
         if (currentTool === 'eyedrop') hideEyedropPreview();
         arcHoverFrame = null;
-        if (currentTool === 'arc-tracer') { arcCrosshairPos = null; hideArcMagnifier(); redrawArcCanvas(); }
+        if (currentTool === 'arc-tracer') { arcCrosshairPos = null; arcLastEvent = null; hideArcMagnifier(); redrawArcCanvas(); }
         updateToolCursor();
       });
 
