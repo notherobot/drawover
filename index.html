@@ -1915,10 +1915,13 @@
             isDrawingB = false;
             const frame = playerB ? playerB.currentFrame : 0;
             const entry = playlist[compareIndex]; if (!entry) return;
-            if (!entry.annotations[frame]) entry.annotations[frame] = [];
-            entry.annotations[frame].push(currentStrokeB);
-            entry.undoStack.push({ type: 'add', frame, stroke: currentStrokeB });
-            entry.redoStack = [];
+            const b = getVideoBoundsFor(mainCanvasB, penCanvasB);
+            if (currentStrokeB.points.some(p => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1)) {
+              if (!entry.annotations[frame]) entry.annotations[frame] = [];
+              entry.annotations[frame].push(currentStrokeB);
+              entry.undoStack.push({ type: 'add', frame, stroke: currentStrokeB });
+              entry.redoStack = [];
+            }
             currentStrokeB = null;
             redrawPenCanvasB(); updateScrubTicks(); scheduleAnnotationSaveB();
           } else if (currentTool === 'laser') { isDrawingB = false; }
@@ -2142,10 +2145,13 @@
           isDrawing = false;
           const frame = player.currentFrame;
           const entry = playlist[activeIndex];
-          if (!entry.annotations[frame]) entry.annotations[frame] = [];
-          entry.annotations[frame].push(currentStroke);
-          entry.undoStack.push({ type: 'add', frame, stroke: currentStroke });
-          entry.redoStack = [];
+          const b = getVideoBounds();
+          if (currentStroke.points.some(p => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1)) {
+            if (!entry.annotations[frame]) entry.annotations[frame] = [];
+            entry.annotations[frame].push(currentStroke);
+            entry.undoStack.push({ type: 'add', frame, stroke: currentStroke });
+            entry.redoStack = [];
+          }
           currentStroke = null;
           redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave(); updateControlAvailability();
         } else if (currentTool === 'laser') { isDrawing = false; }
