@@ -324,7 +324,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 }
 #scrub-times-top {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 2px 0 4px; font-size: 11px; color: #999;
+  padding: 2px 0 22px; font-size: 11px; color: #999;
   font-variant-numeric: tabular-nums; letter-spacing: 0.3px;
 }
 #scrub-frame {
