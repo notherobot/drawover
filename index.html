@@ -11,13 +11,16 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v0.1.99</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.2.0</span></div>
     </div>
 
     <div id="main-body">
       <div id="sidebar-overlay"></div>
       <div id="sidebar">
-        <button id="btn-add-video">+ Add Video</button>
+        <div id="sidebar-btns">
+          <button id="btn-add-video">+ Video</button>
+          <button id="btn-add-folder" title="New folder">📁 Folder</button>
+        </div>
         <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*" multiple hidden>
         <div id="playlist"></div>
       </div>
@@ -149,7 +152,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.1.99</span>
+          <span id="status-version">DrawOver v0.2.0</span>
         </div>
       </div>
     </div>
@@ -208,7 +211,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.1.99</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.2.0</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -273,6 +276,7 @@
       const sidebarEl = document.getElementById('sidebar');
       const sidebarResizer = document.getElementById('sidebar-resizer');
       const btnAddVideo = document.getElementById('btn-add-video');
+      const btnAddFolder = document.getElementById('btn-add-folder');
       const btnPlay = document.getElementById('btn-play');
       const btnFrameBack = document.getElementById('btn-frame-back');
       const btnFrameFwd = document.getElementById('btn-frame-fwd');
@@ -307,6 +311,8 @@
       // ===== STATE =====
       let playlist = [];
       let activeIndex = -1;
+      let folders = []; // [{ id, name, color, expanded }]
+      const PL_COLORS = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#95a5a6'];
       let currentTool = 'pen';
       let prevTool = 'pen';
       let drawColor = '#ff3333';
@@ -398,7 +404,10 @@
           arcPoints: entry.arcPoints || {},
           inPoint: entry.inPoint, outPoint: entry.outPoint,
           fps: entry.fps, duration: entry.duration,
-          thumbnail: entry.thumbnail
+          thumbnail: entry.thumbnail,
+          displayName: entry.displayName || null,
+          color: entry.color || null,
+          folderId: entry.folderId || null,
         });
       }
 
@@ -407,6 +416,10 @@
           localStorage.setItem('drawover_playlist', JSON.stringify(playlist.map(e => e.id)));
           localStorage.setItem('drawover_active', activeIndex >= 0 ? playlist[activeIndex].id : '');
           localStorage.setItem('drawover_active_frame', player.currentFrame ?? 0);
+          localStorage.setItem('drawover_folders', JSON.stringify(folders));
+          localStorage.setItem('drawover_entry_meta', JSON.stringify(
+            Object.fromEntries(playlist.map(e => [e.id, { displayName: e.displayName, color: e.color, folderId: e.folderId }]))
+          ));
         } catch (_) {}
       }
 
@@ -431,12 +444,16 @@
             localStorage.removeItem('drawover_playlist');
             localStorage.removeItem('drawover_active');
             localStorage.removeItem('drawover_active_frame');
+            localStorage.removeItem('drawover_folders');
+            localStorage.removeItem('drawover_entry_meta');
             return;
           }
           const allRecords = await dbGetAll();
           if (!allRecords.length) return;
           const savedIds = JSON.parse(localStorage.getItem('drawover_playlist') || '[]');
           const savedActiveId = localStorage.getItem('drawover_active') || '';
+          folders = JSON.parse(localStorage.getItem('drawover_folders') || '[]');
+          const entryMeta = JSON.parse(localStorage.getItem('drawover_entry_meta') || '{}');
           const byId = Object.fromEntries(allRecords.map(r => [r.id, r]));
           const ordered = savedIds.map(id => byId[id]).filter(Boolean);
           const orphans = allRecords.filter(r => !savedIds.includes(r.id));
@@ -444,6 +461,7 @@
           if (!toRestore.length) return;
           for (const rec of toRestore) {
             const objectUrl = URL.createObjectURL(rec.blob);
+            const meta = entryMeta[rec.id] || {};
             playlist.push({
               id: rec.id, name: rec.name, blob: rec.blob, objectUrl,
               annotations: rec.annotations || {},
@@ -451,6 +469,9 @@
               inPoint: rec.inPoint ?? null, outPoint: rec.outPoint ?? null,
               fps: rec.fps || 24, duration: rec.duration || 0,
               thumbnail: rec.thumbnail || null,
+              displayName: meta.displayName ?? rec.displayName ?? null,
+              color: meta.color ?? rec.color ?? null,
+              folderId: meta.folderId ?? rec.folderId ?? null,
               undoStack: [], redoStack: []
             });
           }
@@ -759,6 +780,15 @@
 
       // ===== PLAYLIST =====
       btnAddVideo.addEventListener('click', () => fileInput.click());
+      btnAddFolder.addEventListener('click', () => {
+        const folder = { id: uuid(), name: '', color: null, expanded: true };
+        folders.push(folder);
+        savePlaylistState();
+        renderPlaylist();
+        const nameEls = playlistEl.querySelectorAll('.pl-folder-name');
+        const last = nameEls[nameEls.length - 1];
+        if (last) startInlineRename(last, '', val => { folder.name = val.trim() || 'New Folder'; savePlaylistState(); renderPlaylist(); });
+      });
 
       function generateThumbnail(objectUrl) {
         return new Promise(resolve => {
@@ -784,7 +814,7 @@
         const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
@@ -800,11 +830,126 @@
         if (firstNewIdx < playlist.length) { await loadVideo(firstNewIdx); savePlaylistState(); }
       });
 
+      // ===== PLAYLIST POPUPS =====
+      const _cpEl = document.getElementById('pl-color-palette');
+      const _ctxEl = document.getElementById('pl-ctx-menu');
+      let _cpCb = null;
+
+      function showColorPalette(anchor, current, cb) {
+        _cpCb = cb;
+        _cpEl.innerHTML = '';
+        const none = document.createElement('div');
+        none.className = 'pl-cp-swatch pl-cp-none'; none.title = 'No color'; none.textContent = '✕';
+        none.addEventListener('click', () => { _cpCb(null); hideColorPalette(); });
+        _cpEl.appendChild(none);
+        PL_COLORS.forEach(c => {
+          const sw = document.createElement('div');
+          sw.className = 'pl-cp-swatch' + (c === current ? ' selected' : '');
+          sw.style.background = c; sw.title = c;
+          sw.addEventListener('click', () => { _cpCb(c); hideColorPalette(); });
+          _cpEl.appendChild(sw);
+        });
+        const r = anchor.getBoundingClientRect();
+        _cpEl.style.left = r.left + 'px'; _cpEl.style.top = (r.bottom + 4) + 'px';
+        _cpEl.style.display = 'flex';
+        requestAnimationFrame(() => {
+          const pr = _cpEl.getBoundingClientRect();
+          if (pr.right > window.innerWidth) _cpEl.style.left = (window.innerWidth - pr.width - 8) + 'px';
+          if (pr.bottom > window.innerHeight) _cpEl.style.top = (r.top - pr.height - 4) + 'px';
+        });
+      }
+      function hideColorPalette() { _cpEl.style.display = 'none'; _cpCb = null; }
+
+      function showCtxMenu(anchor, items) {
+        _ctxEl.innerHTML = '';
+        items.forEach(item => {
+          if (item.sep) { const s = document.createElement('div'); s.className = 'pl-ctx-sep'; _ctxEl.appendChild(s); return; }
+          const el = document.createElement('div');
+          el.className = 'pl-ctx-item' + (item.danger ? ' danger' : '');
+          el.textContent = item.label;
+          if (item.action) el.addEventListener('click', () => { hideCtxMenu(); item.action(); });
+          _ctxEl.appendChild(el);
+        });
+        const r = anchor.getBoundingClientRect();
+        _ctxEl.style.left = (r.right + 2) + 'px'; _ctxEl.style.top = r.top + 'px';
+        _ctxEl.style.display = 'block';
+        requestAnimationFrame(() => {
+          const cr = _ctxEl.getBoundingClientRect();
+          if (cr.right > window.innerWidth) _ctxEl.style.left = (r.left - cr.width - 2) + 'px';
+          if (cr.bottom > window.innerHeight) _ctxEl.style.top = (r.bottom - cr.height) + 'px';
+        });
+      }
+      function hideCtxMenu() { _ctxEl.style.display = 'none'; }
+
+      document.addEventListener('click', (e) => {
+        if (!_cpEl.contains(e.target)) hideColorPalette();
+        if (!_ctxEl.contains(e.target)) hideCtxMenu();
+      }, true);
+
+      function startInlineRename(el, val, onSave) {
+        const input = document.createElement('input');
+        input.type = 'text'; input.value = val; input.className = 'pl-rename-input';
+        el.replaceWith(input); input.focus(); input.select();
+        let saved = false;
+        const done = () => { if (saved) return; saved = true; input.replaceWith(el); onSave(input.value); };
+        const cancel = () => { if (saved) return; saved = true; input.replaceWith(el); };
+        input.addEventListener('blur', done);
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') cancel(); });
+      }
+
+      // ===== REMOVE ENTRY HELPER =====
+      async function removeVideoEntry(entry) {
+        const ok = await confirmDelete(entry);
+        if (!ok) return;
+        const i = playlist.indexOf(entry);
+        if (i === -1) return;
+        dbDelete(entry.id).catch(() => {});
+        URL.revokeObjectURL(entry.objectUrl);
+        playlist.splice(i, 1);
+        if (activeIndex === i) {
+          activeIndex = -1;
+          player.pause(); player.video.src = ''; player.duration = 0;
+          player.inPoint = null; player.outPoint = null;
+          mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+          penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
+          btnPlay.textContent = '▶';
+          scrubProgress.style.width = '0%'; scrubPlayhead.style.left = '0%';
+          scrubCurrent.textContent = '0:00.000'; scrubFrame.textContent = 'F: 0'; scrubTotal.textContent = '0:00.000';
+          updateInOutUI(); updateScrubTicks(); updateControlAvailability();
+        } else if (activeIndex > i) activeIndex--;
+        savePlaylistState(); renderPlaylist();
+      }
+
+      // ===== RENDER PLAYLIST =====
       function renderPlaylist() {
         playlistEl.innerHTML = '';
-        playlist.forEach((entry, i) => {
+
+        function makeColorDot(obj, isEntry) {
+          const dot = document.createElement('div');
+          dot.className = 'pl-color-dot' + (obj.color ? '' : ' empty');
+          if (obj.color) dot.style.background = obj.color;
+          dot.title = 'Set color';
+          dot.addEventListener('click', e => {
+            e.stopPropagation();
+            showColorPalette(dot, obj.color, c => {
+              obj.color = c;
+              if (isEntry) persistEntry(obj).catch(() => {});
+              else savePlaylistState();
+              renderPlaylist();
+            });
+          });
+          return dot;
+        }
+
+        function makeVideoRow(entry, inFolder) {
+          const i = playlist.indexOf(entry);
           const row = document.createElement('div');
-          row.className = 'playlist-row' + (i === activeIndex ? ' active' : '') + (compareMode && i === compareIndex && i !== activeIndex ? ' compare-active' : '');
+          const isActive = i === activeIndex;
+          const isCompare = compareMode && i === compareIndex && i !== activeIndex;
+          row.className = 'playlist-row' + (isActive ? ' active' : '') + (isCompare ? ' compare-active' : '') + (inFolder ? ' in-folder' : '');
+          if (entry.color && !isActive && !isCompare) row.style.borderLeftColor = entry.color;
+
+          row.appendChild(makeColorDot(entry, true));
 
           const thumbEl = document.createElement(entry.thumbnail ? 'img' : 'div');
           thumbEl.className = 'playlist-thumb' + (entry.thumbnail ? '' : ' playlist-thumb-placeholder');
@@ -813,52 +958,109 @@
 
           const info = document.createElement('div');
           info.className = 'playlist-info';
-          const name = document.createElement('span');
-          name.className = 'playlist-name';
-          name.textContent = entry.name || entry.file?.name || 'Video';
-          const dur = document.createElement('span');
-          dur.className = 'playlist-duration';
-          dur.textContent = formatTime(entry.duration);
-          info.appendChild(name); info.appendChild(dur);
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'playlist-name';
+          nameSpan.textContent = entry.displayName || entry.name || 'Video';
+          nameSpan.title = 'Double-click to rename';
+          nameSpan.addEventListener('dblclick', e => {
+            e.stopPropagation();
+            startInlineRename(nameSpan, entry.displayName || entry.name || '', val => {
+              entry.displayName = val.trim() || null; persistEntry(entry).catch(() => {}); renderPlaylist();
+            });
+          });
+          const durSpan = document.createElement('span');
+          durSpan.className = 'playlist-duration';
+          durSpan.textContent = formatTime(entry.duration);
+          info.appendChild(nameSpan); info.appendChild(durSpan);
+          row.appendChild(info);
+
+          const menuBtn = document.createElement('button');
+          menuBtn.className = 'pl-menu-btn'; menuBtn.textContent = '⋮'; menuBtn.title = 'Options';
+          menuBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            const items = [
+              { label: 'Rename', action: () => startInlineRename(nameSpan, entry.displayName || entry.name || '', val => { entry.displayName = val.trim() || null; persistEntry(entry).catch(() => {}); renderPlaylist(); }) },
+              { label: 'Color…', action: () => showColorPalette(menuBtn, entry.color, c => { entry.color = c; persistEntry(entry).catch(() => {}); renderPlaylist(); }) },
+            ];
+            if (folders.length) {
+              items.push({ sep: true });
+              if (entry.folderId) items.push({ label: '↖ Remove from folder', action: () => { entry.folderId = null; savePlaylistState(); persistEntry(entry).catch(() => {}); renderPlaylist(); } });
+              folders.filter(f => f.id !== entry.folderId).forEach(f => {
+                items.push({ label: '📁 ' + (f.name || 'Folder'), action: () => { entry.folderId = f.id; savePlaylistState(); persistEntry(entry).catch(() => {}); renderPlaylist(); } });
+              });
+            }
+            items.push({ sep: true });
+            items.push({ label: 'Remove', danger: true, action: () => removeVideoEntry(entry) });
+            showCtxMenu(menuBtn, items);
+          });
+          row.appendChild(menuBtn);
 
           const removeBtn = document.createElement('button');
-          removeBtn.className = 'playlist-remove';
-          removeBtn.textContent = '✕';
-          removeBtn.addEventListener('click', async (ev) => {
-            ev.stopPropagation();
-            const ok = await confirmDelete(entry);
-            if (!ok) return;
-            dbDelete(entry.id).catch(() => {});
-            URL.revokeObjectURL(entry.objectUrl);
-            playlist.splice(i, 1);
-            if (activeIndex === i) {
-              activeIndex = -1;
-              player.pause();
-              player.video.src = '';
-              player.duration = 0;
-              player.inPoint = null;
-              player.outPoint = null;
-              mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-              penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
-              btnPlay.textContent = '▶';
-              scrubProgress.style.width = '0%';
-              scrubPlayhead.style.left = '0%';
-              scrubCurrent.textContent = '0:00.000';
-              scrubFrame.textContent = 'F: 0';
-              scrubTotal.textContent = '0:00.000';
-              updateInOutUI();
-              updateScrubTicks();
-              updateControlAvailability();
-            } else if (activeIndex > i) activeIndex--;
-            savePlaylistState();
-            renderPlaylist();
-          });
+          removeBtn.className = 'playlist-remove'; removeBtn.textContent = '✕';
+          removeBtn.addEventListener('click', async ev => { ev.stopPropagation(); removeVideoEntry(entry); });
+          row.appendChild(removeBtn);
 
           row.addEventListener('click', () => {
             if (compareMode && !comparePanelLeft) { loadVideoB(i); } else { loadVideo(i); }
           });
-          row.appendChild(info); row.appendChild(removeBtn);
-          playlistEl.appendChild(row);
+          return row;
+        }
+
+        function makeFolderRow(folder) {
+          const row = document.createElement('div');
+          row.className = 'pl-folder-row';
+          if (folder.color) row.style.borderLeftColor = folder.color;
+
+          const arrow = document.createElement('span');
+          arrow.className = 'pl-folder-arrow';
+          arrow.textContent = folder.expanded !== false ? '▾' : '▸';
+          arrow.addEventListener('click', e => {
+            e.stopPropagation();
+            folder.expanded = folder.expanded === false; savePlaylistState(); renderPlaylist();
+          });
+          row.appendChild(arrow);
+
+          row.appendChild(makeColorDot(folder, false));
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'pl-folder-name';
+          nameSpan.textContent = folder.name || 'Folder';
+          nameSpan.title = 'Double-click to rename';
+          nameSpan.addEventListener('dblclick', e => {
+            e.stopPropagation();
+            startInlineRename(nameSpan, folder.name || '', val => { folder.name = val.trim() || 'Folder'; savePlaylistState(); renderPlaylist(); });
+          });
+          row.appendChild(nameSpan);
+
+          const menuBtn = document.createElement('button');
+          menuBtn.className = 'pl-menu-btn'; menuBtn.textContent = '⋮';
+          menuBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            showCtxMenu(menuBtn, [
+              { label: 'Rename', action: () => startInlineRename(nameSpan, folder.name || '', val => { folder.name = val.trim() || 'Folder'; savePlaylistState(); renderPlaylist(); }) },
+              { label: 'Color…', action: () => showColorPalette(menuBtn, folder.color, c => { folder.color = c; savePlaylistState(); renderPlaylist(); }) },
+              { sep: true },
+              { label: 'Delete folder', danger: true, action: () => {
+                playlist.forEach(e => { if (e.folderId === folder.id) { e.folderId = null; persistEntry(e).catch(() => {}); } });
+                folders.splice(folders.indexOf(folder), 1);
+                savePlaylistState(); renderPlaylist();
+              }},
+            ]);
+          });
+          row.appendChild(menuBtn);
+
+          return row;
+        }
+
+        // Unfoldered videos first
+        playlist.filter(e => !e.folderId).forEach(e => playlistEl.appendChild(makeVideoRow(e, false)));
+
+        // Then each folder with its videos
+        folders.forEach(folder => {
+          playlistEl.appendChild(makeFolderRow(folder));
+          if (folder.expanded !== false) {
+            playlist.filter(e => e.folderId === folder.id).forEach(e => playlistEl.appendChild(makeVideoRow(e, true)));
+          }
         });
       }
 
@@ -2508,7 +2710,7 @@
         const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
@@ -2532,5 +2734,7 @@
 
     })();
   </script>
+  <div id="pl-color-palette"></div>
+  <div id="pl-ctx-menu"></div>
 </body>
 </html>
