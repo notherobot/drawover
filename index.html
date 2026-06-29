@@ -1492,9 +1492,10 @@
         arcMagnifierCtx.beginPath(); arcMagnifierCtx.moveTo(S/2, 0); arcMagnifierCtx.lineTo(S/2, S); arcMagnifierCtx.stroke();
         arcMagnifierCtx.beginPath(); arcMagnifierCtx.moveTo(0, S/2); arcMagnifierCtx.lineTo(S, S/2); arcMagnifierCtx.stroke();
         const W = S + 16, H = S + 16;
-        let left = e.clientX + 18, top = e.clientY + 18;
-        if (left + W > window.innerWidth) left = e.clientX - W - 10;
-        if (top + H > window.innerHeight) top = e.clientY - H - 10;
+        let left = e.clientX - W / 2, top = e.clientY - H - 18;
+        if (left < 0) left = 0;
+        if (left + W > window.innerWidth) left = window.innerWidth - W;
+        if (top < 0) top = e.clientY + 18;
         arcMagnifierOverlay.style.left = left + 'px';
         arcMagnifierOverlay.style.top = top + 'px';
         arcMagnifierOverlay.style.display = 'block';
