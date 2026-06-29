@@ -149,7 +149,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.98</span>
+          <span id="status-version">DrawOver 0.1.98</span>
         </div>
       </div>
     </div>
@@ -1230,7 +1230,10 @@
       }
 
       colorSwatchBtns.forEach(swatch => {
-        swatch.addEventListener('click', () => setDrawColor(swatch.dataset.color));
+        swatch.addEventListener('click', () => {
+          if (!swatch.dataset.color) return;
+          setDrawColor(swatch.dataset.color);
+        });
       });
 
       // ===== CUSTOM COLOR PICKER =====
@@ -1289,7 +1292,8 @@
         }
 
         function openPanel() {
-          [cpH, cpS, cpV] = hexToHsv(drawColor);
+          const safeColor = /^#[0-9a-fA-F]{6}$/.test(drawColor) ? drawColor : '#ff3333';
+          [cpH, cpS, cpV] = hexToHsv(safeColor);
           refreshUi();
           const rect = colorCustomBtn.getBoundingClientRect();
           panel.style.left = rect.left + 'px';
@@ -1597,31 +1601,27 @@
         const raw = stroke.points;
         if (!raw || !raw.length) return;
         const pts = smoothPoints(raw, 3);
+        const avgP = pts.reduce((s, p) => s + (p.p ?? 1), 0) / pts.length;
         ctx.save();
         ctx.strokeStyle = stroke.color;
         ctx.fillStyle = stroke.color;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        ctx.lineWidth = Math.max(0.5, stroke.size * avgP);
         if (pts.length === 1) {
-          const r = Math.max(0.5, stroke.size * (pts[0].p ?? 1) / 2);
           ctx.beginPath();
-          ctx.arc(pts[0].x * w, pts[0].y * h, r, 0, Math.PI * 2);
+          ctx.arc(pts[0].x * w, pts[0].y * h, ctx.lineWidth / 2, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          for (let i = 0; i < pts.length - 1; i++) {
-            const x1 = pts[i].x * w,     y1 = pts[i].y * h;
-            const x2 = pts[i+1].x * w,   y2 = pts[i+1].y * h;
-            const pA = pts[i].p ?? 1, pB = pts[i+1].p ?? 1;
-            const sx = i === 0 ? x1 : (pts[i-1].x * w + x1) / 2;
-            const sy = i === 0 ? y1 : (pts[i-1].y * h + y1) / 2;
-            const ex = i === pts.length - 2 ? x2 : (x1 + x2) / 2;
-            const ey = i === pts.length - 2 ? y2 : (y1 + y2) / 2;
-            ctx.beginPath();
-            ctx.lineWidth = Math.max(0.5, stroke.size * (pA + pB) / 2);
-            ctx.moveTo(sx, sy);
-            ctx.quadraticCurveTo(x1, y1, ex, ey);
-            ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x * w, pts[0].y * h);
+          for (let i = 1; i < pts.length - 1; i++) {
+            const mx = (pts[i].x + pts[i+1].x) / 2 * w;
+            const my = (pts[i].y + pts[i+1].y) / 2 * h;
+            ctx.quadraticCurveTo(pts[i].x * w, pts[i].y * h, mx, my);
           }
+          ctx.lineTo(pts[pts.length - 1].x * w, pts[pts.length - 1].y * h);
+          ctx.stroke();
         }
         ctx.restore();
       }
