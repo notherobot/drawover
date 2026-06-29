@@ -311,7 +311,10 @@
       // ===== STATE =====
       let playlist = [];
       let activeIndex = -1;
-      let folders = []; // [{ id, name, color, expanded }]
+      let folders = []; // [{ id, name, color, expanded, children: [entryId,...] }]
+      let playlistOrder = []; // top-level render order: unfoldered entry ids + folder ids
+      let dragInfo = null; // { type:'video'|'folder', id, srcFolderId }
+      let plDropLine = null; // drop-indicator div
       const PL_COLORS = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#95a5a6'];
       let currentTool = 'pen';
       let prevTool = 'pen';
@@ -416,6 +419,7 @@
           localStorage.setItem('drawover_playlist', JSON.stringify(playlist.map(e => e.id)));
           localStorage.setItem('drawover_active', activeIndex >= 0 ? playlist[activeIndex].id : '');
           localStorage.setItem('drawover_active_frame', player.currentFrame ?? 0);
+          localStorage.setItem('drawover_playlist_order', JSON.stringify(playlistOrder));
           localStorage.setItem('drawover_folders', JSON.stringify(folders));
           localStorage.setItem('drawover_entry_meta', JSON.stringify(
             Object.fromEntries(playlist.map(e => [e.id, { displayName: e.displayName, color: e.color, folderId: e.folderId }]))
@@ -444,6 +448,7 @@
             localStorage.removeItem('drawover_playlist');
             localStorage.removeItem('drawover_active');
             localStorage.removeItem('drawover_active_frame');
+            localStorage.removeItem('drawover_playlist_order');
             localStorage.removeItem('drawover_folders');
             localStorage.removeItem('drawover_entry_meta');
             return;
@@ -453,6 +458,7 @@
           const savedIds = JSON.parse(localStorage.getItem('drawover_playlist') || '[]');
           const savedActiveId = localStorage.getItem('drawover_active') || '';
           folders = JSON.parse(localStorage.getItem('drawover_folders') || '[]');
+          playlistOrder = JSON.parse(localStorage.getItem('drawover_playlist_order') || '[]');
           const entryMeta = JSON.parse(localStorage.getItem('drawover_entry_meta') || '{}');
           const byId = Object.fromEntries(allRecords.map(r => [r.id, r]));
           const ordered = savedIds.map(id => byId[id]).filter(Boolean);
@@ -475,6 +481,7 @@
               undoStack: [], redoStack: []
             });
           }
+          ensurePlaylistOrder();
           renderPlaylist();
           let targetIdx = playlist.findIndex(e => e.id === savedActiveId);
           if (targetIdx < 0) targetIdx = 0;
@@ -781,13 +788,30 @@
       // ===== PLAYLIST =====
       btnAddVideo.addEventListener('click', () => fileInput.click());
       btnAddFolder.addEventListener('click', () => {
-        const folder = { id: uuid(), name: '', color: null, expanded: true };
+        const folder = { id: uuid(), name: '', color: null, expanded: true, children: [] };
         folders.push(folder);
+        // Insert above the active video's top-level position
+        let insertAt = playlistOrder.length;
+        if (activeIndex >= 0) {
+          const ae = playlist[activeIndex];
+          if (ae) {
+            const topId = ae.folderId ? ae.folderId : ae.id;
+            const pos = playlistOrder.indexOf(topId);
+            if (pos >= 0) insertAt = pos;
+          }
+        }
+        playlistOrder.splice(insertAt, 0, folder.id);
         savePlaylistState();
         renderPlaylist();
-        const nameEls = playlistEl.querySelectorAll('.pl-folder-name');
-        const last = nameEls[nameEls.length - 1];
-        if (last) startInlineRename(last, '', val => { folder.name = val.trim() || 'New Folder'; savePlaylistState(); renderPlaylist(); });
+        // Find and start rename on the new folder row
+        const rows = playlistEl.querySelectorAll('.pl-folder-row');
+        for (const r of rows) {
+          if (r.dataset.itemId === folder.id) {
+            const nameEl = r.querySelector('.pl-folder-name');
+            if (nameEl) startInlineRename(nameEl, '', val => { folder.name = val.trim() || 'New Folder'; savePlaylistState(); renderPlaylist(); });
+            break;
+          }
+        }
       });
 
       function generateThumbnail(objectUrl) {
@@ -816,6 +840,7 @@
           const objectUrl = URL.createObjectURL(file);
           const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
+          if (!playlistOrder.includes(entry.id)) playlistOrder.push(entry.id);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
             tmp.preload = 'metadata'; tmp.src = objectUrl;
@@ -906,6 +931,8 @@
         dbDelete(entry.id).catch(() => {});
         URL.revokeObjectURL(entry.objectUrl);
         playlist.splice(i, 1);
+        playlistOrder = playlistOrder.filter(id => id !== entry.id);
+        folders.forEach(f => { if (f.children) f.children = f.children.filter(id => id !== entry.id); });
         if (activeIndex === i) {
           activeIndex = -1;
           player.pause(); player.video.src = ''; player.duration = 0;
@@ -920,8 +947,122 @@
         savePlaylistState(); renderPlaylist();
       }
 
+      // ===== PLAYLIST ORDER HELPERS =====
+      function ensurePlaylistOrder() {
+        const inOrder = new Set(playlistOrder);
+        // Add missing top-level entries (unfoldered)
+        playlist.forEach(e => { if (!e.folderId && !inOrder.has(e.id)) { playlistOrder.push(e.id); inOrder.add(e.id); } });
+        // Add missing folders; init their children
+        folders.forEach(f => {
+          if (!f.children) f.children = playlist.filter(e => e.folderId === f.id).map(e => e.id);
+          if (!inOrder.has(f.id)) { playlistOrder.push(f.id); inOrder.add(f.id); }
+          // Sync children: add missing, remove stale
+          const inChildren = new Set(f.children);
+          playlist.filter(e => e.folderId === f.id).forEach(e => { if (!inChildren.has(e.id)) { f.children.push(e.id); inChildren.add(e.id); } });
+          f.children = f.children.filter(id => playlist.find(e => e.id === id));
+        });
+        // Remove stale ids from playlistOrder
+        const valid = new Set([
+          ...playlist.filter(e => !e.folderId).map(e => e.id),
+          ...folders.map(f => f.id),
+        ]);
+        playlistOrder = playlistOrder.filter(id => valid.has(id));
+      }
+
+      function setEntryFolder(entry, newFolderId) {
+        if (entry.folderId) {
+          const old = folders.find(f => f.id === entry.folderId);
+          if (old && old.children) old.children = old.children.filter(id => id !== entry.id);
+        } else {
+          playlistOrder = playlistOrder.filter(id => id !== entry.id);
+        }
+        entry.folderId = newFolderId || null;
+        if (newFolderId) {
+          const nf = folders.find(f => f.id === newFolderId);
+          if (nf) { nf.children = nf.children || []; if (!nf.children.includes(entry.id)) nf.children.push(entry.id); }
+        } else {
+          if (!playlistOrder.includes(entry.id)) playlistOrder.push(entry.id);
+        }
+        persistEntry(entry).catch(() => {});
+        savePlaylistState();
+        renderPlaylist();
+      }
+
+      // ===== DRAG-DROP HELPERS =====
+      function clearDragIndicators() {
+        if (plDropLine && plDropLine.parentNode) plDropLine.parentNode.removeChild(plDropLine);
+        playlistEl.querySelectorAll('.pl-drag-over-folder').forEach(el => el.classList.remove('pl-drag-over-folder'));
+      }
+
+      function getPlDropLine() {
+        if (!plDropLine) { plDropLine = document.createElement('div'); plDropLine.className = 'pl-drop-line'; }
+        return plDropLine;
+      }
+
+      function getInsertContext(prevRow, nextRow) {
+        if (!prevRow) {
+          if (!nextRow) return { folderId: null, beforeId: null };
+          return { folderId: nextRow.dataset.folderId || null, beforeId: nextRow.dataset.itemId };
+        }
+        const prevType = prevRow.dataset.itemType;
+        const prevFolderId = prevRow.dataset.folderId || null;
+        if (prevType === 'folder') {
+          const f = folders.find(f => f.id === prevRow.dataset.itemId);
+          if (f && f.expanded !== false) {
+            return { folderId: f.id, beforeId: (f.children || [])[0] || null };
+          }
+          return { folderId: null, beforeId: nextRow ? nextRow.dataset.itemId : null };
+        }
+        if (prevFolderId) {
+          if (nextRow && nextRow.dataset.folderId === prevFolderId) {
+            return { folderId: prevFolderId, beforeId: nextRow.dataset.itemId };
+          }
+          return { folderId: prevFolderId, beforeId: null };
+        }
+        return { folderId: null, beforeId: nextRow && nextRow.dataset.itemType !== 'folder-child' ? nextRow.dataset.itemId : (nextRow ? nextRow.dataset.itemId : null) };
+      }
+
+      function insertIntoContainer(arr, id, beforeId) {
+        if (beforeId) {
+          const idx = arr.indexOf(beforeId);
+          arr.splice(idx >= 0 ? idx : arr.length, 0, id);
+        } else {
+          arr.push(id);
+        }
+      }
+
+      function applyDrop(type, id, folderId, beforeId) {
+        if (type === 'video') {
+          const entry = playlist.find(e => e.id === id);
+          if (!entry) return;
+          // Remove from old location
+          if (entry.folderId) {
+            const old = folders.find(f => f.id === entry.folderId);
+            if (old && old.children) old.children = old.children.filter(cid => cid !== id);
+          } else {
+            playlistOrder = playlistOrder.filter(pid => pid !== id);
+          }
+          // Insert at new location
+          entry.folderId = folderId || null;
+          if (folderId) {
+            const nf = folders.find(f => f.id === folderId);
+            if (nf) { nf.children = nf.children || []; insertIntoContainer(nf.children, id, beforeId); }
+          } else {
+            insertIntoContainer(playlistOrder, id, beforeId);
+          }
+          persistEntry(entry).catch(() => {});
+        } else if (type === 'folder') {
+          if (folderId) return; // can't nest folders
+          playlistOrder = playlistOrder.filter(pid => pid !== id);
+          insertIntoContainer(playlistOrder, id, beforeId);
+        }
+        savePlaylistState();
+        renderPlaylist();
+      }
+
       // ===== RENDER PLAYLIST =====
       function renderPlaylist() {
+        ensurePlaylistOrder();
         playlistEl.innerHTML = '';
 
         function makeColorDot(obj, isEntry) {
@@ -941,6 +1082,25 @@
           return dot;
         }
 
+        function addDragHandlers(row, type, id, folderId) {
+          row.draggable = true;
+          row.dataset.itemId = id;
+          row.dataset.itemType = type; // 'video' or 'folder'
+          row.dataset.folderId = folderId || '';
+
+          row.addEventListener('dragstart', e => {
+            dragInfo = { type, id, srcFolderId: folderId || null };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', id);
+            row.classList.add('pl-dragging');
+          });
+          row.addEventListener('dragend', () => {
+            row.classList.remove('pl-dragging');
+            clearDragIndicators();
+            dragInfo = null;
+          });
+        }
+
         function makeVideoRow(entry, inFolder) {
           const i = playlist.indexOf(entry);
           const row = document.createElement('div');
@@ -948,6 +1108,8 @@
           const isCompare = compareMode && i === compareIndex && i !== activeIndex;
           row.className = 'playlist-row' + (isActive ? ' active' : '') + (isCompare ? ' compare-active' : '') + (inFolder ? ' in-folder' : '');
           if (entry.color && !isActive && !isCompare) row.style.borderLeftColor = entry.color;
+
+          addDragHandlers(row, 'video', entry.id, entry.folderId || null);
 
           row.appendChild(makeColorDot(entry, true));
 
@@ -984,9 +1146,9 @@
             ];
             if (folders.length) {
               items.push({ sep: true });
-              if (entry.folderId) items.push({ label: '↖ Remove from folder', action: () => { entry.folderId = null; savePlaylistState(); persistEntry(entry).catch(() => {}); renderPlaylist(); } });
+              if (entry.folderId) items.push({ label: '↖ Remove from folder', action: () => setEntryFolder(entry, null) });
               folders.filter(f => f.id !== entry.folderId).forEach(f => {
-                items.push({ label: '📁 ' + (f.name || 'Folder'), action: () => { entry.folderId = f.id; savePlaylistState(); persistEntry(entry).catch(() => {}); renderPlaylist(); } });
+                items.push({ label: '📁 ' + (f.name || 'Folder'), action: () => setEntryFolder(entry, f.id) });
               });
             }
             items.push({ sep: true });
@@ -1010,6 +1172,8 @@
           const row = document.createElement('div');
           row.className = 'pl-folder-row';
           if (folder.color) row.style.borderLeftColor = folder.color;
+
+          addDragHandlers(row, 'folder', folder.id, null);
 
           const arrow = document.createElement('span');
           arrow.className = 'pl-folder-arrow';
@@ -1041,8 +1205,9 @@
               { label: 'Color…', action: () => showColorPalette(menuBtn, folder.color, c => { folder.color = c; savePlaylistState(); renderPlaylist(); }) },
               { sep: true },
               { label: 'Delete folder', danger: true, action: () => {
-                playlist.forEach(e => { if (e.folderId === folder.id) { e.folderId = null; persistEntry(e).catch(() => {}); } });
+                playlist.forEach(e => { if (e.folderId === folder.id) setEntryFolder(e, null); });
                 folders.splice(folders.indexOf(folder), 1);
+                playlistOrder = playlistOrder.filter(id => id !== folder.id);
                 savePlaylistState(); renderPlaylist();
               }},
             ]);
@@ -1052,17 +1217,82 @@
           return row;
         }
 
-        // Unfoldered videos first
-        playlist.filter(e => !e.folderId).forEach(e => playlistEl.appendChild(makeVideoRow(e, false)));
-
-        // Then each folder with its videos
-        folders.forEach(folder => {
-          playlistEl.appendChild(makeFolderRow(folder));
-          if (folder.expanded !== false) {
-            playlist.filter(e => e.folderId === folder.id).forEach(e => playlistEl.appendChild(makeVideoRow(e, true)));
+        // Render in playlistOrder, folders emit their children inline
+        playlistOrder.forEach(id => {
+          const folder = folders.find(f => f.id === id);
+          if (folder) {
+            playlistEl.appendChild(makeFolderRow(folder));
+            if (folder.expanded !== false) {
+              (folder.children || []).forEach(eid => {
+                const e = playlist.find(p => p.id === eid);
+                if (e) playlistEl.appendChild(makeVideoRow(e, true));
+              });
+            }
+          } else {
+            const e = playlist.find(p => p.id === id);
+            if (e) playlistEl.appendChild(makeVideoRow(e, false));
           }
         });
+
       }
+
+      // ---- Playlist drag-over / drop (wired once) ----
+      playlistEl.addEventListener('dragover', e => {
+        if (!dragInfo) return;
+        e.preventDefault();
+        clearDragIndicators();
+
+        const target = e.target.closest('[data-item-id]');
+        if (!target || !playlistEl.contains(target)) return;
+
+        const isFolderRow = target.dataset.itemType === 'folder';
+        const dragIsVideo = dragInfo.type === 'video';
+        const targetFolderId = target.dataset.folderId || null;
+
+        // Dragging video over folder header middle → folder-highlight
+        if (dragIsVideo && isFolderRow) {
+          const rect = target.getBoundingClientRect();
+          const inMiddle = e.clientY > rect.top + rect.height * 0.25 && e.clientY < rect.top + rect.height * 0.75;
+          if (inMiddle) { target.classList.add('pl-drag-over-folder'); return; }
+        }
+
+        // Can't drop a folder inside a folder
+        if (dragInfo.type === 'folder' && targetFolderId) return;
+
+        const rect = target.getBoundingClientRect();
+        const after = e.clientY > rect.top + rect.height / 2;
+        const dl = getPlDropLine();
+        if (after) target.after(dl); else target.before(dl);
+      });
+
+      playlistEl.addEventListener('dragleave', e => {
+        if (!playlistEl.contains(e.relatedTarget)) clearDragIndicators();
+      });
+
+      playlistEl.addEventListener('drop', e => {
+        e.preventDefault();
+        if (!dragInfo) return;
+
+        // Folder-highlight: assign video to folder
+        const fh = playlistEl.querySelector('.pl-drag-over-folder');
+        if (fh) {
+          const tid = fh.dataset.itemId;
+          if (dragInfo.type === 'video') applyDrop('video', dragInfo.id, tid, null);
+          clearDragIndicators(); dragInfo = null; return;
+        }
+
+        // Drop-line reorder
+        if (plDropLine && plDropLine.parentNode) {
+          const prevRow = plDropLine.previousElementSibling;
+          const nextRow = plDropLine.nextElementSibling;
+          const ctx = getInsertContext(prevRow, nextRow);
+          const info = dragInfo;
+          clearDragIndicators(); dragInfo = null;
+          applyDrop(info.type, info.id, ctx.folderId, ctx.beforeId);
+        } else {
+          clearDragIndicators(); dragInfo = null;
+        }
+      });
 
       async function loadVideo(index) {
         if (index < 0 || index >= playlist.length) return;
@@ -2712,6 +2942,7 @@
           const objectUrl = URL.createObjectURL(file);
           const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
+          if (!playlistOrder.includes(entry.id)) playlistOrder.push(entry.id);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
             tmp.preload = 'metadata'; tmp.src = objectUrl;

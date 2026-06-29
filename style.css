@@ -172,6 +172,20 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 .pl-ctx-item.danger { color: #ff5555; }
 .pl-ctx-sep { height: 1px; background: #333; margin: 3px 0; }
 
+/* ===== DRAG AND DROP ===== */
+.pl-drop-line {
+  height: 2px; background: #3aa0ff; border-radius: 1px; margin: 0 4px;
+  pointer-events: none; box-shadow: 0 0 4px rgba(58,160,255,0.6);
+}
+.pl-drag-over-folder {
+  background: rgba(58,160,255,0.12) !important;
+  outline: 1px dashed #3aa0ff;
+  outline-offset: -1px;
+}
+.pl-dragging { opacity: 0.4; }
+[draggable="true"] { cursor: grab; }
+[draggable="true"]:active { cursor: grabbing; }
+
 /* ===== CONTENT ===== */
 #content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
