@@ -29,7 +29,6 @@
             <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
             <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
             <button class="tool-btn" data-tool="eraser" title="Eraser (E)">🧹</button>
-            <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)" style="width:auto;padding:0 8px">Arc Tracer</button>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group" id="color-swatches">
@@ -48,6 +47,8 @@
             <label>Opacity <input type="range" id="brush-opacity" min="1" max="100" value="100"><span id="brush-opacity-val">100</span>%</label>
             <label>Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="3"><span id="laser-hold-val">3</span>s</label>
           </div>
+          <div class="tool-sep"></div>
+          <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)" style="width:auto;padding:0 8px">Arc Tracer</button>
           <div class="tool-sep" id="arc-sep" style="display:none"></div>
           <div id="arc-controls" class="tool-group">
             <span style="font-size:11px;color:#aaa;white-space:nowrap">Window:</span>
@@ -1310,7 +1311,7 @@
         const ox = (cw - fw) / 2, oy = (ch - fh) / 2;
         const mx = (pos.x * cw - ox) / scale;
         const my = (pos.y * ch - oy) / scale;
-        const S = 120, srcR = 12;
+        const S = 120, srcR = 30;
         arcMagnifierCtx.imageSmoothingEnabled = false;
         arcMagnifierCtx.fillStyle = '#111';
         arcMagnifierCtx.fillRect(0, 0, S, S);
