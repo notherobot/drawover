@@ -1944,8 +1944,8 @@
           videoViewport.classList.add('zooming');
           return;
         }
-        // Arc point drag — available with any tool
-        if (activeIndex >= 0 && e.button === 0) {
+        // Arc point drag — available with any tool except arc-tracer (placing new points takes priority)
+        if (currentTool !== 'arc-tracer' && activeIndex >= 0 && e.button === 0) {
           const hitPos = getCanvasPos(e);
           const hit = getArcHitFrame(hitPos);
           if (hit !== null) {
