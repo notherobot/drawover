@@ -561,6 +561,14 @@
 
       function getVideoBounds() { return getVideoBoundsFor(mainCanvas, penCanvas); }
 
+      function clipCtxToVideo(ctx, mc, pc) {
+        const b = getVideoBoundsFor(mc, pc);
+        const w = pc.width, h = pc.height;
+        ctx.beginPath();
+        ctx.rect(b.x0 * w, b.y0 * h, (b.x1 - b.x0) * w, (b.y1 - b.y0) * h);
+        ctx.clip();
+      }
+
       function clampToVideo(pos) {
         if (!mainCanvas.width) return pos;
         const b = getVideoBounds();
@@ -1594,7 +1602,11 @@
         penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
         const entry = getActiveEntry(); if (!entry) return;
         const strokes = entry.annotations[player.currentFrame];
-        if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
+        if (!strokes) return;
+        penCtx.save();
+        clipCtxToVideo(penCtx, mainCanvas, penCanvas);
+        strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
+        penCtx.restore();
       }
 
       // Draws laser stroke at full opacity — caller composites at fade opacity
@@ -1655,7 +1667,10 @@
         const [off, offCtx] = _getLaserOff(w, h, false);
         if (!offCtx) return;
         offCtx.clearRect(0, 0, w, h);
+        offCtx.save();
+        clipCtxToVideo(offCtx, mainCanvas, laserCanvas);
         laserStrokes.forEach(s => drawLaserStroke(offCtx, s, w, h));
+        offCtx.restore();
         laserCtx.save();
         laserCtx.globalAlpha = laserFadeOpacity;
         laserCtx.drawImage(off, 0, 0);
@@ -1666,7 +1681,11 @@
         penCtxB.clearRect(0, 0, penCanvasB.width, penCanvasB.height);
         const entry = getCompareEntry(); if (!entry || !playerB) return;
         const strokes = entry.annotations[playerB.currentFrame];
-        if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtxB, s, penCanvasB.width, penCanvasB.height));
+        if (!strokes) return;
+        penCtxB.save();
+        clipCtxToVideo(penCtxB, mainCanvasB, penCanvasB);
+        strokes.forEach(s => drawStrokeOnCanvas(penCtxB, s, penCanvasB.width, penCanvasB.height));
+        penCtxB.restore();
       }
 
       function redrawLaserCanvasB() {
@@ -1677,7 +1696,10 @@
         const [off, offCtx] = _getLaserOff(w, h, true);
         if (!offCtx) return;
         offCtx.clearRect(0, 0, w, h);
+        offCtx.save();
+        clipCtxToVideo(offCtx, mainCanvasB, laserCanvasB);
         laserStrokes.forEach(s => drawLaserStroke(offCtx, s, w, h));
+        offCtx.restore();
         laserCtxB.save();
         laserCtxB.globalAlpha = laserFadeOpacity;
         laserCtxB.drawImage(off, 0, 0);
@@ -1843,7 +1865,9 @@
             isDrawingB = true;
             currentStrokeB = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] };
             redrawPenCanvasB();
+            penCtxB.save(); clipCtxToVideo(penCtxB, mainCanvasB, penCanvasB);
             drawStrokeOnCanvas(penCtxB, currentStrokeB, penCanvasB.width, penCanvasB.height);
+            penCtxB.restore();
           } else if (currentTool === 'laser') {
             isDrawingB = true;
             laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] });
@@ -1875,7 +1899,9 @@
             const cpos = clampToVideoB(pos);
             currentStrokeB.points.push({ ...cpos, p: getPressure(e) });
             redrawPenCanvasB();
+            penCtxB.save(); clipCtxToVideo(penCtxB, mainCanvasB, penCanvasB);
             drawStrokeOnCanvas(penCtxB, currentStrokeB, penCanvasB.width, penCanvasB.height);
+            penCtxB.restore();
           } else if (currentTool === 'laser' && isDrawingB && laserStrokes.length) {
             laserStrokes[laserStrokes.length - 1].points.push({ ...clampToVideoB(pos), p: getPressure(e) });
             lastLaserInputTime = Date.now();
@@ -2024,7 +2050,9 @@
           isDrawing = true;
           currentStroke = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] };
           redrawPenCanvas();
+          penCtx.save(); clipCtxToVideo(penCtx, mainCanvas, penCanvas);
           drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
+          penCtx.restore();
         } else if (currentTool === 'laser') {
           isDrawing = true;
           laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] });
@@ -2092,7 +2120,9 @@
           const cpos = clampToVideo(pos);
           currentStroke.points.push({ ...cpos, p: getPressure(e) });
           redrawPenCanvas();
+          penCtx.save(); clipCtxToVideo(penCtx, mainCanvas, penCanvas);
           drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
+          penCtx.restore();
         } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
           laserStrokes[laserStrokes.length - 1].points.push({ ...clampToVideo(pos), p: getPressure(e) });
           lastLaserInputTime = Date.now();
