@@ -113,8 +113,8 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 .pl-folder-row:hover { background: #252525; }
 .pl-folder-row:hover .pl-menu-btn { opacity: 1; }
 .pl-folder-arrow {
-  font-size: 13px; color: #777; cursor: pointer; flex-shrink: 0;
-  width: 20px; text-align: center; line-height: 1; padding: 2px 0; user-select: none;
+  font-size: 18px; color: #777; cursor: pointer; flex-shrink: 0;
+  width: 24px; text-align: center; line-height: 1; padding: 2px 0; user-select: none;
 }
 .pl-folder-arrow:hover { color: #ccc; }
 .pl-folder-name {
