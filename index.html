@@ -11,6 +11,9 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
+      <div class="topbar-sep"></div>
+      <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
+      <button id="btn-compare" title="Compare two videos side-by-side">Compare</button>
       <div id="app-title">DrawOver <span id="version">v0.2.1</span></div>
     </div>
 
@@ -96,8 +99,8 @@
 
         <div id="scrub-bar-container">
           <div id="scrub-times-top">
-            <span id="scrub-current">0:00.000</span>
-            <span id="scrub-total">0:00.000</span>
+            <span id="scrub-current">00:00:00:00</span>
+            <span id="scrub-total">00:00:00:00</span>
           </div>
           <div id="scrub-bar">
             <div id="scrub-progress"></div>
@@ -143,9 +146,6 @@
           <button id="btn-mute" title="Mute">🔊</button>
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
-          <div class="pb-sep"></div>
-          <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
-          <button id="btn-compare" title="Compare two videos side-by-side">⧉</button>
           <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
         </div>
 
@@ -534,12 +534,16 @@
       }
 
       // ===== HELPERS =====
-      function formatTimecode(s) {
-        if (isNaN(s) || !isFinite(s)) return '0:00.000';
-        const m = Math.floor(s / 60);
-        const sec = Math.floor(s % 60);
-        const ms = Math.floor((s % 1) * 1000);
-        return m + ':' + String(sec).padStart(2, '0') + '.' + String(ms).padStart(3, '0');
+      function formatSMPTE(s, fps) {
+        if (isNaN(s) || !isFinite(s) || s < 0) return '00:00:00:00';
+        const f = fps || 24;
+        const totalFrames = Math.round(s * f);
+        const ff = totalFrames % f;
+        const totalSec = Math.floor(totalFrames / f);
+        const hh = Math.floor(totalSec / 3600);
+        const mm = Math.floor((totalSec % 3600) / 60);
+        const ss = totalSec % 60;
+        return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0') + ':' + String(ss).padStart(2,'0') + ':' + String(ff).padStart(2,'0');
       }
 
       function formatTime(s) {
@@ -783,7 +787,7 @@
       const player = new FramePlayer(mainCanvas, mainCtx);
       player.onFrameChange = () => { redrawPenCanvas(); redrawArcCanvas(); updateScrubBar(); updateScrubTimes(); };
       window.addEventListener('beforeunload', () => { if (activeIndex >= 0) savePlaylistState(); });
-      player.onDurationChange = (dur) => { scrubTotal.textContent = formatTimecode(dur); updateScrubTicks(); updateArcTicks(); };
+      player.onDurationChange = (dur) => { scrubTotal.textContent = formatSMPTE(dur, player.fps); updateScrubTicks(); updateArcTicks(); };
 
       // ===== PLAYLIST =====
       btnAddVideo.addEventListener('click', () => fileInput.click());
@@ -814,21 +818,80 @@
         }
       });
 
-      function generateThumbnail(objectUrl) {
+      function analyzeVideo(objectUrl) {
         return new Promise(resolve => {
           const vid = document.createElement('video');
           const cnv = document.createElement('canvas');
-          vid.preload = 'metadata';
+          vid.preload = 'auto';
           vid.muted = true;
           vid.src = objectUrl;
-          vid.addEventListener('loadedmetadata', () => { vid.currentTime = Math.min(1, vid.duration * 0.1); }, { once: true });
-          vid.addEventListener('seeked', () => {
-            cnv.width = 96; cnv.height = Math.round(96 / (vid.videoWidth / (vid.videoHeight || 1)));
-            cnv.getContext('2d').drawImage(vid, 0, 0, cnv.width, cnv.height);
+          let duration = 0;
+          let thumbnail = null;
+          const timestamps = [];
+          const TARGET_FRAMES = 16;
+
+          function snapFPS(raw) {
+            const map = [[23.976, 24], [24, 24], [25, 25], [29.97, 30], [30, 30], [50, 50], [59.94, 60], [60, 60]];
+            let best = 24, bestDiff = Infinity;
+            for (const [s, r] of map) { const d = Math.abs(raw - s); if (d < bestDiff) { bestDiff = d; best = r; } }
+            return best;
+          }
+
+          function computeFPS() {
+            if (timestamps.length < 3) return 24;
+            const diffs = [];
+            for (let i = 1; i < timestamps.length; i++) {
+              const d = timestamps[i] - timestamps[i - 1];
+              if (d > 0.001 && d < 0.15) diffs.push(d);
+            }
+            if (diffs.length < 2) return 24;
+            const sorted = diffs.slice().sort((a, b) => a - b);
+            return snapFPS(1 / sorted[Math.floor(sorted.length / 2)]);
+          }
+
+          function finish() {
+            try { vid.pause(); } catch (_) {}
             vid.src = '';
-            resolve(cnv.toDataURL('image/jpeg', 0.75));
-          }, { once: true });
-          vid.addEventListener('error', () => { vid.src = ''; resolve(null); }, { once: true });
+            resolve({ thumbnail, fps: computeFPS(), duration });
+          }
+
+          vid.addEventListener('error', () => { vid.src = ''; resolve({ thumbnail: null, fps: 24, duration }); }, { once: true });
+
+          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            vid.addEventListener('loadedmetadata', () => { duration = vid.duration || 0; }, { once: true });
+            function frameCallback(now, meta) {
+              timestamps.push(meta.mediaTime);
+              if (!thumbnail && timestamps.length >= 4) {
+                cnv.width = 96;
+                cnv.height = Math.round(96 / (vid.videoWidth / (vid.videoHeight || 1)));
+                cnv.getContext('2d').drawImage(vid, 0, 0, cnv.width, cnv.height);
+                thumbnail = cnv.toDataURL('image/jpeg', 0.75);
+              }
+              if (timestamps.length < TARGET_FRAMES) {
+                vid.requestVideoFrameCallback(frameCallback);
+              } else {
+                finish();
+              }
+            }
+            vid.addEventListener('ended', () => finish(), { once: true });
+            vid.addEventListener('canplay', () => {
+              vid.requestVideoFrameCallback(frameCallback);
+              vid.play().catch(() => finish());
+            }, { once: true });
+          } else {
+            // No VFCB: fall back to seek-and-capture, fps stays at default
+            vid.addEventListener('loadedmetadata', () => {
+              duration = vid.duration || 0;
+              vid.currentTime = Math.min(1, duration * 0.1);
+            }, { once: true });
+            vid.addEventListener('seeked', () => {
+              cnv.width = 96; cnv.height = Math.round(96 / (vid.videoWidth / (vid.videoHeight || 1)));
+              cnv.getContext('2d').drawImage(vid, 0, 0, cnv.width, cnv.height);
+              thumbnail = cnv.toDataURL('image/jpeg', 0.75);
+              vid.src = '';
+              resolve({ thumbnail, fps: 24, duration });
+            }, { once: true });
+          }
           vid.load();
         });
       }
@@ -838,16 +901,13 @@
         const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: 24, undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
           if (!playlistOrder.includes(entry.id)) playlistOrder.push(entry.id);
-          await new Promise(resolve => {
-            const tmp = document.createElement('video');
-            tmp.preload = 'metadata'; tmp.src = objectUrl;
-            tmp.onloadedmetadata = () => { entry.duration = tmp.duration || 0; resolve(); };
-            tmp.onerror = resolve;
-          });
-          entry.thumbnail = await generateThumbnail(objectUrl);
+          const { thumbnail, fps, duration } = await analyzeVideo(objectUrl);
+          entry.thumbnail = thumbnail;
+          entry.fps = fps;
+          entry.duration = duration;
           persistEntry(entry).catch(() => {});
           renderPlaylist();
         }
@@ -941,7 +1001,7 @@
           penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
           btnPlay.textContent = '▶';
           scrubProgress.style.width = '0%'; scrubPlayhead.style.left = '0%';
-          scrubCurrent.textContent = '0:00.000'; scrubFrame.textContent = 'F: 0'; scrubTotal.textContent = '0:00.000';
+          scrubCurrent.textContent = '00:00:00:00'; scrubFrame.textContent = 'F: 0'; scrubTotal.textContent = '00:00:00:00';
           updateInOutUI(); updateScrubTicks(); updateControlAvailability();
         } else if (activeIndex > i) activeIndex--;
         savePlaylistState(); renderPlaylist();
@@ -1473,9 +1533,9 @@
       }
 
       function updateScrubTimes() {
-        scrubCurrent.textContent = formatTimecode(player.getCurrentTime());
+        scrubCurrent.textContent = formatSMPTE(player.getCurrentTime(), player.fps);
         scrubFrame.textContent = 'F: ' + player.currentFrame;
-        if (player.duration) scrubTotal.textContent = formatTimecode(player.duration);
+        if (player.duration) scrubTotal.textContent = formatSMPTE(player.duration, player.fps);
       }
 
       function scrubFromEvent(e) {
@@ -1483,8 +1543,14 @@
         const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
         const pct = Math.max(0, Math.min(1, x / rect.width));
         if (player.duration) {
-          player.seekToTime(pct * player.duration);
-          if (compareMode && playerB && playerB.duration) playerB.seekToTime(pct * playerB.duration);
+          const rawTime = pct * player.duration;
+          const frameNum = Math.round(rawTime * player.fps);
+          const snappedTime = frameNum / player.fps + 1e-5;
+          player.seekToTime(snappedTime);
+          if (compareMode && playerB && playerB.duration) {
+            const bFrame = Math.round(rawTime * playerB.fps);
+            playerB.seekToTime(bFrame / playerB.fps + 1e-5);
+          }
         }
       }
 
