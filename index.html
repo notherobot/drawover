@@ -1100,8 +1100,12 @@
 
       // ===== TOOLS =====
       function updateToolCursor() {
+        if (arcHoverFrame !== null || arcDragFrame !== null) {
+          penCanvas.style.cursor = penCanvasB.style.cursor = 'move';
+          return;
+        }
         if (currentTool === 'arc-tracer') {
-          penCanvas.style.cursor = penCanvasB.style.cursor = (arcHoverFrame !== null || arcDragFrame !== null) ? 'move' : 'none';
+          penCanvas.style.cursor = penCanvasB.style.cursor = 'none';
           return;
         }
         if (currentTool === 'laser' || currentTool === 'eyedrop') {
@@ -1824,22 +1828,26 @@
           videoViewport.classList.add('zooming');
           return;
         }
-        if (currentTool === 'arc-tracer' && activeIndex >= 0 && e.button === 0) {
-          const pos = getCanvasPos(e);
-          const entry = getActiveEntry(); if (!entry) return;
-          if (!entry.arcPoints) entry.arcPoints = {};
-          const hit = getArcHitFrame(pos);
+        // Arc point drag — available with any tool
+        if (activeIndex >= 0 && e.button === 0) {
+          const hitPos = getCanvasPos(e);
+          const hit = getArcHitFrame(hitPos);
           if (hit !== null) {
             arcDragFrame = hit;
             penCanvas.setPointerCapture(e.pointerId);
             updateToolCursor();
-          } else {
-            entry.arcPoints[player.currentFrame] = { x: pos.x, y: pos.y };
-            redrawArcCanvas();
-            updateArcTicks();
-            scheduleAnnotationSave();
-            player.stepFrame(1);
+            return;
           }
+        }
+        if (currentTool === 'arc-tracer' && activeIndex >= 0 && e.button === 0) {
+          const pos = getCanvasPos(e);
+          const entry = getActiveEntry(); if (!entry) return;
+          if (!entry.arcPoints) entry.arcPoints = {};
+          entry.arcPoints[player.currentFrame] = { x: pos.x, y: pos.y };
+          redrawArcCanvas();
+          updateArcTicks();
+          scheduleAnnotationSave();
+          player.stepFrame(1);
           return;
         }
         if (!drawingsVisible || activeIndex < 0) return;
@@ -1889,6 +1897,16 @@
         if (!drawingsVisible) return;
         const pos = getCanvasPos(e);
 
+        // Arc point drag — runs regardless of current tool
+        if (arcDragFrame !== null) {
+          const entry = getActiveEntry();
+          if (entry && entry.arcPoints) {
+            entry.arcPoints[arcDragFrame] = { x: pos.x, y: pos.y };
+            redrawArcCanvas();
+          }
+          return;
+        }
+
         // Eyedropper preview while hovering
         if (currentTool === 'eyedrop') {
           showEyedropPreview(e, pos);
@@ -1896,22 +1914,20 @@
         }
 
         if (currentTool === 'arc-tracer') {
-          const pos = getCanvasPos(e);
-          if (arcDragFrame !== null) {
-            const entry = getActiveEntry();
-            if (entry && entry.arcPoints) {
-              entry.arcPoints[arcDragFrame] = { x: pos.x, y: pos.y };
-              redrawArcCanvas();
-            }
-          } else {
-            arcCrosshairPos = pos;
-            const prevHover = arcHoverFrame;
-            arcHoverFrame = getArcHitFrame(pos);
-            if (arcHoverFrame !== prevHover) updateToolCursor();
-            redrawArcCanvas();
-            showArcMagnifier(e, arcCrosshairPos);
-          }
+          arcCrosshairPos = pos;
+          const prevHover = arcHoverFrame;
+          arcHoverFrame = getArcHitFrame(pos);
+          if (arcHoverFrame !== prevHover) updateToolCursor();
+          redrawArcCanvas();
+          showArcMagnifier(e, arcCrosshairPos);
           return;
+        }
+
+        // Arc point hover detection for non-arc-tracer tools
+        if (!isDrawing && !isErasing) {
+          const prevHover = arcHoverFrame;
+          arcHoverFrame = getArcHitFrame(pos);
+          if (arcHoverFrame !== prevHover) updateToolCursor();
         }
 
         if (currentTool === 'pen' && isDrawing && currentStroke) {
@@ -1952,7 +1968,9 @@
 
       penCanvas.addEventListener('pointerleave', () => {
         if (currentTool === 'eyedrop') hideEyedropPreview();
-        if (currentTool === 'arc-tracer') { arcCrosshairPos = null; arcHoverFrame = null; hideArcMagnifier(); redrawArcCanvas(); updateToolCursor(); }
+        arcHoverFrame = null;
+        if (currentTool === 'arc-tracer') { arcCrosshairPos = null; hideArcMagnifier(); redrawArcCanvas(); }
+        updateToolCursor();
       });
 
       penCanvas.addEventListener('pointerup', (e) => {
