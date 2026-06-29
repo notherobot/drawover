@@ -2846,10 +2846,14 @@
       const sidebarOverlay = document.getElementById('sidebar-overlay');
       const isMobile = () => window.innerWidth < 640;
 
+      const SIDEBAR_DEFAULT_W = 440;
       function setSidebarOpen(open) {
         if (!open) {
           sidebarEl.style.width = '';
           sidebarEl.style.minWidth = '';
+        } else if (!sidebarEl.style.width && !isMobile()) {
+          sidebarEl.style.width = SIDEBAR_DEFAULT_W + 'px';
+          sidebarEl.style.minWidth = SIDEBAR_DEFAULT_W + 'px';
         }
         sidebarEl.classList.toggle('sidebar-open', open);
         sidebarOverlay.classList.toggle('open', open && isMobile());
@@ -2875,7 +2879,7 @@
       sidebarResizer.addEventListener('pointermove', (e) => {
         if (!sidebarResizer.hasPointerCapture(e.pointerId)) return;
         const rect = document.getElementById('main-body').getBoundingClientRect();
-        const w = Math.max(140, Math.min(480, e.clientX - rect.left));
+        const w = Math.max(140, Math.min(600, e.clientX - rect.left));
         sidebarEl.style.width = w + 'px';
         sidebarEl.style.minWidth = w + 'px';
       });
