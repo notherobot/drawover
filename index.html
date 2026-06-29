@@ -26,6 +26,8 @@
       <div id="content">
         <div id="tool-row">
           <div class="tool-group">
+            <button class="tool-btn" data-tool="pan" title="Pan — click and drag (H)">✋</button>
+            <button class="tool-btn" data-tool="zoom" title="Zoom — drag up/down, or +/− (Z)">🔍</button>
             <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
             <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
             <button class="tool-btn" data-tool="eraser" title="Eraser (E)">🧹</button>
@@ -139,8 +141,6 @@
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
           <div class="pb-sep"></div>
-          <button id="btn-pan-drag" title="Pan — hold and drag">✥ Pan</button>
-          <button id="btn-zoom-drag" title="Zoom — hold and drag">⌕ Zoom</button>
           <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
           <button id="btn-compare" title="Compare two videos side-by-side">⧉</button>
           <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
@@ -1114,6 +1114,14 @@
           penCanvas.style.cursor = penCanvasB.style.cursor = 'move';
           return;
         }
+        if (currentTool === 'pan') {
+          penCanvas.style.cursor = penCanvasB.style.cursor = vpDrag ? 'grabbing' : 'grab';
+          return;
+        }
+        if (currentTool === 'zoom') {
+          penCanvas.style.cursor = penCanvasB.style.cursor = 'zoom-in';
+          return;
+        }
         if (currentTool === 'arc-tracer') {
           penCanvas.style.cursor = penCanvasB.style.cursor = 'none';
           return;
@@ -1366,6 +1374,22 @@
       // ===== PAN / ZOOM =====
       function applyViewport() {
         videoViewport.style.transform = `translate(${panX}px,${panY}px) scale(${vpZoom})`;
+      }
+
+      function stepZoom(factor) {
+        const isB = compareMode && !comparePanelLeft;
+        const container = isB ? videoViewportB : videoViewport;
+        const rect = container.getBoundingClientRect();
+        const cx = rect.width / 2, cy = rect.height / 2;
+        if (isB) {
+          const nz = Math.max(0.1, Math.min(20, vpZoomB * factor));
+          const r = nz / vpZoomB;
+          panXB = cx - (cx - panXB) * r; panYB = cy - (cy - panYB) * r; vpZoomB = nz; applyViewportB();
+        } else {
+          const nz = Math.max(0.1, Math.min(20, vpZoom * factor));
+          const r = nz / vpZoom;
+          panX = cx - (cx - panX) * r; panY = cy - (cy - panY) * r; vpZoom = nz; applyViewport();
+        }
       }
 
       videoContainer.addEventListener('contextmenu', e => e.preventDefault());
@@ -1944,8 +1968,25 @@
           videoViewport.classList.add('zooming');
           return;
         }
-        // Arc point drag — available with any tool except arc-tracer (placing new points takes priority)
-        if (currentTool !== 'arc-tracer' && activeIndex >= 0 && e.button === 0) {
+        // Pan tool
+        if (currentTool === 'pan' && e.button === 0) {
+          penCanvas.setPointerCapture(e.pointerId);
+          vpDrag = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
+          videoViewport.classList.add('panning');
+          updateToolCursor();
+          return;
+        }
+        // Zoom tool
+        if (currentTool === 'zoom' && e.button === 0) {
+          penCanvas.setPointerCapture(e.pointerId);
+          const rect = videoContainer.getBoundingClientRect();
+          vpDrag = { type: 'zoom', startY: e.clientY, startZoom: vpZoom, startPanX: panX, startPanY: panY,
+                     cx: rect.width / 2, cy: rect.height / 2 };
+          videoViewport.classList.add('zooming');
+          return;
+        }
+        // Arc point drag — available with any tool except arc-tracer and pan/zoom
+        if (currentTool !== 'arc-tracer' && currentTool !== 'pan' && currentTool !== 'zoom' && activeIndex >= 0 && e.button === 0) {
           const hitPos = getCanvasPos(e);
           const hit = getArcHitFrame(hitPos);
           if (hit !== null) {
@@ -2093,6 +2134,7 @@
         if (vpDrag) {
           videoViewport.classList.remove('panning', 'zooming');
           vpDrag = null;
+          updateToolCursor();
           return;
         }
         finishStroke(e);
@@ -2101,6 +2143,7 @@
         if (vpDrag) {
           videoViewport.classList.remove('panning', 'zooming');
           vpDrag = null;
+          updateToolCursor();
           return;
         }
         finishStroke(e);
@@ -2214,11 +2257,15 @@
         else if (e.key === 'ArrowRight') { e.preventDefault(); btnFrameFwd.click(); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); btnPrevAnnotation.click(); }
         else if (e.key === 'ArrowDown') { e.preventDefault(); btnNextAnnotation.click(); }
+        else if (e.key === '+' || e.key === '=') { e.preventDefault(); stepZoom(1.25); }
+        else if (e.key === '-' || e.key === '_') { e.preventDefault(); stepZoom(1 / 1.25); }
         else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
           if (e.key === 'b' || e.key === 'B') activateTool('pen');
           else if (e.key === 'e' || e.key === 'E') activateTool('eraser');
           else if (e.key === 'l' || e.key === 'L') activateTool('laser');
           else if (e.key === 't' || e.key === 'T') activateTool('arc-tracer');
+          else if (e.key === 'h' || e.key === 'H') activateTool('pan');
+          else if (e.key === 'z' || e.key === 'Z') activateTool('zoom');
           else if (e.key === 'i' || e.key === 'I') btnSetIn.click();
           else if (e.key === 'o' || e.key === 'O') btnSetOut.click();
           else if (e.key === 'a' || e.key === 'A') {
@@ -2264,69 +2311,6 @@
         else { panX = 0; panY = 0; vpZoom = 1; applyViewport(); }
       });
 
-      // ===== PAN / ZOOM DRAG BUTTONS =====
-      (function() {
-        let vdState = null;
-        let accDx = 0, accDy = 0;
-
-        function applyDrag() {
-          if (!vdState) return;
-          if (vdState.type === 'pan') {
-            if (vdState.isB) { panXB = vdState.px + accDx; panYB = vdState.py + accDy; applyViewportB(); }
-            else { panX = vdState.px + accDx; panY = vdState.py + accDy; applyViewport(); }
-          } else {
-            const newZoom = Math.max(0.1, Math.min(20, vdState.zoom * Math.pow(1.005, -accDy)));
-            const ratio = newZoom / vdState.zoom;
-            const cx = vdState.cx, cy = vdState.cy;
-            if (vdState.isB) {
-              vpZoomB = newZoom;
-              panXB = cx - (cx - vdState.px) * ratio;
-              panYB = cy - (cy - vdState.py) * ratio;
-              applyViewportB();
-            } else {
-              vpZoom = newZoom;
-              panX = cx - (cx - vdState.px) * ratio;
-              panY = cy - (cy - vdState.py) * ratio;
-              applyViewport();
-            }
-          }
-        }
-
-        document.addEventListener('mousemove', (e) => {
-          if (!vdState || !document.pointerLockElement) return;
-          accDx += e.movementX;
-          accDy += e.movementY;
-          applyDrag();
-        });
-
-        document.addEventListener('pointerup', () => {
-          if (!vdState) return;
-          const btn = document.getElementById(vdState.type === 'pan' ? 'btn-pan-drag' : 'btn-zoom-drag');
-          btn.classList.remove('active');
-          vdState = null;
-          document.exitPointerLock();
-        });
-
-        function setupViewBtn(id, type) {
-          const btn = document.getElementById(id);
-          btn.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            const isB = compareMode && !comparePanelLeft;
-            const container = isB ? videoViewportB : videoViewport;
-            const rect = container ? container.getBoundingClientRect() : { width: 0, height: 0 };
-            accDx = 0; accDy = 0;
-            vdState = { type, isB,
-              px: isB ? panXB : panX, py: isB ? panYB : panY,
-              zoom: isB ? vpZoomB : vpZoom,
-              cx: rect.width / 2, cy: rect.height / 2 };
-            btn.classList.add('active');
-            btn.requestPointerLock();
-          });
-        }
-
-        setupViewBtn('btn-pan-drag', 'pan');
-        setupViewBtn('btn-zoom-drag', 'zoom');
-      })();
 
       // ===== COMPARE MODE =====
       function exitCompareMode() {
