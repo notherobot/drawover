@@ -1610,31 +1610,36 @@
       }
 
       // Draws laser stroke at full opacity — caller composites at fade opacity
+      // Uses filled dots + trapezoids (same as pen) to support per-point pressure
+      // without alpha compounding at joints on the offscreen canvas.
       function drawLaserStroke(ctx, stroke, w, h) {
         const raw = stroke.points;
         if (!raw || !raw.length) return;
         const pts = smoothPoints(raw, 3);
-        const avgP = pts.reduce((s, p) => s + (p.p ?? 1), 0) / pts.length;
         ctx.save();
-        ctx.strokeStyle = stroke.color;
         ctx.fillStyle = stroke.color;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.lineWidth = Math.max(0.5, stroke.size * avgP);
-        if (pts.length === 1) {
+        for (let i = 0; i < pts.length; i++) {
+          const r = Math.max(0.5, stroke.size * (pts[i].p ?? 1) / 2);
           ctx.beginPath();
-          ctx.arc(pts[0].x * w, pts[0].y * h, ctx.lineWidth / 2, 0, Math.PI * 2);
+          ctx.arc(pts[i].x * w, pts[i].y * h, r, 0, Math.PI * 2);
           ctx.fill();
-        } else {
+        }
+        for (let i = 0; i < pts.length - 1; i++) {
+          const ax = pts[i].x * w,   ay = pts[i].y * h;
+          const bx = pts[i+1].x * w, by = pts[i+1].y * h;
+          const rA = Math.max(0.5, stroke.size * (pts[i].p ?? 1) / 2);
+          const rB = Math.max(0.5, stroke.size * (pts[i+1].p ?? 1) / 2);
+          const dx = bx - ax, dy = by - ay;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len < 0.5) continue;
+          const nx = -dy / len, ny = dx / len;
           ctx.beginPath();
-          ctx.moveTo(pts[0].x * w, pts[0].y * h);
-          for (let i = 1; i < pts.length - 1; i++) {
-            const mx = (pts[i].x + pts[i+1].x) / 2 * w;
-            const my = (pts[i].y + pts[i+1].y) / 2 * h;
-            ctx.quadraticCurveTo(pts[i].x * w, pts[i].y * h, mx, my);
-          }
-          ctx.lineTo(pts[pts.length - 1].x * w, pts[pts.length - 1].y * h);
-          ctx.stroke();
+          ctx.moveTo(ax + nx * rA, ay + ny * rA);
+          ctx.lineTo(bx + nx * rB, by + ny * rB);
+          ctx.lineTo(bx - nx * rB, by - ny * rB);
+          ctx.lineTo(ax - nx * rA, ay - ny * rA);
+          ctx.closePath();
+          ctx.fill();
         }
         ctx.restore();
       }
