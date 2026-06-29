@@ -1896,14 +1896,13 @@
           const pos = getCanvasPosB(e);
           if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
           if (currentTool === 'pen' && isDrawingB && currentStrokeB) {
-            const cpos = clampToVideoB(pos);
-            currentStrokeB.points.push({ ...cpos, p: getPressure(e) });
+            currentStrokeB.points.push({ ...pos, p: getPressure(e) });
             redrawPenCanvasB();
             penCtxB.save(); clipCtxToVideo(penCtxB, mainCanvasB, penCanvasB);
             drawStrokeOnCanvas(penCtxB, currentStrokeB, penCanvasB.width, penCanvasB.height);
             penCtxB.restore();
           } else if (currentTool === 'laser' && isDrawingB && laserStrokes.length) {
-            laserStrokes[laserStrokes.length - 1].points.push({ ...clampToVideoB(pos), p: getPressure(e) });
+            laserStrokes[laserStrokes.length - 1].points.push({ ...pos, p: getPressure(e) });
             lastLaserInputTime = Date.now();
             if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
           } else if (currentTool === 'eraser' && isErasingB) {
@@ -2117,14 +2116,13 @@
         }
 
         if (currentTool === 'pen' && isDrawing && currentStroke) {
-          const cpos = clampToVideo(pos);
-          currentStroke.points.push({ ...cpos, p: getPressure(e) });
+          currentStroke.points.push({ ...pos, p: getPressure(e) });
           redrawPenCanvas();
           penCtx.save(); clipCtxToVideo(penCtx, mainCanvas, penCanvas);
           drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
           penCtx.restore();
         } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
-          laserStrokes[laserStrokes.length - 1].points.push({ ...clampToVideo(pos), p: getPressure(e) });
+          laserStrokes[laserStrokes.length - 1].points.push({ ...pos, p: getPressure(e) });
           lastLaserInputTime = Date.now();
           if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
         } else if (currentTool === 'eraser' && isErasing) {
