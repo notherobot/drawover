@@ -1089,6 +1089,7 @@
           row.dataset.folderId = folderId || '';
 
           row.addEventListener('dragstart', e => {
+            if (e.target.closest('button, .pl-color-dot, .pl-folder-arrow, .pl-rename-input')) { e.preventDefault(); return; }
             dragInfo = { type, id, srcFolderId: folderId || null };
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', id);
@@ -1124,6 +1125,7 @@
           nameSpan.className = 'playlist-name';
           nameSpan.textContent = entry.displayName || entry.name || 'Video';
           nameSpan.title = 'Double-click to rename';
+          nameSpan.addEventListener('click', e => e.stopPropagation());
           nameSpan.addEventListener('dblclick', e => {
             e.stopPropagation();
             startInlineRename(nameSpan, entry.displayName || entry.name || '', val => {
