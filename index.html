@@ -406,6 +406,7 @@
         try {
           localStorage.setItem('drawover_playlist', JSON.stringify(playlist.map(e => e.id)));
           localStorage.setItem('drawover_active', activeIndex >= 0 ? playlist[activeIndex].id : '');
+          localStorage.setItem('drawover_active_frame', player.currentFrame ?? 0);
         } catch (_) {}
       }
 
@@ -429,6 +430,7 @@
             await Promise.all(stale.map(r => dbDelete(r.id)));
             localStorage.removeItem('drawover_playlist');
             localStorage.removeItem('drawover_active');
+            localStorage.removeItem('drawover_active_frame');
             return;
           }
           const allRecords = await dbGetAll();
@@ -456,6 +458,8 @@
           let targetIdx = playlist.findIndex(e => e.id === savedActiveId);
           if (targetIdx < 0) targetIdx = 0;
           await loadVideo(targetIdx);
+          const savedFrame = parseInt(localStorage.getItem('drawover_active_frame') || '0', 10);
+          if (savedFrame > 0) player.seekToTime(savedFrame / (playlist[targetIdx]?.fps || 30) + 1e-5);
           dismissWelcome();
         } catch (err) {
           console.warn('DrawOver: restore failed', err);
@@ -750,6 +754,7 @@
 
       const player = new FramePlayer(mainCanvas, mainCtx);
       player.onFrameChange = () => { redrawPenCanvas(); redrawArcCanvas(); updateScrubBar(); updateScrubTimes(); };
+      window.addEventListener('beforeunload', () => { if (activeIndex >= 0) savePlaylistState(); });
       player.onDurationChange = (dur) => { scrubTotal.textContent = formatTimecode(dur); updateScrubTicks(); updateArcTicks(); };
 
       // ===== PLAYLIST =====
