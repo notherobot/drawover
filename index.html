@@ -856,8 +856,8 @@
       });
 
       // ===== PLAYLIST POPUPS =====
-      const _cpEl = document.getElementById('pl-color-palette');
-      const _ctxEl = document.getElementById('pl-ctx-menu');
+      const _cpEl = (() => { const el = document.createElement('div'); el.id = 'pl-color-palette'; document.body.appendChild(el); return el; })();
+      const _ctxEl = (() => { const el = document.createElement('div'); el.id = 'pl-ctx-menu'; document.body.appendChild(el); return el; })();
       let _cpCb = null;
 
       function showColorPalette(anchor, current, cb) {
@@ -2976,7 +2976,5 @@
 
     })();
   </script>
-  <div id="pl-color-palette"></div>
-  <div id="pl-ctx-menu"></div>
 </body>
 </html>
