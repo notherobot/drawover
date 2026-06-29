@@ -125,7 +125,7 @@
           <div class="pb-sep"></div>
           <button class="transport-btn" id="btn-to-start" title="Go to In / Start">|◀</button>
           <button class="transport-btn" id="btn-frame-back" title="Frame Back (←)">◀◀</button>
-          <button id="btn-play" title="Play/Pause (Space)">▶</button>
+          <button id="btn-play" title="Play/Pause (Space)">▶&#xFE0E;</button>
           <button class="transport-btn" id="btn-frame-fwd" title="Frame Forward (→)">▶▶</button>
           <button class="transport-btn" id="btn-to-end" title="Go to Out / End">▶|</button>
           <div class="pb-sep"></div>
@@ -152,7 +152,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.2 &nbsp;[Last Updated: 06/29/2026 1:50PM PST]</span>
+          <span id="status-version">DrawOver v0.2.2 &nbsp;[Last Updated: 06/29/2026 2:28PM PST]</span>
         </div>
       </div>
     </div>
@@ -675,7 +675,7 @@
             }
             this.playing = false;
             this._cancelRAF();
-            btnPlay.textContent = '▶';
+            btnPlay.textContent = '▶︎';
             if (this.onFrameChange) this.onFrameChange(this._frameNum);
           });
         }
@@ -1009,7 +1009,7 @@
           player.inPoint = null; player.outPoint = null;
           mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
           penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
-          btnPlay.textContent = '▶';
+          btnPlay.textContent = '▶︎';
           scrubProgress.style.width = '0%'; scrubPlayhead.style.left = '0%';
           scrubCurrent.textContent = '00:00:00:00'; scrubFrame.textContent = 'F: 0'; scrubTotal.textContent = '00:00:00:00';
           updateInOutUI(); updateScrubTicks(); updateControlAvailability();
@@ -1405,7 +1405,7 @@
         player.inPoint = entry.inPoint;
         player.outPoint = entry.outPoint;
         player.loop = loopEnabled;
-        btnPlay.textContent = '▶';
+        btnPlay.textContent = '▶︎';
         try {
           await player.load(entry.objectUrl, entry.fps);
           if (player.duration) entry.duration = player.duration;
@@ -1437,7 +1437,7 @@
         if (player.playing) {
           player.pause();
           if (compareMode && playerB) playerB.pause();
-          btnPlay.textContent = '▶';
+          btnPlay.textContent = '▶︎';
         } else {
           if (loopEnabled) {
             const entry = playlist[activeIndex];
@@ -1453,7 +1453,7 @@
             playerB.seekToTime(player.getCurrentTime());
             playerB.play();
           }
-          btnPlay.textContent = '⏸';
+          btnPlay.textContent = '⏸︎';
         }
       });
 
@@ -2411,7 +2411,7 @@
           if (!isInVideoBoundsB(pos)) return;
           penCanvasB.setPointerCapture(e.pointerId);
           if (currentTool === 'pen') {
-            if (playerB.playing) { playerB.pause(); player.pause(); btnPlay.textContent = '▶'; }
+            if (playerB.playing) { playerB.pause(); player.pause(); btnPlay.textContent = '▶︎'; }
             isDrawingB = true;
             currentStrokeB = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] };
             redrawPenCanvasB();
@@ -2598,7 +2598,7 @@
         if (!isInVideoBounds(pos)) return;
         penCanvas.setPointerCapture(e.pointerId);
         if (currentTool === 'pen') {
-          if (player.playing) { player.pause(); btnPlay.textContent = '▶'; }
+          if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
           isDrawing = true;
           currentStroke = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] };
           redrawPenCanvas();
