@@ -1083,23 +1083,29 @@
         }
 
         function addDragHandlers(row, type, id, folderId) {
-          row.draggable = true;
+          // Only the handle is draggable — not the whole row — so buttons/dots still get clicks
           row.dataset.itemId = id;
-          row.dataset.itemType = type; // 'video' or 'folder'
+          row.dataset.itemType = type;
           row.dataset.folderId = folderId || '';
 
-          row.addEventListener('dragstart', e => {
-            if (e.target.closest('button, .pl-color-dot, .pl-folder-arrow, .pl-rename-input')) { e.preventDefault(); return; }
+          const handle = document.createElement('div');
+          handle.className = 'pl-drag-handle';
+          handle.title = 'Drag to reorder';
+          handle.textContent = '⠿';
+          handle.draggable = true;
+
+          handle.addEventListener('dragstart', e => {
             dragInfo = { type, id, srcFolderId: folderId || null };
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', id);
             row.classList.add('pl-dragging');
           });
-          row.addEventListener('dragend', () => {
+          handle.addEventListener('dragend', () => {
             row.classList.remove('pl-dragging');
             clearDragIndicators();
             dragInfo = null;
           });
+          return handle;
         }
 
         function makeVideoRow(entry, inFolder) {
@@ -1110,8 +1116,7 @@
           row.className = 'playlist-row' + (isActive ? ' active' : '') + (isCompare ? ' compare-active' : '') + (inFolder ? ' in-folder' : '');
           if (entry.color && !isActive && !isCompare) row.style.borderLeftColor = entry.color;
 
-          addDragHandlers(row, 'video', entry.id, entry.folderId || null);
-
+          row.appendChild(addDragHandlers(row, 'video', entry.id, entry.folderId || null));
           row.appendChild(makeColorDot(entry, true));
 
           const thumbEl = document.createElement(entry.thumbnail ? 'img' : 'div');
@@ -1175,7 +1180,7 @@
           row.className = 'pl-folder-row';
           if (folder.color) row.style.borderLeftColor = folder.color;
 
-          addDragHandlers(row, 'folder', folder.id, null);
+          row.appendChild(addDragHandlers(row, 'folder', folder.id, null));
 
           const arrow = document.createElement('span');
           arrow.className = 'pl-folder-arrow';

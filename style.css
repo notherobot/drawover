@@ -183,8 +183,12 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   outline-offset: -1px;
 }
 .pl-dragging { opacity: 0.4; }
-[draggable="true"] { cursor: grab; }
-[draggable="true"]:active { cursor: grabbing; }
+.pl-drag-handle {
+  color: #444; font-size: 13px; cursor: grab; flex-shrink: 0;
+  padding: 0 3px; user-select: none; line-height: 1;
+}
+.pl-drag-handle:hover { color: #888; }
+.pl-drag-handle:active { cursor: grabbing; }
 
 /* ===== CONTENT ===== */
 #content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
