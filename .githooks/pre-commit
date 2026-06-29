@@ -1,0 +1,8 @@
+#!/bin/bash
+# Auto-update the "Last Updated" timestamp in index.html before every commit.
+
+TIMESTAMP=$(TZ='America/Los_Angeles' date '+%m/%d/%Y %-I:%M%p PST')
+
+sed -i "s/\[Last Updated: [^]]*\]/[Last Updated: $TIMESTAMP]/" index.html
+
+git add index.html
