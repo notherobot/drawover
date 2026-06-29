@@ -10,10 +10,7 @@
 <body>
   <div id="app">
     <div id="topbar">
-      <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div class="topbar-sep"></div>
-      <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
-      <button id="btn-compare" title="Compare two videos side-by-side">Compare</button>
+      <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
       <div id="app-title">DrawOver <span id="version">v0.2.2</span></div>
     </div>
 
@@ -31,6 +28,9 @@
 
       <div id="content">
         <div id="tool-row">
+          <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
+          <button id="btn-compare" title="Compare two videos side-by-side">Compare</button>
+          <div class="tool-sep"></div>
           <div class="tool-group">
             <button class="tool-btn" data-tool="pan" title="Pan — click and drag (H)">✋</button>
             <button class="tool-btn" data-tool="zoom" title="Zoom — drag up/down, or +/− (Z)">🔍</button>
@@ -2954,6 +2954,7 @@
         sidebarEl.classList.toggle('sidebar-open', open);
         sidebarOverlay.classList.toggle('open', open && isMobile());
         btnSidebarToggle.classList.toggle('active', open);
+        btnSidebarToggle.textContent = open ? '‹ Hide Playlist' : 'Show Playlist ›';
         if (!isMobile()) resizeCanvases();
       }
 

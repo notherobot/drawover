@@ -33,19 +33,19 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 
 /* ===== SIDEBAR TOGGLE BUTTON ===== */
 #btn-sidebar-toggle {
-  background: none; border: none; color: #aaa; font-size: 18px;
-  padding: 2px 8px; flex-shrink: 0; border-radius: 4px;
+  background: none; border: 1px solid #2e2e2e; color: #aaa; font-size: 11px;
+  padding: 3px 10px; flex-shrink: 0; border-radius: 4px; white-space: nowrap; cursor: pointer;
 }
-#btn-sidebar-toggle:hover { background: #2a2a2a; color: #e0e0e0; }
-#btn-sidebar-toggle.active { color: #3aa0ff; }
-.topbar-sep { width: 1px; height: 18px; background: #2a2a2a; margin: 0 6px; flex-shrink: 0; }
+#btn-sidebar-toggle:hover { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
+#btn-sidebar-toggle.active { color: #3aa0ff; border-color: #2a4a6e; }
+#app-title { flex: 1; text-align: center; font-size: 14px; font-weight: 600; color: #3aa0ff; letter-spacing: 0.5px; }
+/* Reframe + Compare live in tool-row */
 #btn-reset-view, #btn-compare {
-  background: none; border: 1px solid #333; color: #bbb; font-size: 12px;
-  padding: 3px 9px; border-radius: 4px; cursor: pointer; flex-shrink: 0; white-space: nowrap;
+  background: none; border: 1px solid #333; color: #bbb; font-size: 11px;
+  padding: 4px 9px; border-radius: 4px; cursor: pointer; flex-shrink: 0; white-space: nowrap; height: 30px;
 }
 #btn-reset-view:hover, #btn-compare:hover { background: #2a2a2a; color: #e0e0e0; }
 #btn-compare.active { background: #1e3550; border-color: #3aa0ff; color: #3aa0ff; }
-#app-title { flex: 1; text-align: center; font-size: 14px; font-weight: 600; color: #3aa0ff; letter-spacing: 0.5px; }
 
 /* ===== SIDEBAR ===== */
 #sidebar-overlay {
