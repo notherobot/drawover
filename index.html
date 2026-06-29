@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.97</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.98</span></div>
     </div>
 
     <div id="main-body">
@@ -137,7 +137,10 @@
           <button id="btn-mute" title="Mute">🔊</button>
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
-          <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡</button>
+          <div class="pb-sep"></div>
+          <button id="btn-pan-drag" title="Pan — hold and drag">✥ Pan</button>
+          <button id="btn-zoom-drag" title="Zoom — hold and drag">⌕ Zoom</button>
+          <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
           <button id="btn-compare" title="Compare two videos side-by-side">⧉</button>
           <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
         </div>
@@ -145,7 +148,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.97</span>
+          <span id="status-version">DrawOver v1.98</span>
         </div>
       </div>
     </div>
@@ -167,10 +170,12 @@
       <tr><td>Ctrl+Z</td><td>Undo</td></tr>
       <tr><td>Ctrl+⇧+Z</td><td>Redo</td></tr>
       <tr class="sc-section"><td colspan="2">Range &amp; View</td></tr>
-      <tr><td>A</td><td>Reset pan &amp; zoom</td></tr>
+      <tr><td>A</td><td>Reframe (reset pan &amp; zoom)</td></tr>
       <tr><td>I</td><td>Set In point</td></tr>
       <tr><td>O</td><td>Set Out point</td></tr>
-      <tr class="sc-section"><td colspan="2">Mouse</td></tr>
+      <tr class="sc-section"><td colspan="2">Pan &amp; Zoom (mouse or toolbar buttons)</td></tr>
+      <tr><td>✥ Pan hold+drag</td><td>Pan viewport</td></tr>
+      <tr><td>⌕ Zoom hold+drag</td><td>Zoom viewport</td></tr>
       <tr><td>Right-drag</td><td>Zoom at click point</td></tr>
       <tr><td>MMB drag</td><td>Pan</td></tr>
       <tr><td>Scroll</td><td>Zoom at cursor</td></tr>
@@ -192,7 +197,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.97</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.98</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2078,6 +2083,51 @@
         if (compareMode && !comparePanelLeft) { panXB = 0; panYB = 0; vpZoomB = 1; applyViewportB(); }
         else { panX = 0; panY = 0; vpZoom = 1; applyViewport(); }
       });
+
+      // ===== PAN / ZOOM DRAG BUTTONS =====
+      (function() {
+        let vdState = null;
+        function setupViewBtn(id, type) {
+          const btn = document.getElementById(id);
+          btn.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            btn.setPointerCapture(e.pointerId);
+            const isB = compareMode && !comparePanelLeft;
+            vdState = { type, isB,
+              sx: e.clientX, sy: e.clientY,
+              px: isB ? panXB : panX, py: isB ? panYB : panY,
+              zoom: isB ? vpZoomB : vpZoom };
+            btn.classList.add('active');
+          });
+          btn.addEventListener('pointermove', (e) => {
+            if (!vdState || vdState.type !== type) return;
+            const dx = e.clientX - vdState.sx, dy = e.clientY - vdState.sy;
+            if (type === 'pan') {
+              if (vdState.isB) { panXB = vdState.px + dx; panYB = vdState.py + dy; applyViewportB(); }
+              else { panX = vdState.px + dx; panY = vdState.py + dy; applyViewport(); }
+            } else {
+              const newZoom = Math.max(0.1, Math.min(20, vdState.zoom * Math.pow(1.005, -dy)));
+              const ratio = newZoom / vdState.zoom;
+              if (vdState.isB) {
+                vpZoomB = newZoom;
+                panXB = vdState.px * ratio + (1 - ratio) * 0; // zoom around origin; fine for now
+                panYB = vdState.py * ratio;
+                applyViewportB();
+              } else {
+                vpZoom = newZoom;
+                panX = vdState.px * ratio;
+                panY = vdState.py * ratio;
+                applyViewport();
+              }
+            }
+          });
+          const end = () => { if (vdState) { vdState = null; btn.classList.remove('active'); } };
+          btn.addEventListener('pointerup', end);
+          btn.addEventListener('pointercancel', end);
+        }
+        setupViewBtn('btn-pan-drag', 'pan');
+        setupViewBtn('btn-zoom-drag', 'zoom');
+      })();
 
       // ===== COMPARE MODE =====
       function exitCompareMode() {
