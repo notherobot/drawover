@@ -2251,6 +2251,7 @@
 
       document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT') return;
+        if (e.key === 'Escape' && currentTool === 'arc-tracer') { e.preventDefault(); activateTool(prevTool || 'pen'); return; }
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'Z' || e.key === 'z')) { e.preventDefault(); redo(); }
         else if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || e.key === 'z')) { e.preventDefault(); undo(); }
         else if (e.key === ' ') { e.preventDefault(); btnPlay.click(); }
