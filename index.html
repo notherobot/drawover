@@ -29,7 +29,6 @@
             <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
             <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
             <button class="tool-btn" data-tool="eraser" title="Eraser (E)">🧹</button>
-            <button class="tool-btn" data-tool="arc-tracer" title="Arc Tracer (T)">⊙</button>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group" id="color-swatches">
@@ -48,13 +47,15 @@
             <label>Opacity <input type="range" id="brush-opacity" min="1" max="100" value="100"><span id="brush-opacity-val">100</span>%</label>
             <label>Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="3"><span id="laser-hold-val">3</span>s</label>
           </div>
-          <div class="tool-sep"></div>
+          <div class="tool-sep" id="arc-sep" style="display:none"></div>
           <div id="arc-controls" class="tool-group">
-            <span style="font-size:11px;color:#aaa;white-space:nowrap">Arc window:</span>
+            <span style="font-size:11px;color:#aaa;white-space:nowrap">Window:</span>
             <input type="number" id="arc-window" min="1" max="50" value="5" title="Frames before/after current to show">
             <span style="font-size:11px;color:#aaa">fr</span>
-            <button id="btn-clear-arc" style="font-size:11px;padding:0 6px">Clear Arc</button>
+            <button id="btn-clear-arc" style="font-size:11px;padding:0 6px">Clear</button>
+            <button id="btn-arc-done" style="font-size:11px;padding:0 8px;background:#1e3520;border-color:#3aa060">✓ Done</button>
           </div>
+          <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)">⊙</button>
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
@@ -96,6 +97,7 @@
             <div id="scrub-progress"></div>
             <div id="scrub-inout"></div>
             <div id="scrub-ticks"></div>
+            <div id="scrub-arc-ticks"></div>
             <div id="scrub-frame">F: 0</div>
             <div id="scrub-playhead"></div>
             <div id="scrub-in-handle" class="io-handle"></div>
@@ -181,6 +183,11 @@
     <div id="eyedropper-hex">#ff3333</div>
   </div>
 
+  <!-- Arc tracer magnifier -->
+  <div id="arc-magnifier">
+    <canvas id="arc-magnifier-canvas" width="120" height="120"></canvas>
+  </div>
+
   <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
@@ -217,8 +224,14 @@
       const arcCanvas = document.getElementById('arc-canvas');
       const arcCtx = arcCanvas.getContext('2d');
       const arcControlsEl = document.getElementById('arc-controls');
+      const arcSepEl = document.getElementById('arc-sep');
       const arcWindowInput = document.getElementById('arc-window');
       const btnClearArc = document.getElementById('btn-clear-arc');
+      const btnArcDone = document.getElementById('btn-arc-done');
+      const scrubArcTicks = document.getElementById('scrub-arc-ticks');
+      const arcMagnifierOverlay = document.getElementById('arc-magnifier');
+      const arcMagnifierCanvas = document.getElementById('arc-magnifier-canvas');
+      const arcMagnifierCtx = arcMagnifierCanvas.getContext('2d');
       const videoContainerB = document.getElementById('video-container-b');
       const videoViewportB = document.getElementById('video-viewport-b');
       const videoArea = document.getElementById('video-area');
@@ -711,7 +724,7 @@
 
       const player = new FramePlayer(mainCanvas, mainCtx);
       player.onFrameChange = () => { redrawPenCanvas(); redrawArcCanvas(); updateScrubBar(); updateScrubTimes(); };
-      player.onDurationChange = (dur) => { scrubTotal.textContent = formatTimecode(dur); updateScrubTicks(); };
+      player.onDurationChange = (dur) => { scrubTotal.textContent = formatTimecode(dur); updateScrubTicks(); updateArcTicks(); };
 
       // ===== PLAYLIST =====
       btnAddVideo.addEventListener('click', () => fileInput.click());
@@ -1116,11 +1129,16 @@
 
       function activateTool(tool) {
         if (tool === 'eyedrop' && currentTool !== 'eyedrop') prevTool = currentTool;
+        if (tool === 'arc-tracer' && currentTool !== 'arc-tracer') prevTool = currentTool;
         if (currentTool === 'eyedrop' && tool !== 'eyedrop') hideEyedropPreview();
-        if (currentTool === 'arc-tracer' && tool !== 'arc-tracer') { arcCrosshairPos = null; redrawArcCanvas(); }
+        if (currentTool === 'arc-tracer' && tool !== 'arc-tracer') {
+          arcCrosshairPos = null; hideArcMagnifier(); redrawArcCanvas();
+        }
         currentTool = tool;
         toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
-        arcControlsEl.style.display = tool === 'arc-tracer' ? 'flex' : 'none';
+        const showArc = tool === 'arc-tracer';
+        arcControlsEl.style.display = showArc ? 'flex' : 'none';
+        arcSepEl.style.display = showArc ? '' : 'none';
         updateToolCursor();
       }
 
@@ -1152,7 +1170,10 @@
         entry.arcPoints = {};
         scheduleAnnotationSave();
         redrawArcCanvas();
+        updateArcTicks();
       });
+
+      btnArcDone.addEventListener('click', () => activateTool(prevTool || 'pen'));
 
       // ===== COLOR SWATCHES =====
       function setDrawColor(hex) {
@@ -1270,6 +1291,57 @@
 
       function hideEyedropPreview() {
         eyedropOverlay.style.display = 'none';
+      }
+
+      // ===== ARC MAGNIFIER =====
+      function showArcMagnifier(e, pos) {
+        const vw = mainCanvas.width, vh = mainCanvas.height;
+        if (!vw || !vh || !player.video || player.video.readyState < 2) {
+          arcMagnifierOverlay.style.display = 'none'; return;
+        }
+        const cw = penCanvas.width, ch = penCanvas.height;
+        const scale = Math.min(cw / vw, ch / vh);
+        const fw = vw * scale, fh = vh * scale;
+        const ox = (cw - fw) / 2, oy = (ch - fh) / 2;
+        const mx = (pos.x * cw - ox) / scale;
+        const my = (pos.y * ch - oy) / scale;
+        const S = 120, srcR = 12;
+        arcMagnifierCtx.imageSmoothingEnabled = false;
+        arcMagnifierCtx.fillStyle = '#111';
+        arcMagnifierCtx.fillRect(0, 0, S, S);
+        arcMagnifierCtx.drawImage(mainCanvas, mx - srcR, my - srcR, srcR * 2, srcR * 2, 0, 0, S, S);
+        arcMagnifierCtx.strokeStyle = 'rgba(0,0,0,0.6)';
+        arcMagnifierCtx.lineWidth = 2;
+        arcMagnifierCtx.beginPath(); arcMagnifierCtx.moveTo(S/2, 0); arcMagnifierCtx.lineTo(S/2, S); arcMagnifierCtx.stroke();
+        arcMagnifierCtx.beginPath(); arcMagnifierCtx.moveTo(0, S/2); arcMagnifierCtx.lineTo(S, S/2); arcMagnifierCtx.stroke();
+        arcMagnifierCtx.strokeStyle = 'rgba(255,255,255,0.85)';
+        arcMagnifierCtx.lineWidth = 1;
+        arcMagnifierCtx.beginPath(); arcMagnifierCtx.moveTo(S/2, 0); arcMagnifierCtx.lineTo(S/2, S); arcMagnifierCtx.stroke();
+        arcMagnifierCtx.beginPath(); arcMagnifierCtx.moveTo(0, S/2); arcMagnifierCtx.lineTo(S, S/2); arcMagnifierCtx.stroke();
+        const W = S + 16, H = S + 16;
+        let left = e.clientX + 18, top = e.clientY + 18;
+        if (left + W > window.innerWidth) left = e.clientX - W - 10;
+        if (top + H > window.innerHeight) top = e.clientY - H - 10;
+        arcMagnifierOverlay.style.left = left + 'px';
+        arcMagnifierOverlay.style.top = top + 'px';
+        arcMagnifierOverlay.style.display = 'block';
+      }
+
+      function hideArcMagnifier() { arcMagnifierOverlay.style.display = 'none'; }
+
+      // ===== ARC TIMELINE TICKS =====
+      function updateArcTicks() {
+        scrubArcTicks.innerHTML = '';
+        const entry = getActiveEntry();
+        if (!entry || !entry.arcPoints || !player.duration) return;
+        Object.keys(entry.arcPoints).map(Number).forEach(f => {
+          const pct = (f / (entry.fps || 24) / player.duration) * 100;
+          if (pct < 0 || pct > 100) return;
+          const tick = document.createElement('div');
+          tick.className = 'scrub-arc-tick';
+          tick.style.left = pct + '%';
+          scrubArcTicks.appendChild(tick);
+        });
       }
 
       // ===== DRAWING =====
@@ -1733,6 +1805,7 @@
           if (!entry.arcPoints) entry.arcPoints = {};
           entry.arcPoints[player.currentFrame] = { x: pos.x, y: pos.y };
           redrawArcCanvas();
+          updateArcTicks();
           scheduleAnnotationSave();
           player.stepFrame(1);
           return;
@@ -1793,6 +1866,7 @@
         if (currentTool === 'arc-tracer') {
           arcCrosshairPos = getCanvasPos(e);
           redrawArcCanvas();
+          showArcMagnifier(e, arcCrosshairPos);
           return;
         }
 
@@ -1827,7 +1901,7 @@
 
       penCanvas.addEventListener('pointerleave', () => {
         if (currentTool === 'eyedrop') hideEyedropPreview();
-        if (currentTool === 'arc-tracer') { arcCrosshairPos = null; redrawArcCanvas(); }
+        if (currentTool === 'arc-tracer') { arcCrosshairPos = null; hideArcMagnifier(); redrawArcCanvas(); }
       });
 
       penCanvas.addEventListener('pointerup', (e) => {
