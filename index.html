@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">☰</button>
-      <div id="app-title">DrawOver <span id="version">v1.96</span></div>
+      <div id="app-title">DrawOver <span id="version">v1.97</span></div>
     </div>
 
     <div id="main-body">
@@ -29,6 +29,7 @@
             <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
             <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
             <button class="tool-btn" data-tool="eraser" title="Eraser (E)">🧹</button>
+            <button class="tool-btn" data-tool="arc-tracer" title="Arc Tracer (T)">⊙</button>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group" id="color-swatches">
@@ -47,6 +48,13 @@
             <label>Opacity <input type="range" id="brush-opacity" min="1" max="100" value="100"><span id="brush-opacity-val">100</span>%</label>
             <label>Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="3"><span id="laser-hold-val">3</span>s</label>
           </div>
+          <div class="tool-sep"></div>
+          <div id="arc-controls" class="tool-group">
+            <span style="font-size:11px;color:#aaa;white-space:nowrap">Arc window:</span>
+            <input type="number" id="arc-window" min="1" max="50" value="5" title="Frames before/after current to show">
+            <span style="font-size:11px;color:#aaa">fr</span>
+            <button id="btn-clear-arc" style="font-size:11px;padding:0 6px">Clear Arc</button>
+          </div>
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
@@ -60,6 +68,7 @@
                 <canvas id="main-canvas"></canvas>
                 <canvas id="pen-canvas"></canvas>
                 <canvas id="laser-canvas"></canvas>
+                <canvas id="arc-canvas"></canvas>
               </div>
             </div>
           </div>
@@ -134,7 +143,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v1.96</span>
+          <span id="status-version">DrawOver v1.97</span>
         </div>
       </div>
     </div>
@@ -152,6 +161,7 @@
       <tr><td>B</td><td>Pen tool</td></tr>
       <tr><td>E</td><td>Eraser tool</td></tr>
       <tr><td>L</td><td>Laser tool</td></tr>
+      <tr><td>T</td><td>Arc Tracer</td></tr>
       <tr><td>Ctrl+Z</td><td>Undo</td></tr>
       <tr><td>Ctrl+⇧+Z</td><td>Redo</td></tr>
       <tr class="sc-section"><td colspan="2">Range &amp; View</td></tr>
@@ -175,7 +185,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.96</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v1.97</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -204,6 +214,11 @@
       const mainCtxB = mainCanvasB.getContext('2d');
       const penCtxB = penCanvasB.getContext('2d');
       const laserCtxB = laserCanvasB.getContext('2d');
+      const arcCanvas = document.getElementById('arc-canvas');
+      const arcCtx = arcCanvas.getContext('2d');
+      const arcControlsEl = document.getElementById('arc-controls');
+      const arcWindowInput = document.getElementById('arc-window');
+      const btnClearArc = document.getElementById('btn-clear-arc');
       const videoContainerB = document.getElementById('video-container-b');
       const videoViewportB = document.getElementById('video-viewport-b');
       const videoArea = document.getElementById('video-area');
@@ -280,6 +295,9 @@
       let vpDrag = null; // { type:'pan'|'zoom', startX, startY, startPanX, startPanY, startZoom, cx, cy }
 
       // ===== COMPARE MODE STATE =====
+      let arcWindow = 5;
+      let arcCrosshairPos = null;
+
       let compareMode = false;
       let comparePanelLeft = true; // true = left panel is active for drawing/undo
       let compareIndex = -1;
@@ -346,6 +364,7 @@
         return dbPut({
           id: entry.id, name: entry.name, blob: entry.blob,
           annotations: entry.annotations,
+          arcPoints: entry.arcPoints || {},
           inPoint: entry.inPoint, outPoint: entry.outPoint,
           fps: entry.fps, duration: entry.duration,
           thumbnail: entry.thumbnail
@@ -395,6 +414,7 @@
             playlist.push({
               id: rec.id, name: rec.name, blob: rec.blob, objectUrl,
               annotations: rec.annotations || {},
+              arcPoints: rec.arcPoints || {},
               inPoint: rec.inPoint ?? null, outPoint: rec.outPoint ?? null,
               fps: rec.fps || 24, duration: rec.duration || 0,
               thumbnail: rec.thumbnail || null,
@@ -690,7 +710,7 @@
       }
 
       const player = new FramePlayer(mainCanvas, mainCtx);
-      player.onFrameChange = () => { redrawPenCanvas(); updateScrubBar(); updateScrubTimes(); };
+      player.onFrameChange = () => { redrawPenCanvas(); redrawArcCanvas(); updateScrubBar(); updateScrubTimes(); };
       player.onDurationChange = (dur) => { scrubTotal.textContent = formatTimecode(dur); updateScrubTicks(); };
 
       // ===== PLAYLIST =====
@@ -720,7 +740,7 @@
         const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
           playlist.push(entry);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
@@ -827,7 +847,8 @@
         if (!rect.width || !rect.height) return;
         penCanvas.width = rect.width; penCanvas.height = rect.height;
         laserCanvas.width = rect.width; laserCanvas.height = rect.height;
-        redrawPenCanvas(); redrawLaserCanvas(); updateScrubTicks();
+        arcCanvas.width = rect.width; arcCanvas.height = rect.height;
+        redrawPenCanvas(); redrawLaserCanvas(); redrawArcCanvas(); updateScrubTicks();
         updateToolCursor();
       }
       new ResizeObserver(resizeCanvases).observe(videoContainer);
@@ -1058,6 +1079,10 @@
 
       // ===== TOOLS =====
       function updateToolCursor() {
+        if (currentTool === 'arc-tracer') {
+          penCanvas.style.cursor = penCanvasB.style.cursor = 'none';
+          return;
+        }
         if (currentTool === 'laser' || currentTool === 'eyedrop') {
           penCanvas.style.cursor = penCanvasB.style.cursor = 'crosshair';
           return;
@@ -1092,8 +1117,10 @@
       function activateTool(tool) {
         if (tool === 'eyedrop' && currentTool !== 'eyedrop') prevTool = currentTool;
         if (currentTool === 'eyedrop' && tool !== 'eyedrop') hideEyedropPreview();
+        if (currentTool === 'arc-tracer' && tool !== 'arc-tracer') { arcCrosshairPos = null; redrawArcCanvas(); }
         currentTool = tool;
         toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+        arcControlsEl.style.display = tool === 'arc-tracer' ? 'flex' : 'none';
         updateToolCursor();
       }
 
@@ -1113,6 +1140,18 @@
       laserHoldSlider.addEventListener('input', () => {
         laserHoldMs = parseFloat(laserHoldSlider.value) * 1000;
         laserHoldValEl.textContent = laserHoldSlider.value;
+      });
+
+      arcWindowInput.addEventListener('input', () => {
+        arcWindow = Math.max(1, parseInt(arcWindowInput.value, 10) || 5);
+        redrawArcCanvas();
+      });
+
+      btnClearArc.addEventListener('click', () => {
+        const entry = getActiveEntry(); if (!entry) return;
+        entry.arcPoints = {};
+        scheduleAnnotationSave();
+        redrawArcCanvas();
       });
 
       // ===== COLOR SWATCHES =====
@@ -1403,6 +1442,81 @@
         laserCtxB.restore();
       }
 
+      function redrawArcCanvas() {
+        arcCtx.clearRect(0, 0, arcCanvas.width, arcCanvas.height);
+        const w = arcCanvas.width, h = arcCanvas.height;
+
+        // Full-canvas crosshair when arc tracer is active and cursor is on canvas
+        if (currentTool === 'arc-tracer' && arcCrosshairPos) {
+          const cx = arcCrosshairPos.x * w, cy = arcCrosshairPos.y * h;
+          arcCtx.save();
+          arcCtx.strokeStyle = 'rgba(255,255,255,0.8)';
+          arcCtx.lineWidth = 1;
+          arcCtx.setLineDash([5, 5]);
+          arcCtx.beginPath(); arcCtx.moveTo(0, cy); arcCtx.lineTo(w, cy); arcCtx.stroke();
+          arcCtx.beginPath(); arcCtx.moveTo(cx, 0); arcCtx.lineTo(cx, h); arcCtx.stroke();
+          arcCtx.restore();
+        }
+
+        // Arc path and dots
+        const entry = getActiveEntry();
+        if (!entry || !entry.arcPoints) return;
+        const allPts = entry.arcPoints;
+        const allFrames = Object.keys(allPts).map(Number).sort((a, b) => a - b);
+        if (!allFrames.length) return;
+
+        const currentFrame = player.currentFrame;
+        const visible = allFrames.filter(f => Math.abs(f - currentFrame) <= arcWindow);
+        if (!visible.length) return;
+
+        // Smooth connecting curve through visible points
+        if (visible.length >= 2) {
+          const coords = visible.map(f => ({ x: allPts[f].x * w, y: allPts[f].y * h, f }));
+          arcCtx.save();
+          arcCtx.strokeStyle = 'rgba(255, 200, 50, 0.55)';
+          arcCtx.lineWidth = 1.5;
+          arcCtx.lineCap = 'round';
+          arcCtx.lineJoin = 'round';
+          arcCtx.setLineDash([]);
+          arcCtx.beginPath();
+          arcCtx.moveTo(coords[0].x, coords[0].y);
+          if (coords.length === 2) {
+            arcCtx.lineTo(coords[1].x, coords[1].y);
+          } else {
+            arcCtx.lineTo((coords[0].x + coords[1].x) / 2, (coords[0].y + coords[1].y) / 2);
+            for (let i = 1; i < coords.length - 1; i++) {
+              const mx = (coords[i].x + coords[i+1].x) / 2;
+              const my = (coords[i].y + coords[i+1].y) / 2;
+              arcCtx.quadraticCurveTo(coords[i].x, coords[i].y, mx, my);
+            }
+            arcCtx.lineTo(coords[coords.length-1].x, coords[coords.length-1].y);
+          }
+          arcCtx.stroke();
+          arcCtx.restore();
+        }
+
+        // Dots at each visible point
+        for (const f of visible) {
+          const dist = Math.abs(f - currentFrame);
+          const isCurrent = dist === 0;
+          const opacity = isCurrent ? 1 : Math.max(0.25, 1 - dist / (arcWindow + 1));
+          const radius = isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35);
+          const px = allPts[f].x * w, py = allPts[f].y * h;
+          const color = isCurrent ? '#ffcc00' : (f < currentFrame ? '#ff7733' : '#44aaff');
+          arcCtx.save();
+          arcCtx.globalAlpha = opacity;
+          arcCtx.beginPath();
+          arcCtx.arc(px, py, radius + 1.5, 0, Math.PI * 2);
+          arcCtx.fillStyle = 'rgba(0,0,0,0.5)';
+          arcCtx.fill();
+          arcCtx.beginPath();
+          arcCtx.arc(px, py, radius, 0, Math.PI * 2);
+          arcCtx.fillStyle = color;
+          arcCtx.fill();
+          arcCtx.restore();
+        }
+      }
+
       function resizeCanvasesB() {
         const rect = videoContainerB.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
@@ -1613,6 +1727,16 @@
           videoViewport.classList.add('zooming');
           return;
         }
+        if (currentTool === 'arc-tracer' && activeIndex >= 0 && e.button === 0) {
+          const pos = getCanvasPos(e);
+          const entry = getActiveEntry(); if (!entry) return;
+          if (!entry.arcPoints) entry.arcPoints = {};
+          entry.arcPoints[player.currentFrame] = { x: pos.x, y: pos.y };
+          redrawArcCanvas();
+          scheduleAnnotationSave();
+          player.stepFrame(1);
+          return;
+        }
         if (!drawingsVisible || activeIndex < 0) return;
         const pos = getCanvasPos(e);
         if (currentTool === 'eyedrop') {
@@ -1666,6 +1790,12 @@
           return;
         }
 
+        if (currentTool === 'arc-tracer') {
+          arcCrosshairPos = getCanvasPos(e);
+          redrawArcCanvas();
+          return;
+        }
+
         if (currentTool === 'pen' && isDrawing && currentStroke) {
           const cpos = clampToVideo(pos);
           currentStroke.points.push({ ...cpos, p: getPressure(e) });
@@ -1697,6 +1827,7 @@
 
       penCanvas.addEventListener('pointerleave', () => {
         if (currentTool === 'eyedrop') hideEyedropPreview();
+        if (currentTool === 'arc-tracer') { arcCrosshairPos = null; redrawArcCanvas(); }
       });
 
       penCanvas.addEventListener('pointerup', (e) => {
@@ -1828,6 +1959,7 @@
           if (e.key === 'b' || e.key === 'B') activateTool('pen');
           else if (e.key === 'e' || e.key === 'E') activateTool('eraser');
           else if (e.key === 'l' || e.key === 'L') activateTool('laser');
+          else if (e.key === 't' || e.key === 'T') activateTool('arc-tracer');
           else if (e.key === 'i' || e.key === 'I') btnSetIn.click();
           else if (e.key === 'o' || e.key === 'O') btnSetOut.click();
           else if (e.key === 'a' || e.key === 'A') {
@@ -2023,7 +2155,7 @@
         const firstNewIdx = playlist.length;
         for (const file of files) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null };
           playlist.push(entry);
           await new Promise(resolve => {
             const tmp = document.createElement('video');
