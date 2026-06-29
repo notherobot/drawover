@@ -56,7 +56,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   transition: width 0.2s ease;
 }
 #sidebar.sidebar-open {
-  width: 220px; min-width: 220px;
+  width: 440px; min-width: 440px;
 }
 #sidebar-btns { display: flex; gap: 6px; padding: 8px 8px 4px; flex-shrink: 0; }
 #btn-add-video {
