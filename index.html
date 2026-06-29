@@ -2088,48 +2088,63 @@
       // ===== PAN / ZOOM DRAG BUTTONS =====
       (function() {
         let vdState = null;
+        let accDx = 0, accDy = 0;
+
+        function applyDrag() {
+          if (!vdState) return;
+          if (vdState.type === 'pan') {
+            if (vdState.isB) { panXB = vdState.px + accDx; panYB = vdState.py + accDy; applyViewportB(); }
+            else { panX = vdState.px + accDx; panY = vdState.py + accDy; applyViewport(); }
+          } else {
+            const newZoom = Math.max(0.1, Math.min(20, vdState.zoom * Math.pow(1.005, -accDy)));
+            const ratio = newZoom / vdState.zoom;
+            const cx = vdState.cx, cy = vdState.cy;
+            if (vdState.isB) {
+              vpZoomB = newZoom;
+              panXB = cx - (cx - vdState.px) * ratio;
+              panYB = cy - (cy - vdState.py) * ratio;
+              applyViewportB();
+            } else {
+              vpZoom = newZoom;
+              panX = cx - (cx - vdState.px) * ratio;
+              panY = cy - (cy - vdState.py) * ratio;
+              applyViewport();
+            }
+          }
+        }
+
+        document.addEventListener('mousemove', (e) => {
+          if (!vdState || !document.pointerLockElement) return;
+          accDx += e.movementX;
+          accDy += e.movementY;
+          applyDrag();
+        });
+
+        document.addEventListener('pointerup', () => {
+          if (!vdState) return;
+          const btn = document.getElementById(vdState.type === 'pan' ? 'btn-pan-drag' : 'btn-zoom-drag');
+          btn.classList.remove('active');
+          vdState = null;
+          document.exitPointerLock();
+        });
+
         function setupViewBtn(id, type) {
           const btn = document.getElementById(id);
           btn.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            btn.setPointerCapture(e.pointerId);
             const isB = compareMode && !comparePanelLeft;
             const container = isB ? videoViewportB : videoViewport;
             const rect = container ? container.getBoundingClientRect() : { width: 0, height: 0 };
+            accDx = 0; accDy = 0;
             vdState = { type, isB,
-              sx: e.clientX, sy: e.clientY,
               px: isB ? panXB : panX, py: isB ? panYB : panY,
               zoom: isB ? vpZoomB : vpZoom,
               cx: rect.width / 2, cy: rect.height / 2 };
             btn.classList.add('active');
+            btn.requestPointerLock();
           });
-          btn.addEventListener('pointermove', (e) => {
-            if (!vdState || vdState.type !== type) return;
-            const dx = e.clientX - vdState.sx, dy = e.clientY - vdState.sy;
-            if (type === 'pan') {
-              if (vdState.isB) { panXB = vdState.px + dx; panYB = vdState.py + dy; applyViewportB(); }
-              else { panX = vdState.px + dx; panY = vdState.py + dy; applyViewport(); }
-            } else {
-              const newZoom = Math.max(0.1, Math.min(20, vdState.zoom * Math.pow(1.005, -dy)));
-              const ratio = newZoom / vdState.zoom;
-              const cx = vdState.cx, cy = vdState.cy;
-              if (vdState.isB) {
-                vpZoomB = newZoom;
-                panXB = cx - (cx - vdState.px) * ratio;
-                panYB = cy - (cy - vdState.py) * ratio;
-                applyViewportB();
-              } else {
-                vpZoom = newZoom;
-                panX = cx - (cx - vdState.px) * ratio;
-                panY = cy - (cy - vdState.py) * ratio;
-                applyViewport();
-              }
-            }
-          });
-          const end = () => { if (vdState) { vdState = null; btn.classList.remove('active'); } };
-          btn.addEventListener('pointerup', end);
-          btn.addEventListener('pointercancel', end);
         }
+
         setupViewBtn('btn-pan-drag', 'pan');
         setupViewBtn('btn-zoom-drag', 'zoom');
       })();
