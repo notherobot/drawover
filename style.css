@@ -481,6 +481,11 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 #welcome-drop-zone:hover, #welcome-drop-zone.drag-over {
   border-color: #3aa0ff; background: rgba(58,160,255,0.06);
 }
+#sidebar.sidebar-file-drop {
+  outline: 2px dashed #3aa0ff;
+  outline-offset: -3px;
+  background: rgba(58,160,255,0.05);
+}
 #welcome-drop-icon { font-size: 36px; margin-bottom: 12px; color: #888; }
 #welcome-drop-label { font-size: 15px; color: #aaa; margin-bottom: 6px; }
 #welcome-drop-sub { font-size: 12px; color: #888; }

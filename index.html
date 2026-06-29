@@ -896,10 +896,14 @@
         });
       }
 
-      fileInput.addEventListener('change', async (e) => {
-        const files = Array.from(e.target.files);
+      const isVideoFile = f => f.type.startsWith('video/') || (!f.type && /\.(mp4|mov|m4v|webm|mkv|avi|mts|m2ts)$/i.test(f.name));
+
+      async function addFiles(files) {
+        const valid = Array.from(files).filter(isVideoFile);
+        if (!valid.length) return;
+        dismissWelcome();
         const firstNewIdx = playlist.length;
-        for (const file of files) {
+        for (const file of valid) {
           const objectUrl = URL.createObjectURL(file);
           const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: 24, undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
@@ -913,7 +917,9 @@
         }
         fileInput.value = '';
         if (firstNewIdx < playlist.length) { await loadVideo(firstNewIdx); savePlaylistState(); }
-      });
+      }
+
+      fileInput.addEventListener('change', async (e) => { await addFiles(e.target.files); });
 
       // ===== PLAYLIST POPUPS =====
       const _cpEl = (() => { const el = document.createElement('div'); el.id = 'pl-color-palette'; document.body.appendChild(el); return el; })();
@@ -1305,7 +1311,15 @@
 
       // ---- Playlist drag-over / drop (wired once) ----
       playlistEl.addEventListener('dragover', e => {
-        if (!dragInfo) return;
+        // External file drag from OS
+        if (!dragInfo) {
+          if (e.dataTransfer.types.includes('Files')) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            sidebarEl.classList.add('sidebar-file-drop');
+          }
+          return;
+        }
         e.preventDefault();
         clearDragIndicators();
 
@@ -1333,12 +1347,19 @@
       });
 
       playlistEl.addEventListener('dragleave', e => {
-        if (!playlistEl.contains(e.relatedTarget)) clearDragIndicators();
+        if (!playlistEl.contains(e.relatedTarget)) {
+          clearDragIndicators();
+          sidebarEl.classList.remove('sidebar-file-drop');
+        }
       });
 
-      playlistEl.addEventListener('drop', e => {
+      playlistEl.addEventListener('drop', async e => {
         e.preventDefault();
-        if (!dragInfo) return;
+        sidebarEl.classList.remove('sidebar-file-drop');
+        if (!dragInfo) {
+          if (e.dataTransfer.files.length) await addFiles(e.dataTransfer.files);
+          return;
+        }
 
         // Folder-highlight: assign video to folder
         const fh = playlistEl.querySelector('.pl-drag-over-folder');
@@ -3010,28 +3031,28 @@
       dropZone.addEventListener('drop', async (e) => {
         e.preventDefault();
         dropZone.classList.remove('drag-over');
-        const isVideo = f => f.type.startsWith('video/') || (!f.type && /\.(mp4|mov|m4v|webm|mkv|avi|mts|m2ts)$/i.test(f.name));
-        const files = Array.from(e.dataTransfer.files).filter(isVideo);
-        if (!files.length) return;
-        dismissWelcome();
-        const firstNewIdx = playlist.length;
-        for (const file of files) {
-          const objectUrl = URL.createObjectURL(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: getFPS(), undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
-          playlist.push(entry);
-          if (!playlistOrder.includes(entry.id)) playlistOrder.push(entry.id);
-          await new Promise(resolve => {
-            const tmp = document.createElement('video');
-            tmp.preload = 'metadata'; tmp.src = objectUrl;
-            tmp.onloadedmetadata = () => { entry.duration = tmp.duration || 0; resolve(); };
-            tmp.onerror = resolve;
-          });
-          entry.thumbnail = await generateThumbnail(objectUrl);
-          persistEntry(entry).catch(() => {});
-          renderPlaylist();
+        await addFiles(e.dataTransfer.files);
+      });
+
+      // Drag-and-drop onto the sidebar (covers the header buttons area above the playlist)
+      sidebarEl.addEventListener('dragover', e => {
+        if (dragInfo) return; // internal reorder — handled by playlistEl
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          sidebarEl.classList.add('sidebar-file-drop');
         }
-        fileInput.value = '';
-        if (firstNewIdx < playlist.length) { await loadVideo(firstNewIdx); savePlaylistState(); }
+      });
+      sidebarEl.addEventListener('dragleave', e => {
+        if (!sidebarEl.contains(e.relatedTarget)) sidebarEl.classList.remove('sidebar-file-drop');
+      });
+      sidebarEl.addEventListener('drop', async e => {
+        sidebarEl.classList.remove('sidebar-file-drop');
+        if (dragInfo) return;
+        if (e.dataTransfer.files.length) {
+          e.preventDefault();
+          await addFiles(e.dataTransfer.files);
+        }
       });
 
       // Dismiss when a file is opened via the normal file picker too
