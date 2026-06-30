@@ -152,7 +152,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.2 &nbsp;[Last Updated: 06/29/2026 2:28PM PST]</span>
+          <span id="status-version">DrawOver v0.2.2 &nbsp;[Last Updated: 06/30/2026 1:36PM PST]</span>
         </div>
       </div>
     </div>
@@ -643,6 +643,8 @@
           this.ctx = ctx;
           this.video = document.createElement('video');
           this.video.preload = 'auto';
+          this.video.setAttribute('playsinline', '');
+          this.video.setAttribute('webkit-playsinline', '');
           this.video.playsInline = true;
           this.video.style.display = 'none';
           document.body.appendChild(this.video);
@@ -828,6 +830,9 @@
           const cnv = document.createElement('canvas');
           vid.preload = 'auto';
           vid.muted = true;
+          vid.setAttribute('playsinline', '');
+          vid.setAttribute('webkit-playsinline', '');
+          vid.playsInline = true;
           vid.src = objectUrl;
           let duration = 0;
           let thumbnail = null;
