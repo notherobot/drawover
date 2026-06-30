@@ -152,7 +152,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.2 &nbsp;[Last Updated: 06/30/2026 1:36PM PST]</span>
+          <span id="status-version">DrawOver v0.2.2 &nbsp;[Last Updated: 06/30/2026 2:11PM PST]</span>
         </div>
       </div>
     </div>
@@ -698,9 +698,10 @@
               this.canvas.width = this.video.videoWidth || 1280;
               this.canvas.height = this.video.videoHeight || 720;
               if (this.onDurationChange) this.onDurationChange(this.duration);
-              this._renderFrame();
-              if (this.onFrameChange) this.onFrameChange(0);
-              resolve();
+              // Seek to just past zero so iOS decodes and delivers the first frame.
+              // The existing 'seeked' handler calls _renderFrame() + onFrameChange().
+              this.video.addEventListener('seeked', () => resolve(), { once: true });
+              this.video.currentTime = 1e-5;
             };
             const onError = () => {
             cleanup();
