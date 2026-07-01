@@ -156,7 +156,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:29AM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:40AM PST]</span>
         </div>
       </div>
     </div>
@@ -1838,13 +1838,23 @@
       scrubInHandle.addEventListener('mousedown', (e) => { e.stopPropagation(); draggingHandle = 'in'; });
       scrubOutHandle.addEventListener('mousedown', (e) => { e.stopPropagation(); draggingHandle = 'out'; });
 
-      scrubBar.addEventListener('mousedown', (e) => { if (!draggingHandle) { isScrubbing = true; scrubFromEvent(e); } });
+      scrubBar.addEventListener('mousedown', (e) => {
+        if (!draggingHandle) {
+          isScrubbing = true;
+          if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
+          scrubFromEvent(e);
+        }
+      });
       document.addEventListener('mousemove', (e) => {
         if (draggingHandle) handleDragFromEvent(e);
         else if (isScrubbing) scrubFromEvent(e);
       });
       document.addEventListener('mouseup', () => { isScrubbing = false; draggingHandle = null; });
-      scrubBar.addEventListener('touchstart', (e) => { isScrubbing = true; scrubFromEvent(e); }, { passive: true });
+      scrubBar.addEventListener('touchstart', (e) => {
+        isScrubbing = true;
+        if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
+        scrubFromEvent(e);
+      }, { passive: true });
       document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
       document.addEventListener('touchend', () => { isScrubbing = false; });
 

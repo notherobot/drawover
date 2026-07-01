@@ -477,6 +477,7 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 #content:fullscreen {
   display: flex; flex-direction: column; background: #1a1a1a;
   width: 100vw; height: 100vh; padding: 0;
+  overflow: visible; /* fixed-position overlay panels must not be clipped in fullscreen */
 }
 #content:fullscreen #video-area { flex: 1; min-height: 0; }
 
