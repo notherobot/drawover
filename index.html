@@ -156,7 +156,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:51AM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:59AM PST]</span>
         </div>
       </div>
     </div>
@@ -193,20 +193,20 @@
   <!-- Developer Tools panel -->
   <div id="devtools-panel">
     <h3>Developer Tools</h3>
-    <p class="dt-desc">OBS Crop/Pad filter values for the video area (excludes UI chrome). Open in fullscreen for accurate values.</p>
+    <p class="dt-desc">OBS Crop/Pad filter values — physical pixels. Reset view (A) first, then open in fullscreen for accurate values.</p>
     <table id="dt-table">
-      <tr class="dt-section"><td colspan="2">Video</td></tr>
-      <tr><td>Resolution</td><td id="dt-res">—</td></tr>
+      <tr class="dt-section"><td colspan="2">Display</td></tr>
+      <tr><td>DPR</td><td id="dt-dpr">—</td></tr>
+      <tr><td>Screen</td><td id="dt-screen">—</td></tr>
+      <tr><td>Video res</td><td id="dt-res">—</td></tr>
       <tr class="dt-section"><td colspan="2">OBS Crop/Pad Filter</td></tr>
       <tr><td>Left</td><td id="dt-left">—</td></tr>
       <tr><td>Top</td><td id="dt-top">—</td></tr>
       <tr><td>Right</td><td id="dt-right">—</td></tr>
       <tr><td>Bottom</td><td id="dt-bottom">—</td></tr>
-      <tr class="dt-section"><td colspan="2">Rendered Area</td></tr>
+      <tr class="dt-section"><td colspan="2">Video area</td></tr>
       <tr><td>Width</td><td id="dt-w">—</td></tr>
       <tr><td>Height</td><td id="dt-h">—</td></tr>
-      <tr><td>X offset</td><td id="dt-x">—</td></tr>
-      <tr><td>Y offset</td><td id="dt-y">—</td></tr>
     </table>
     <button id="dt-copy-btn">Copy OBS Values</button>
   </div>
@@ -3260,22 +3260,42 @@
       const btnDevtools = document.getElementById('btn-devtools');
       const devtoolsPanel = document.getElementById('devtools-panel');
       function updateDevtoolsValues() {
+        const dpr = window.devicePixelRatio || 1;
+        // CSS-pixel rect of the canvas element (may be larger than actual video due to object-fit:contain)
         const rect = mainCanvas.getBoundingClientRect();
-        const screenW = window.innerWidth;
-        const screenH = window.innerHeight;
-        const left   = Math.round(rect.left);
-        const top    = Math.round(rect.top);
-        const right  = Math.round(screenW - rect.right);
-        const bottom = Math.round(screenH - rect.bottom);
+        const boxW = rect.width;
+        const boxH = rect.height;
+        // Compute the actual rendered video rectangle inside the canvas box (object-fit:contain letterboxing)
+        const videoAspect = mainCanvas.width / mainCanvas.height;
+        const boxAspect   = boxW / boxH;
+        let renderW, renderH;
+        if (videoAspect >= boxAspect) {
+          renderW = boxW;
+          renderH = boxW / videoAspect;
+        } else {
+          renderH = boxH;
+          renderW = boxH * videoAspect;
+        }
+        const renderX = rect.left + (boxW - renderW) / 2;  // CSS px from left of viewport
+        const renderY = rect.top  + (boxH - renderH) / 2;  // CSS px from top of viewport
+        // Convert CSS pixels → physical pixels (what OBS captures)
+        const left   = Math.round(renderX * dpr);
+        const top    = Math.round(renderY * dpr);
+        const right  = Math.round((window.innerWidth  - renderX - renderW) * dpr);
+        const bottom = Math.round((window.innerHeight - renderY - renderH) * dpr);
+        const w      = Math.round(renderW * dpr);
+        const h      = Math.round(renderH * dpr);
+        const screenW = Math.round(window.innerWidth  * dpr);
+        const screenH = Math.round(window.innerHeight * dpr);
+        document.getElementById('dt-dpr').textContent    = dpr.toFixed(1) + '×';
+        document.getElementById('dt-screen').textContent = `${screenW} × ${screenH}`;
         document.getElementById('dt-res').textContent    = `${mainCanvas.width} × ${mainCanvas.height}`;
         document.getElementById('dt-left').textContent   = `${left} px`;
         document.getElementById('dt-top').textContent    = `${top} px`;
         document.getElementById('dt-right').textContent  = `${right} px`;
         document.getElementById('dt-bottom').textContent = `${bottom} px`;
-        document.getElementById('dt-w').textContent      = `${Math.round(rect.width)} px`;
-        document.getElementById('dt-h').textContent      = `${Math.round(rect.height)} px`;
-        document.getElementById('dt-x').textContent      = `${left} px`;
-        document.getElementById('dt-y').textContent      = `${top} px`;
+        document.getElementById('dt-w').textContent      = `${w} px`;
+        document.getElementById('dt-h').textContent      = `${h} px`;
         devtoolsPanel.dataset.copyText =
           `OBS Crop/Pad Filter\nLeft: ${left}\nTop: ${top}\nRight: ${right}\nBottom: ${bottom}`;
       }
