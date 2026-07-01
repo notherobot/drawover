@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 4:06PM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 4:08PM PST]</span>
         </div>
       </div>
     </div>
@@ -1993,7 +1993,7 @@
         updateToolCursor();
       }
 
-      toolBtns.forEach(btn => btn.addEventListener('click', () => activateTool(btn.dataset.tool)));
+      toolBtns.forEach(btn => { if (btn.dataset.tool) btn.addEventListener('click', () => activateTool(btn.dataset.tool)); });
 
       brushSizeSlider.addEventListener('input', () => {
         brushSize = parseInt(brushSizeSlider.value, 10);
