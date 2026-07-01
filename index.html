@@ -156,7 +156,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 12:56PM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 1:10PM PST]</span>
         </div>
       </div>
     </div>
@@ -1657,10 +1657,9 @@
       function resizeCanvases() {
         const rect = videoContainer.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        penCanvas.width   = rect.width * dpr; penCanvas.height   = rect.height * dpr;
-        laserCanvas.width = rect.width * dpr; laserCanvas.height = rect.height * dpr;
-        arcCanvas.width   = rect.width * dpr; arcCanvas.height   = rect.height * dpr;
+        penCanvas.width = rect.width; penCanvas.height = rect.height;
+        laserCanvas.width = rect.width; laserCanvas.height = rect.height;
+        arcCanvas.width = rect.width; arcCanvas.height = rect.height;
         redrawPenCanvas(); redrawLaserCanvas(); redrawArcCanvas(); updateScrubTicks();
         updateToolCursor();
       }
@@ -2324,7 +2323,7 @@
 
       function getPressure(e) {
         if (e.pointerType !== 'pen') return 1.0;
-        return Math.max(0.15, e.pressure);
+        return Math.pow(Math.max(0.02, e.pressure), 2);
       }
 
       // Catmull-Rom interpolation: inserts `steps-1` extra points between each pair
@@ -2358,11 +2357,10 @@
 
         const pts = smoothPoints(stroke.points, 4);
         const size = stroke.size;
-        const dpr = window.devicePixelRatio || 1;
 
         for (let i = 0; i < pts.length; i++) {
           const p = pts[i].p !== undefined ? pts[i].p : 1;
-          const r = Math.max(0.5 * dpr, size * p * dpr / 2);
+          const r = Math.max(0.5, size * p / 2);
           ctx.beginPath();
           ctx.arc(pts[i].x * w, pts[i].y * h, r, 0, Math.PI * 2);
           ctx.fill();
@@ -2371,8 +2369,8 @@
         for (let i = 0; i < pts.length - 1; i++) {
           const ax = pts[i].x * w,   ay = pts[i].y * h;
           const bx = pts[i+1].x * w, by = pts[i+1].y * h;
-          const rA = Math.max(0.5 * dpr, size * (pts[i].p   !== undefined ? pts[i].p   : 1) * dpr / 2);
-          const rB = Math.max(0.5 * dpr, size * (pts[i+1].p !== undefined ? pts[i+1].p : 1) * dpr / 2);
+          const rA = Math.max(0.5, size * (pts[i].p   !== undefined ? pts[i].p   : 1) / 2);
+          const rB = Math.max(0.5, size * (pts[i+1].p !== undefined ? pts[i+1].p : 1) / 2);
           const dx = bx - ax, dy = by - ay;
           const len = Math.sqrt(dx * dx + dy * dy);
           if (len < 0.5) continue;
@@ -2407,11 +2405,10 @@
         const raw = stroke.points;
         if (!raw || !raw.length) return;
         const pts = smoothPoints(raw, 3);
-        const dpr = window.devicePixelRatio || 1;
         ctx.save();
         ctx.fillStyle = stroke.color;
         for (let i = 0; i < pts.length; i++) {
-          const r = Math.max(0.5 * dpr, stroke.size * (pts[i].p ?? 1) * dpr / 2);
+          const r = Math.max(0.5, stroke.size * (pts[i].p ?? 1) / 2);
           ctx.beginPath();
           ctx.arc(pts[i].x * w, pts[i].y * h, r, 0, Math.PI * 2);
           ctx.fill();
@@ -2419,8 +2416,8 @@
         for (let i = 0; i < pts.length - 1; i++) {
           const ax = pts[i].x * w,   ay = pts[i].y * h;
           const bx = pts[i+1].x * w, by = pts[i+1].y * h;
-          const rA = Math.max(0.5 * dpr, stroke.size * (pts[i].p ?? 1) * dpr / 2);
-          const rB = Math.max(0.5 * dpr, stroke.size * (pts[i+1].p ?? 1) * dpr / 2);
+          const rA = Math.max(0.5, stroke.size * (pts[i].p ?? 1) / 2);
+          const rB = Math.max(0.5, stroke.size * (pts[i+1].p ?? 1) / 2);
           const dx = bx - ax, dy = by - ay;
           const len = Math.sqrt(dx * dx + dy * dy);
           if (len < 0.5) continue;
@@ -2506,15 +2503,14 @@
       function redrawArcCanvas() {
         arcCtx.clearRect(0, 0, arcCanvas.width, arcCanvas.height);
         const w = arcCanvas.width, h = arcCanvas.height;
-        const dpr = window.devicePixelRatio || 1;
 
         // Full-canvas crosshair when arc tracer is active and cursor is on canvas
         if (currentTool === 'arc-tracer' && arcCrosshairPos) {
           const cx = arcCrosshairPos.x * w, cy = arcCrosshairPos.y * h;
           arcCtx.save();
           arcCtx.strokeStyle = 'rgba(255,255,255,0.8)';
-          arcCtx.lineWidth = dpr;
-          arcCtx.setLineDash([5 * dpr, 5 * dpr]);
+          arcCtx.lineWidth = 1;
+          arcCtx.setLineDash([5, 5]);
           arcCtx.beginPath(); arcCtx.moveTo(0, cy); arcCtx.lineTo(w, cy); arcCtx.stroke();
           arcCtx.beginPath(); arcCtx.moveTo(cx, 0); arcCtx.lineTo(cx, h); arcCtx.stroke();
           arcCtx.restore();
@@ -2536,7 +2532,7 @@
           const coords = visible.map(f => ({ x: allPts[f].x * w, y: allPts[f].y * h, f }));
           arcCtx.save();
           arcCtx.strokeStyle = 'rgba(255, 200, 50, 0.55)';
-          arcCtx.lineWidth = 1.5 * dpr;
+          arcCtx.lineWidth = 1.5;
           arcCtx.lineCap = 'round';
           arcCtx.lineJoin = 'round';
           arcCtx.setLineDash([]);
@@ -2562,13 +2558,13 @@
           const dist = Math.abs(f - currentFrame);
           const isCurrent = dist === 0;
           const opacity = isCurrent ? 1 : Math.max(0.25, 1 - dist / (arcWindow + 1));
-          const radius = (isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35)) * dpr;
+          const radius = isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35);
           const px = allPts[f].x * w, py = allPts[f].y * h;
           const color = isCurrent ? '#ffcc00' : (f < currentFrame ? '#ff7733' : '#44aaff');
           arcCtx.save();
           arcCtx.globalAlpha = opacity;
           arcCtx.beginPath();
-          arcCtx.arc(px, py, radius + 1.5 * dpr, 0, Math.PI * 2);
+          arcCtx.arc(px, py, radius + 1.5, 0, Math.PI * 2);
           arcCtx.fillStyle = 'rgba(0,0,0,0.5)';
           arcCtx.fill();
           arcCtx.beginPath();
@@ -2582,9 +2578,8 @@
       function resizeCanvasesB() {
         const rect = videoContainerB.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        penCanvasB.width   = rect.width * dpr; penCanvasB.height   = rect.height * dpr;
-        laserCanvasB.width = rect.width * dpr; laserCanvasB.height = rect.height * dpr;
+        penCanvasB.width = rect.width; penCanvasB.height = rect.height;
+        laserCanvasB.width = rect.width; laserCanvasB.height = rect.height;
         redrawPenCanvasB();
       }
 
@@ -2919,21 +2914,13 @@
         }
 
         if (currentTool === 'pen' && isDrawing && currentStroke) {
-          const coalesced = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-          for (const ce of coalesced) {
-            const cpos = getCanvasPos(ce);
-            currentStroke.points.push({ ...cpos, p: getPressure(ce) });
-          }
+          currentStroke.points.push({ ...pos, p: getPressure(e) });
           redrawPenCanvas();
           penCtx.save(); clipCtxToVideo(penCtx, mainCanvas, penCanvas);
           drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
           penCtx.restore();
         } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
-          const coalesced = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-          for (const ce of coalesced) {
-            const cpos = getCanvasPos(ce);
-            laserStrokes[laserStrokes.length - 1].points.push({ ...cpos, p: getPressure(ce) });
-          }
+          laserStrokes[laserStrokes.length - 1].points.push({ ...pos, p: getPressure(e) });
           lastLaserInputTime = Date.now();
           if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
         } else if (currentTool === 'eraser' && isErasing) {
