@@ -405,7 +405,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 }
 #btn-play {
   width: 50px; height: 50px; border-radius: 50%; padding: 0;
-  font-size: 26px; background: #333; border-color: #4a4a4a; flex-shrink: 0;
+  font-size: 34px; background: #333; border-color: #4a4a4a; flex-shrink: 0;
 }
 #btn-play:hover { background: #444; }
 #speed-select {

@@ -156,13 +156,12 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:23AM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:29AM PST]</span>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Keyboard shortcuts panel -->
+  <!-- Keyboard shortcuts panel (inside #content so it appears in fullscreen) -->
   <div id="shortcuts-panel">
     <h3>Keyboard Shortcuts</h3>
     <table>
@@ -190,7 +189,7 @@
     </table>
   </div>
 
-  <!-- Developer Tools panel -->
+  <!-- Developer Tools panel (inside #content so it appears in fullscreen) -->
   <div id="devtools-panel">
     <h3>Developer Tools</h3>
     <p class="dt-desc">OBS Crop/Pad filter values for the video area (excludes UI chrome). Open in fullscreen for accurate values.</p>
@@ -209,6 +208,8 @@
       <tr><td>Y offset</td><td id="dt-y">—</td></tr>
     </table>
     <button id="dt-copy-btn">Copy OBS Values</button>
+  </div>
+
   </div>
 
   <!-- Eyedropper zoom preview -->
@@ -729,8 +730,11 @@
           this._frameNum = 0;
           this._rafId = null;
           this._hasVFCB = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+          this._prewarming = false;
+          this._prewarmToken = null;
 
           this.video.addEventListener('seeked', () => {
+            if (this._prewarming) return; // suppress canvas update during decoder pre-warm
             this._frameNum = Math.round(this.video.currentTime * this.fps);
             this._renderFrame();
             if (this.onFrameChange) this.onFrameChange(this._frameNum);
@@ -829,24 +833,9 @@
           this._rafId = requestAnimationFrame(() => this._rafLoop());
         }
 
-        async play() {
+        play() {
           if (!this.video.src) return;
-          // Pre-warm the hardware decoder: seek ahead a few frames then back so
-          // the decoder pipeline is already primed before playback begins.
-          // This prevents the stutter that occurs when play() initialises the
-          // decoder cold (observed on iOS Safari and some desktop GPUs).
-          const startTime = this.video.currentTime;
-          const warmTarget = Math.min(startTime + 3 / this.fps, this.duration - 1 / this.fps);
-          if (warmTarget > startTime) {
-            await new Promise(res => {
-              this.video.addEventListener('seeked', res, { once: true });
-              this.video.currentTime = warmTarget;
-            });
-            await new Promise(res => {
-              this.video.addEventListener('seeked', res, { once: true });
-              this.video.currentTime = startTime;
-            });
-          }
+          this._prewarmToken = null; // cancel any in-progress pause pre-warm
           this.playing = true;
           this.video.play().catch(() => {});
           if (this._hasVFCB) this._scheduleVFCB();
@@ -857,6 +846,33 @@
           this.playing = false;
           this.video.pause();
           this._cancelRAF();
+          this._prewarm(); // prime decoder while paused so next play() starts smooth
+        }
+
+        async _prewarm() {
+          const token = Symbol();
+          this._prewarmToken = token;
+          this._prewarming = true;
+          const startTime = this.video.currentTime;
+          const warmTarget = Math.min(startTime + 3 / this.fps, this.duration - 1 / this.fps);
+          if (warmTarget > startTime) {
+            await new Promise(res => {
+              this.video.addEventListener('seeked', res, { once: true });
+              this.video.currentTime = warmTarget;
+            });
+            if (this._prewarmToken !== token) { this._prewarming = false; return; }
+            await new Promise(res => {
+              this.video.addEventListener('seeked', res, { once: true });
+              this.video.currentTime = startTime;
+            });
+          }
+          this._prewarming = false;
+          if (this._prewarmToken === token) {
+            // Restore the correct frame number and canvas state after warm seeks
+            this._frameNum = Math.round(startTime * this.fps);
+            this._renderFrame();
+            if (this.onFrameChange) this.onFrameChange(this._frameNum);
+          }
         }
 
         stepFrame(dir) {
