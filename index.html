@@ -150,12 +150,13 @@
           <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
           <button id="btn-fullscreen" title="Fullscreen">⛶</button>
           <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
+          <button id="btn-devtools" title="Developer Tools">Dev</button>
         </div>
 
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:09AM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:23AM PST]</span>
         </div>
       </div>
     </div>
@@ -187,6 +188,27 @@
       <tr><td>MMB drag</td><td>Pan</td></tr>
       <tr><td>Scroll</td><td>Zoom at cursor</td></tr>
     </table>
+  </div>
+
+  <!-- Developer Tools panel -->
+  <div id="devtools-panel">
+    <h3>Developer Tools</h3>
+    <p class="dt-desc">OBS Crop/Pad filter values for the video area (excludes UI chrome). Open in fullscreen for accurate values.</p>
+    <table id="dt-table">
+      <tr class="dt-section"><td colspan="2">Video</td></tr>
+      <tr><td>Resolution</td><td id="dt-res">—</td></tr>
+      <tr class="dt-section"><td colspan="2">OBS Crop/Pad Filter</td></tr>
+      <tr><td>Left</td><td id="dt-left">—</td></tr>
+      <tr><td>Top</td><td id="dt-top">—</td></tr>
+      <tr><td>Right</td><td id="dt-right">—</td></tr>
+      <tr><td>Bottom</td><td id="dt-bottom">—</td></tr>
+      <tr class="dt-section"><td colspan="2">Rendered Area</td></tr>
+      <tr><td>Width</td><td id="dt-w">—</td></tr>
+      <tr><td>Height</td><td id="dt-h">—</td></tr>
+      <tr><td>X offset</td><td id="dt-x">—</td></tr>
+      <tr><td>Y offset</td><td id="dt-y">—</td></tr>
+    </table>
+    <button id="dt-copy-btn">Copy OBS Values</button>
   </div>
 
   <!-- Eyedropper zoom preview -->
@@ -807,8 +829,24 @@
           this._rafId = requestAnimationFrame(() => this._rafLoop());
         }
 
-        play() {
+        async play() {
           if (!this.video.src) return;
+          // Pre-warm the hardware decoder: seek ahead a few frames then back so
+          // the decoder pipeline is already primed before playback begins.
+          // This prevents the stutter that occurs when play() initialises the
+          // decoder cold (observed on iOS Safari and some desktop GPUs).
+          const startTime = this.video.currentTime;
+          const warmTarget = Math.min(startTime + 3 / this.fps, this.duration - 1 / this.fps);
+          if (warmTarget > startTime) {
+            await new Promise(res => {
+              this.video.addEventListener('seeked', res, { once: true });
+              this.video.currentTime = warmTarget;
+            });
+            await new Promise(res => {
+              this.video.addEventListener('seeked', res, { once: true });
+              this.video.currentTime = startTime;
+            });
+          }
           this.playing = true;
           this.video.play().catch(() => {});
           if (this._hasVFCB) this._scheduleVFCB();
@@ -3183,6 +3221,49 @@
         if (!shortcutsPanel.contains(e.target) && e.target !== btnShortcuts) {
           shortcutsPanel.classList.remove('open');
           btnShortcuts.classList.remove('active');
+        }
+      });
+
+      // ===== DEVELOPER TOOLS PANEL =====
+      const btnDevtools = document.getElementById('btn-devtools');
+      const devtoolsPanel = document.getElementById('devtools-panel');
+      function updateDevtoolsValues() {
+        const rect = mainCanvas.getBoundingClientRect();
+        const screenW = window.innerWidth;
+        const screenH = window.innerHeight;
+        const left   = Math.round(rect.left);
+        const top    = Math.round(rect.top);
+        const right  = Math.round(screenW - rect.right);
+        const bottom = Math.round(screenH - rect.bottom);
+        document.getElementById('dt-res').textContent    = `${mainCanvas.width} × ${mainCanvas.height}`;
+        document.getElementById('dt-left').textContent   = `${left} px`;
+        document.getElementById('dt-top').textContent    = `${top} px`;
+        document.getElementById('dt-right').textContent  = `${right} px`;
+        document.getElementById('dt-bottom').textContent = `${bottom} px`;
+        document.getElementById('dt-w').textContent      = `${Math.round(rect.width)} px`;
+        document.getElementById('dt-h').textContent      = `${Math.round(rect.height)} px`;
+        document.getElementById('dt-x').textContent      = `${left} px`;
+        document.getElementById('dt-y').textContent      = `${top} px`;
+        devtoolsPanel.dataset.copyText =
+          `OBS Crop/Pad Filter\nLeft: ${left}\nTop: ${top}\nRight: ${right}\nBottom: ${bottom}`;
+      }
+      btnDevtools.addEventListener('click', () => {
+        const open = devtoolsPanel.classList.toggle('open');
+        btnDevtools.classList.toggle('active', open);
+        if (open) updateDevtoolsValues();
+      });
+      document.getElementById('dt-copy-btn').addEventListener('click', () => {
+        const text = devtoolsPanel.dataset.copyText || '';
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = document.getElementById('dt-copy-btn');
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = 'Copy OBS Values'; }, 1500);
+        }).catch(() => {});
+      });
+      document.addEventListener('click', (e) => {
+        if (!devtoolsPanel.contains(e.target) && e.target !== btnDevtools) {
+          devtoolsPanel.classList.remove('open');
+          btnDevtools.classList.remove('active');
         }
       });
 
