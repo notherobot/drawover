@@ -156,7 +156,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 2:21PM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 3:57PM PST]</span>
         </div>
       </div>
     </div>
@@ -876,6 +876,10 @@
 
         stepFrame(dir) {
           this.pause();
+          // Cancel any prewarm started by pause() — its seeked listener would otherwise
+          // consume the seek below and then seek back to the original position.
+          this._prewarmToken = null;
+          this._prewarming = false;
           const maxFrame = Math.ceil(this.duration * this.fps) - 1;
           const target = Math.max(0, Math.min(maxFrame, this._frameNum + dir));
           this.video.currentTime = this._frameToTime(target);
