@@ -155,7 +155,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:04AM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:09AM PST]</span>
         </div>
       </div>
     </div>
@@ -263,6 +263,9 @@
       <div id="welcome-drop-sub">MP4, MOV, WebM supported</div>
     </div>
     <button id="btn-welcome-browse">Browse files…</button>
+    <label id="welcome-trim-label" title="Show a trim preview before opening in the session">
+      <input type="checkbox" id="welcome-trim-cb"> Trim video before opening in Session view
+    </label>
   </div>
 
   <script>
@@ -955,11 +958,17 @@
       // ===== TRIM MODAL =====
       let trimOnImport = localStorage.getItem('drawover_trim_on_import') === '1';
       const trimImportCb = document.getElementById('trim-import-cb');
-      trimImportCb.checked = trimOnImport;
-      trimImportCb.addEventListener('change', () => {
-        trimOnImport = trimImportCb.checked;
-        localStorage.setItem('drawover_trim_on_import', trimOnImport ? '1' : '');
-      });
+      const welcomeTrimCb = document.getElementById('welcome-trim-cb');
+
+      function setTrimOnImport(val) {
+        trimOnImport = val;
+        trimImportCb.checked = val;
+        welcomeTrimCb.checked = val;
+        localStorage.setItem('drawover_trim_on_import', val ? '1' : '');
+      }
+      setTrimOnImport(trimOnImport);
+      trimImportCb.addEventListener('change', () => setTrimOnImport(trimImportCb.checked));
+      welcomeTrimCb.addEventListener('change', () => setTrimOnImport(welcomeTrimCb.checked));
 
       function showTrimModal(entry) {
         return new Promise(resolve => {
