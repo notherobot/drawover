@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 4:08PM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 4:14PM PST]</span>
         </div>
       </div>
     </div>
@@ -2344,11 +2344,16 @@
       function smoothPoints(pts, steps) {
         if (pts.length < 2) return pts;
         const out = [];
+        // Phantom endpoints so the spline has a natural tangent at both ends
+        // instead of a clamped (halved) one that produces a straight-line start.
+        const first = pts[0], second = pts[1], last = pts[pts.length - 1], prev = pts[pts.length - 2];
+        const ghost0 = { x: 2*first.x - second.x, y: 2*first.y - second.y, p: first.p };
+        const ghostN = { x: 2*last.x  - prev.x,   y: 2*last.y  - prev.y,   p: last.p  };
         for (let i = 0; i < pts.length - 1; i++) {
-          const p0 = pts[Math.max(0, i - 1)];
+          const p0 = i === 0               ? ghost0 : pts[i - 1];
           const p1 = pts[i];
           const p2 = pts[i + 1];
-          const p3 = pts[Math.min(pts.length - 1, i + 2)];
+          const p3 = i + 2 >= pts.length   ? ghostN : pts[i + 2];
           out.push(p1);
           for (let s = 1; s < steps; s++) {
             const t = s / steps, t2 = t * t, t3 = t2 * t;
@@ -2369,7 +2374,7 @@
         ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
         ctx.fillStyle = stroke.color;
 
-        const pts = smoothPoints(stroke.points, 4);
+        const pts = smoothPoints(stroke.points, 8);
         const size = stroke.size;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -2419,7 +2424,7 @@
       function drawLaserStroke(ctx, stroke, w, h) {
         const raw = stroke.points;
         if (!raw || !raw.length) return;
-        const pts = smoothPoints(raw, 3);
+        const pts = smoothPoints(raw, 8);
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         ctx.save();
         ctx.fillStyle = stroke.color;
@@ -2708,13 +2713,18 @@
           const pos = getCanvasPosB(e);
           if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
           if (currentTool === 'pen' && isDrawingB && currentStrokeB) {
-            currentStrokeB.points.push({ ...pos, p: getPressure(e) });
+            const ppB = currentStrokeB.points[currentStrokeB.points.length - 1];
+            const dxB = pos.x - ppB.x, dyB = pos.y - ppB.y;
+            if (dxB*dxB + dyB*dyB >= 1e-6) currentStrokeB.points.push({ ...pos, p: getPressure(e) });
             redrawPenCanvasB();
             penCtxB.save(); clipCtxToVideo(penCtxB, mainCanvasB, penCanvasB);
             drawStrokeOnCanvas(penCtxB, currentStrokeB, penCanvasB.width, penCanvasB.height);
             penCtxB.restore();
           } else if (currentTool === 'laser' && isDrawingB && laserStrokes.length) {
-            laserStrokes[laserStrokes.length - 1].points.push({ ...pos, p: getPressure(e) });
+            const laserB = laserStrokes[laserStrokes.length - 1];
+            const ppLB = laserB.points[laserB.points.length - 1];
+            const dxLB = pos.x - ppLB.x, dyLB = pos.y - ppLB.y;
+            if (dxLB*dxLB + dyLB*dyLB >= 1e-6) laserB.points.push({ ...pos, p: getPressure(e) });
             lastLaserInputTime = Date.now();
             if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
           } else if (currentTool === 'eraser' && isErasingB) {
@@ -2934,7 +2944,10 @@
         if (currentTool === 'pen' && isDrawing && currentStroke) {
           const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
           for (const ce of (events.length ? events : [e])) {
-            currentStroke.points.push({ ...getCanvasPos(ce), p: getPressure(ce) });
+            const np = getCanvasPos(ce);
+            const pp = currentStroke.points[currentStroke.points.length - 1];
+            const dx = np.x - pp.x, dy = np.y - pp.y;
+            if (dx*dx + dy*dy >= 1e-6) currentStroke.points.push({ ...np, p: getPressure(ce) });
           }
           redrawPenCanvas();
           penCtx.save(); clipCtxToVideo(penCtx, mainCanvas, penCanvas);
@@ -2943,7 +2956,11 @@
         } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
           const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
           for (const ce of (events.length ? events : [e])) {
-            laserStrokes[laserStrokes.length - 1].points.push({ ...getCanvasPos(ce), p: getPressure(ce) });
+            const laser = laserStrokes[laserStrokes.length - 1];
+            const np = getCanvasPos(ce);
+            const pp = laser.points[laser.points.length - 1];
+            const dx = np.x - pp.x, dy = np.y - pp.y;
+            if (dx*dx + dy*dy >= 1e-6) laser.points.push({ ...np, p: getPressure(ce) });
           }
           lastLaserInputTime = Date.now();
           if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
