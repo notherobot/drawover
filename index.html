@@ -156,12 +156,13 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:40AM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 11:51AM PST]</span>
         </div>
       </div>
     </div>
+  </div>
 
-  <!-- Keyboard shortcuts panel (inside #content so it appears in fullscreen) -->
+  <!-- Keyboard shortcuts panel -->
   <div id="shortcuts-panel">
     <h3>Keyboard Shortcuts</h3>
     <table>
@@ -189,7 +190,7 @@
     </table>
   </div>
 
-  <!-- Developer Tools panel (inside #content so it appears in fullscreen) -->
+  <!-- Developer Tools panel -->
   <div id="devtools-panel">
     <h3>Developer Tools</h3>
     <p class="dt-desc">OBS Crop/Pad filter values for the video area (excludes UI chrome). Open in fullscreen for accurate values.</p>
@@ -208,8 +209,6 @@
       <tr><td>Y offset</td><td id="dt-y">—</td></tr>
     </table>
     <button id="dt-copy-btn">Copy OBS Values</button>
-  </div>
-
   </div>
 
   <!-- Eyedropper zoom preview -->
@@ -3134,8 +3133,15 @@
         else document.getElementById('content').requestFullscreen().catch(() => {});
       });
       document.addEventListener('fullscreenchange', () => {
-        btnFullscreen.textContent = document.fullscreenElement ? '⛶ Exit' : '⛶';
+        const fsEl = document.fullscreenElement;
+        btnFullscreen.textContent = fsEl ? '⛶ Exit' : '⛶';
         setTimeout(resizeCanvases, 100);
+        // Panels use position:fixed; they must be descendants of the fullscreen
+        // element to appear in fullscreen. Move them in/out of #content as needed.
+        [shortcutsPanel, devtoolsPanel].forEach(p => {
+          if (fsEl) fsEl.appendChild(p);
+          else document.body.appendChild(p);
+        });
       });
 
       document.getElementById('btn-reset-view').addEventListener('click', () => {
