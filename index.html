@@ -43,13 +43,13 @@
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group" id="color-swatches">
-            <button class="d-swatch active" data-color="#ff3333" style="background:#ff3333" title="Red"></button>
+            <button class="d-swatch active" data-color="#ff0000" style="background:#ff0000" title="Red"></button>
             <button class="d-swatch" data-color="#ff8800" style="background:#ff8800" title="Orange"></button>
             <button class="d-swatch" data-color="#ffee00" style="background:#ffee00" title="Yellow"></button>
             <button class="d-swatch" data-color="#33cc33" style="background:#33cc33" title="Green"></button>
             <button class="d-swatch" data-color="#00aaff" style="background:#00aaff" title="Blue"></button>
             <button class="d-swatch" data-color="#ffffff" style="background:#ffffff" title="White"></button>
-            <button class="d-swatch" id="color-custom-btn" style="background:#ff3333" title="Custom color — click to open picker"></button>
+            <button class="d-swatch" id="color-custom-btn" style="background:#ff0000" title="Custom color — click to open picker"></button>
             <button class="tool-btn" data-tool="eyedrop" title="Eyedropper — sample color from video"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20.71 5.63l-2.34-2.34a1 1 0 00-1.41 0l-3.12 3.12-1.41-1.42-1.42 1.42 1.41 1.41-6.6 6.6A2 2 0 005 16v3h3a2 2 0 001.42-.59l6.6-6.6 1.41 1.42 1.42-1.42-1.42-1.41 3.12-3.12a1 1 0 000-1.65z"/></svg></button>
           </div>
           <div class="tool-sep"></div>
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 4:14PM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 5:28PM PST]</span>
         </div>
       </div>
     </div>
@@ -215,7 +215,7 @@
   <!-- Eyedropper zoom preview -->
   <div id="eyedropper-overlay">
     <canvas id="eyedropper-canvas" width="91" height="91"></canvas>
-    <div id="eyedropper-hex">#ff3333</div>
+    <div id="eyedropper-hex">#ff0000</div>
   </div>
 
   <!-- Custom color picker panel -->
@@ -389,7 +389,7 @@
       const PL_COLORS = ['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#95a5a6'];
       let currentTool = 'pen';
       let prevTool = 'pen';
-      let drawColor = '#ff3333';
+      let drawColor = '#ff0000';
       let brushSize = 4;
       let brushOpacity = 1;
       let drawingsVisible = true;
@@ -2101,7 +2101,7 @@
         }
 
         function openPanel() {
-          const safeColor = /^#[0-9a-fA-F]{6}$/.test(drawColor) ? drawColor : '#ff3333';
+          const safeColor = /^#[0-9a-fA-F]{6}$/.test(drawColor) ? drawColor : '#ff0000';
           [cpH, cpS, cpV] = hexToHsv(safeColor);
           refreshUi();
           const rect = colorCustomBtn.getBoundingClientRect();
