@@ -310,8 +310,14 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #main-canvas, #main-canvas-b { width: 100%; height: 100%; object-fit: contain; display: block; }
 #pen-canvas, #laser-canvas, #pen-canvas-b, #laser-canvas-b {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  /* Disable the browser's built-in pan/scroll/zoom gesture handling on the
+     drawing surface. Without this, the browser (and Windows Ink) reserve the
+     first bit of pointer travel to decide if it's a scroll, delaying the
+     initial pointermove events and producing a straight line at stroke start. */
+  touch-action: none;
+  -ms-touch-action: none;
 }
-#pen-canvas, #pen-canvas-b { pointer-events: auto; cursor: crosshair; z-index: 1; }
+#pen-canvas, #pen-canvas-b { pointer-events: auto; cursor: crosshair; z-index: 1; touch-action: none; -ms-touch-action: none; }
 #laser-canvas, #laser-canvas-b { pointer-events: none; z-index: 2; }
 #arc-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
 #video-viewport.panning #pen-canvas, #video-viewport-b.panning #pen-canvas-b { cursor: grabbing; }
