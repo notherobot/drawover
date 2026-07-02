@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 6:23PM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/02/2026 9:31AM PST]</span>
         </div>
       </div>
     </div>
@@ -2454,41 +2454,14 @@
         ctx.restore();
       }
 
-      let _laserOff = null, _laserOffCtx = null;
-      let _laserOffB = null, _laserOffCtxB = null;
-
-      function _getLaserOff(w, h, isB) {
-        if (isB) {
-          if (!_laserOffB || _laserOffB.width !== w || _laserOffB.height !== h) {
-            _laserOffB = document.createElement('canvas');
-            _laserOffB.width = w; _laserOffB.height = h;
-            _laserOffCtxB = _laserOffB.getContext('2d');
-          }
-          return [_laserOffB, _laserOffCtxB];
-        }
-        if (!_laserOff || _laserOff.width !== w || _laserOff.height !== h) {
-          _laserOff = document.createElement('canvas');
-          _laserOff.width = w; _laserOff.height = h;
-          _laserOffCtx = _laserOff.getContext('2d');
-        }
-        return [_laserOff, _laserOffCtx];
-      }
-
       function redrawLaserCanvas() {
         laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
         if (!laserStrokes.length) return;
         const w = laserCanvas.width, h = laserCanvas.height;
         if (!w || !h) return;
-        const [off, offCtx] = _getLaserOff(w, h, false);
-        if (!offCtx) return;
-        offCtx.clearRect(0, 0, w, h);
-        offCtx.save();
-        clipCtxToVideo(offCtx, mainCanvas, laserCanvas);
-        laserStrokes.forEach(s => drawLaserStroke(offCtx, s, w, h));
-        offCtx.restore();
         laserCtx.save();
         laserCtx.globalAlpha = laserFadeOpacity;
-        laserCtx.drawImage(off, 0, 0);
+        laserStrokes.forEach(s => drawLaserStroke(laserCtx, s, w, h));
         laserCtx.restore();
       }
 
@@ -2508,16 +2481,9 @@
         if (!laserStrokes.length) return;
         const w = laserCanvasB.width, h = laserCanvasB.height;
         if (!w || !h) return;
-        const [off, offCtx] = _getLaserOff(w, h, true);
-        if (!offCtx) return;
-        offCtx.clearRect(0, 0, w, h);
-        offCtx.save();
-        clipCtxToVideo(offCtx, mainCanvasB, laserCanvasB);
-        laserStrokes.forEach(s => drawLaserStroke(offCtx, s, w, h));
-        offCtx.restore();
         laserCtxB.save();
         laserCtxB.globalAlpha = laserFadeOpacity;
-        laserCtxB.drawImage(off, 0, 0);
+        laserStrokes.forEach(s => drawLaserStroke(laserCtxB, s, w, h));
         laserCtxB.restore();
       }
 
@@ -2882,6 +2848,7 @@
           laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos, p: getPressure(e) }] });
           lastLaserInputTime = Date.now();
           if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+          redrawLaserCanvas();
         } else if (currentTool === 'eraser') {
           isErasing = true; eraseAt(pos);
         }
