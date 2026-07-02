@@ -11,20 +11,20 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.2.3</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.3.0</span></div>
     </div>
 
     <div id="main-body">
       <div id="sidebar-overlay"></div>
       <div id="sidebar">
         <div id="sidebar-btns">
-          <button id="btn-add-video">+ Video</button>
+          <button id="btn-add-video">+ Media</button>
           <button id="btn-add-folder" title="New folder">📁 Folder</button>
           <label id="trim-import-label" title="Show a trim preview before opening in the session">
             <input type="checkbox" id="trim-import-cb"> Trim on import
           </label>
         </div>
-        <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*" multiple hidden>
+        <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*,image/*" multiple hidden>
         <div id="playlist"></div>
       </div>
       <div id="sidebar-resizer"></div>
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/02/2026 9:31AM PST]</span>
+          <span id="status-version">DrawOver v0.3.0 &nbsp;[Last Updated: 07/02/2026 9:57AM PST]</span>
         </div>
       </div>
     </div>
@@ -278,12 +278,12 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.2.3</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.0</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
-      <div id="welcome-drop-label">Drop a video file here</div>
-      <div id="welcome-drop-sub">MP4, MOV, WebM supported</div>
+      <div id="welcome-drop-label">Drop a video or image here</div>
+      <div id="welcome-drop-sub">MP4, MOV, WebM &nbsp;·&nbsp; PNG, JPG, GIF, WebP &nbsp;·&nbsp; or paste an image</div>
     </div>
     <button id="btn-welcome-browse">Browse files…</button>
     <label id="welcome-trim-label" title="Show a trim preview before opening in the session">
@@ -475,6 +475,7 @@
       function persistEntry(entry) {
         return dbPut({
           id: entry.id, name: entry.name, blob: entry.blob,
+          isImage: !!entry.isImage,
           annotations: entry.annotations,
           arcPoints: entry.arcPoints || {},
           inPoint: entry.inPoint, outPoint: entry.outPoint,
@@ -542,6 +543,7 @@
             const meta = entryMeta[rec.id] || {};
             playlist.push({
               id: rec.id, name: rec.name, blob: rec.blob, objectUrl,
+              isImage: !!rec.isImage,
               annotations: rec.annotations || {},
               arcPoints: rec.arcPoints || {},
               inPoint: rec.inPoint ?? null, outPoint: rec.outPoint ?? null,
@@ -733,6 +735,8 @@
           this._hasVFCB = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
           this._prewarming = false;
           this._prewarmToken = null;
+          this.isImage = false;
+          this.image = null;
 
           this.video.addEventListener('seeked', () => {
             if (this._prewarming) return; // suppress canvas update during decoder pre-warm
@@ -760,8 +764,37 @@
 
         _frameToTime(f) { return f / this.fps + 1e-5; }
 
+        // Load a still image and treat it as a single, non-playable frame.
+        async loadImage(objectUrl) {
+          this.pause();
+          this.isImage = true;
+          this.duration = 0;
+          this.fps = 1;
+          this._frameNum = 0;
+          this.inPoint = null;
+          this.outPoint = null;
+          this.video.removeAttribute('src');
+          this.video.load();
+          return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+              this.image = img;
+              this.canvas.width = img.naturalWidth || 1280;
+              this.canvas.height = img.naturalHeight || 720;
+              if (this.onDurationChange) this.onDurationChange(0);
+              this._renderFrame();
+              if (this.onFrameChange) this.onFrameChange(0);
+              resolve();
+            };
+            img.onerror = () => reject(new Error('Failed to load image.'));
+            img.src = objectUrl;
+          });
+        }
+
         async load(objectUrl, fps) {
           this.pause();
+          this.isImage = false;
+          this.image = null;
           this.fps = fps;
           this._frameNum = 0;
           this.video.src = objectUrl;
@@ -796,6 +829,12 @@
         }
 
         _renderFrame() {
+          if (this.isImage) {
+            if (!this.image) return;
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.drawImage(this.image, 0, 0, this.canvas.width, this.canvas.height);
+            return;
+          }
           if (this.video.readyState < 2) return;
           this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
           this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
@@ -835,7 +874,7 @@
         }
 
         play() {
-          if (!this.video.src) return;
+          if (this.isImage || !this.video.src) return;
           this._prewarmToken = null; // cancel any in-progress pause pre-warm
           this.playing = true;
           this.video.play().catch(() => {});
@@ -845,6 +884,7 @@
 
         pause() {
           this.playing = false;
+          if (this.isImage) { this._cancelRAF(); return; }
           this.video.pause();
           this._cancelRAF();
           this._prewarm(); // prime decoder while paused so next play() starts smooth
@@ -877,6 +917,7 @@
         }
 
         stepFrame(dir) {
+          if (this.isImage) return;
           this.pause();
           // Cancel any prewarm started by pause() — its seeked listener would otherwise
           // consume the seek below and then seek back to the original position.
@@ -888,10 +929,11 @@
         }
 
         seekToTime(t) {
+          if (this.isImage) return;
           this.video.currentTime = Math.max(0, Math.min(this.duration, t));
         }
 
-        getCurrentTime() { return this.video.currentTime; }
+        getCurrentTime() { return this.isImage ? 0 : this.video.currentTime; }
       }
 
       const player = new FramePlayer(mainCanvas, mainCtx);
@@ -1013,6 +1055,28 @@
       }
 
       const isVideoFile = f => f.type.startsWith('video/') || (!f.type && /\.(mp4|mov|m4v|webm|mkv|avi|mts|m2ts)$/i.test(f.name));
+      const isImageFile = f => f.type.startsWith('image/') || (!f.type && /\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i.test(f.name));
+
+      // Load an image just to grab a thumbnail. Duration stays 0 (still image).
+      function analyzeImage(objectUrl) {
+        return new Promise(resolve => {
+          const img = new Image();
+          const cnv = document.createElement('canvas');
+          img.onload = () => {
+            const ar = img.naturalWidth / (img.naturalHeight || 1);
+            cnv.width = 96;
+            cnv.height = Math.max(1, Math.round(96 / (ar || 1)));
+            try {
+              cnv.getContext('2d').drawImage(img, 0, 0, cnv.width, cnv.height);
+              resolve({ thumbnail: cnv.toDataURL('image/jpeg', 0.75), duration: 0 });
+            } catch (_) {
+              resolve({ thumbnail: null, duration: 0 });
+            }
+          };
+          img.onerror = () => resolve({ thumbnail: null, duration: 0 });
+          img.src = objectUrl;
+        });
+      }
 
       // ===== TRIM MODAL =====
       let trimOnImport = localStorage.getItem('drawover_trim_on_import') === '1';
@@ -1139,28 +1203,43 @@
       }
 
       async function addFiles(files) {
-        const valid = Array.from(files).filter(isVideoFile);
+        const valid = Array.from(files).filter(f => isVideoFile(f) || isImageFile(f));
         if (!valid.length) return;
         dismissWelcome();
         const firstNewIdx = playlist.length;
         for (const file of valid) {
           const objectUrl = URL.createObjectURL(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: 24, undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
+          const isImage = !isVideoFile(file) && isImageFile(file);
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, isImage, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: 24, undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
           if (!playlistOrder.includes(entry.id)) playlistOrder.push(entry.id);
-          const { thumbnail, fps, duration } = await analyzeVideo(objectUrl);
-          entry.thumbnail = thumbnail;
-          entry.fps = fps;
-          entry.duration = duration;
+          if (isImage) {
+            const { thumbnail } = await analyzeImage(objectUrl);
+            entry.thumbnail = thumbnail;
+            entry.duration = 0;
+          } else {
+            const { thumbnail, fps, duration } = await analyzeVideo(objectUrl);
+            entry.thumbnail = thumbnail;
+            entry.fps = fps;
+            entry.duration = duration;
+          }
           persistEntry(entry).catch(() => {});
           renderPlaylist();
         }
         fileInput.value = '';
         if (firstNewIdx < playlist.length) {
-          if (trimOnImport) await showTrimModal(playlist[firstNewIdx]);
+          if (trimOnImport && !playlist[firstNewIdx].isImage) await showTrimModal(playlist[firstNewIdx]);
           await loadVideo(firstNewIdx);
           savePlaylistState();
         }
+      }
+
+      // Add a pasted/generated image blob directly to the playlist.
+      async function addImageBlob(blob, name) {
+        const file = (blob instanceof File)
+          ? blob
+          : new File([blob], name || `Pasted image.${(blob.type.split('/')[1] || 'png')}`, { type: blob.type || 'image/png' });
+        await addFiles([file]);
       }
 
       fileInput.addEventListener('change', async (e) => { await addFiles(e.target.files); });
@@ -1449,7 +1528,7 @@
           });
           const durSpan = document.createElement('span');
           durSpan.className = 'playlist-duration';
-          durSpan.textContent = formatTime(entry.duration);
+          durSpan.textContent = entry.isImage ? '🖼 Image' : formatTime(entry.duration);
           info.appendChild(nameSpan); info.appendChild(durSpan);
           row.appendChild(info);
 
@@ -1647,8 +1726,12 @@
         player.loop = loopEnabled;
         btnPlay.textContent = '▶︎';
         try {
-          await player.load(entry.objectUrl, entry.fps);
-          if (player.duration) entry.duration = player.duration;
+          if (entry.isImage) {
+            await player.loadImage(entry.objectUrl);
+          } else {
+            await player.load(entry.objectUrl, entry.fps);
+            if (player.duration) entry.duration = player.duration;
+          }
         } catch (err) { alert(err.message); return; }
         renderPlaylist();
         updateInOutUI();
@@ -2757,10 +2840,14 @@
         playerB.outPoint = entry.outPoint;
         playerB.loop = loopEnabled;
         try {
-          await playerB.load(entry.objectUrl, entry.fps);
-          if (playerB.duration) entry.duration = playerB.duration;
+          if (entry.isImage) {
+            await playerB.loadImage(entry.objectUrl);
+          } else {
+            await playerB.load(entry.objectUrl, entry.fps);
+            if (playerB.duration) entry.duration = playerB.duration;
+          }
         } catch (err) { alert(err.message); return; }
-        playerB.seekToTime(player.getCurrentTime());
+        if (!entry.isImage) playerB.seekToTime(player.getCurrentTime());
         resizeCanvasesB();
         updatePanelLabels();
         renderPlaylist();
@@ -3065,12 +3152,16 @@
         const entry = getActiveEntry();
         const hasVideo = activeIndex >= 0;
         const noVideo = !hasVideo;
-        // No-video group
-        [btnPlay, btnFrameBack, btnFrameFwd, btnToStart, btnToEnd,
-         btnSetIn, btnSetOut, btnClearInOut, btnLoop, btnToggleDrawings,
-         btnMute, volumeSlider, btnPrevAnnotation, btnNextAnnotation,
-         btnClearFrame, document.getElementById('speed-select')
+        const isImage = !!(entry && entry.isImage);
+        // No-video group — always needs a loaded item
+        [btnToggleDrawings, btnPrevAnnotation, btnNextAnnotation,
+         btnClearFrame
         ].forEach(el => { if (el) el.disabled = noVideo; });
+        // Playback transport — meaningless for a still image
+        [btnPlay, btnFrameBack, btnFrameFwd, btnToStart, btnToEnd,
+         btnSetIn, btnSetOut, btnClearInOut, btnLoop,
+         btnMute, volumeSlider, document.getElementById('speed-select')
+        ].forEach(el => { if (el) el.disabled = noVideo || isImage; });
         // Undo/redo
         btnUndo.disabled = !entry || !entry.undoStack.length;
         btnRedo.disabled = !entry || !entry.redoStack.length;
@@ -3401,6 +3492,26 @@
 
       // Dismiss when a file is opened via the normal file picker too
       fileInput.addEventListener('change', () => dismissWelcome(), { capture: true });
+
+      // ===== PASTE IMAGE =====
+      // Paste an image from the clipboard as a new playlist item.
+      document.addEventListener('paste', async (e) => {
+        // Don't hijack paste while the user is editing text (e.g. inline rename)
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        const imgs = [];
+        for (const it of items) {
+          if (it.kind === 'file' && it.type.startsWith('image/')) {
+            const blob = it.getAsFile();
+            if (blob) imgs.push(blob);
+          }
+        }
+        if (!imgs.length) return;
+        e.preventDefault();
+        for (const blob of imgs) await addImageBlob(blob);
+      });
 
       // Restore persisted videos from last session
       restorePlaylist().catch(() => {});
