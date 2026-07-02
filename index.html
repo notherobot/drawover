@@ -2423,54 +2423,41 @@
         return Math.max(0.15, e.pressure);
       }
 
-      // Centripetal Catmull-Rom interpolation: inserts `steps-1` extra points
-      // between each pair. Uses the centripetal (alpha=0.5) parameterization
-      // rather than the uniform one — uniform Catmull-Rom overshoots, forming
-      // loops and cusps when sample points are far apart (fast strokes), which
-      // shows up as glitchy spikes. Centripetal provably never self-intersects
-      // or cusps, so fast and slow strokes render the same clean curve.
+      // Samples a quadratic-through-midpoints curve into a dense point list
+      // (with interpolated pressure), inserting `steps` points per input
+      // segment. Each interior point is the control point of a quadratic Bézier
+      // that runs between the midpoints of its two adjacent segments — the same
+      // curve the app strokes for the arc tool. Because every Bézier stays
+      // inside the convex hull of its control points, the curve never overshoots
+      // its input points no matter how far apart they are. That is the key
+      // property here: fast strokes have widely-spaced samples, and the previous
+      // Catmull-Rom smoothing overshot on those, producing the glitchy spikes
+      // and loops. This method renders fast and slow strokes identically clean.
       function smoothPoints(pts, steps) {
-        if (pts.length < 2) return pts;
-        const out = [];
-        // dist^0.5, floored so duplicate samples never zero out a knot interval
-        const knot = (a, b) => Math.max(1e-4, Math.sqrt(Math.hypot(b.x - a.x, b.y - a.y)));
-        for (let i = 0; i < pts.length - 1; i++) {
-          const p1 = pts[i];
-          const p2 = pts[i + 1];
-          // Phantom endpoints by reflection so the knot sequence never
-          // degenerates at the ends of the stroke.
-          const p0 = i - 1 >= 0 ? pts[i - 1]
-                                : { x: 2*p1.x - p2.x, y: 2*p1.y - p2.y, p: p1.p };
-          const p3 = i + 2 <= pts.length - 1 ? pts[i + 2]
-                                : { x: 2*p2.x - p1.x, y: 2*p2.y - p1.y, p: p2.p };
-
-          out.push(p1);
-
-          const t0 = 0;
-          const t1 = t0 + knot(p0, p1);
-          const t2 = t1 + knot(p1, p2);
-          const t3 = t2 + knot(p2, p3);
-
-          for (let s = 1; s < steps; s++) {
-            const t = t1 + (t2 - t1) * (s / steps);
-            const A1x = ((t1-t)*p0.x + (t-t0)*p1.x) / (t1-t0);
-            const A1y = ((t1-t)*p0.y + (t-t0)*p1.y) / (t1-t0);
-            const A2x = ((t2-t)*p1.x + (t-t1)*p2.x) / (t2-t1);
-            const A2y = ((t2-t)*p1.y + (t-t1)*p2.y) / (t2-t1);
-            const A3x = ((t3-t)*p2.x + (t-t2)*p3.x) / (t3-t2);
-            const A3y = ((t3-t)*p2.y + (t-t2)*p3.y) / (t3-t2);
-            const B1x = ((t2-t)*A1x + (t-t0)*A2x) / (t2-t0);
-            const B1y = ((t2-t)*A1y + (t-t0)*A2y) / (t2-t0);
-            const B2x = ((t3-t)*A2x + (t-t1)*A3x) / (t3-t1);
-            const B2y = ((t3-t)*A2y + (t-t1)*A3y) / (t3-t1);
+        if (pts.length < 3) return pts;
+        const out = [{ ...pts[0] }];
+        const mid = (a, b) => ({
+          x: (a.x + b.x) / 2,
+          y: (a.y + b.y) / 2,
+          p: ((a.p ?? 1) + (b.p ?? 1)) / 2,
+        });
+        for (let i = 1; i < pts.length - 1; i++) {
+          // Start of the first quad is the true stroke start; otherwise it is
+          // the previous segment's midpoint (keeps the curve continuous).
+          const m0 = i === 1 ? pts[0] : mid(pts[i - 1], pts[i]);
+          const m1 = mid(pts[i], pts[i + 1]);
+          const c = pts[i];
+          for (let s = 1; s <= steps; s++) {
+            const t = s / steps, it = 1 - t;
             out.push({
-              x: ((t2-t)*B1x + (t-t1)*B2x) / (t2-t1),
-              y: ((t2-t)*B1y + (t-t1)*B2y) / (t2-t1),
-              p: p1.p + (p2.p - p1.p) * (s / steps),
+              x: it*it*m0.x + 2*it*t*c.x + t*t*m1.x,
+              y: it*it*m0.y + 2*it*t*c.y + t*t*m1.y,
+              p: it*it*(m0.p ?? 1) + 2*it*t*(c.p ?? 1) + t*t*(m1.p ?? 1),
             });
           }
         }
-        out.push(pts[pts.length - 1]);
+        // Final straight run from the last midpoint to the true stroke end.
+        out.push({ ...pts[pts.length - 1] });
         return out;
       }
 
