@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 5:28PM PST]</span>
+          <span id="status-version">DrawOver v0.2.3 &nbsp;[Last Updated: 07/01/2026 6:23PM PST]</span>
         </div>
       </div>
     </div>
@@ -2946,8 +2946,8 @@
           for (const ce of (events.length ? events : [e])) {
             const np = getCanvasPos(ce);
             const pp = currentStroke.points[currentStroke.points.length - 1];
-            const dx = np.x - pp.x, dy = np.y - pp.y;
-            if (dx*dx + dy*dy >= 1e-6) currentStroke.points.push({ ...np, p: getPressure(ce) });
+            // Only skip exact duplicates (same pixel) to preserve early stroke curvature
+            if (np.x !== pp.x || np.y !== pp.y) currentStroke.points.push({ ...np, p: getPressure(ce) });
           }
           redrawPenCanvas();
           penCtx.save(); clipCtxToVideo(penCtx, mainCanvas, penCanvas);
@@ -2959,11 +2959,12 @@
             const laser = laserStrokes[laserStrokes.length - 1];
             const np = getCanvasPos(ce);
             const pp = laser.points[laser.points.length - 1];
-            const dx = np.x - pp.x, dy = np.y - pp.y;
-            if (dx*dx + dy*dy >= 1e-6) laser.points.push({ ...np, p: getPressure(ce) });
+            // Only skip exact duplicates
+            if (np.x !== pp.x || np.y !== pp.y) laser.points.push({ ...np, p: getPressure(ce) });
           }
           lastLaserInputTime = Date.now();
           if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+          redrawLaserCanvas();
         } else if (currentTool === 'eraser' && isErasing) {
           eraseAt(pos);
         }
@@ -3222,15 +3223,20 @@
 
       // ===== LASER FADE =====
       function laserLoop() {
-        const now = Date.now();
-        if (laserFading) {
-          laserFadeOpacity = Math.max(0, 1 - (now - laserFadeStart) / LASER_FADE_DURATION);
-          if (laserFadeOpacity <= 0) { laserStrokes = []; laserFading = false; laserFadeOpacity = 1; }
-        } else if (laserStrokes.length && (now - lastLaserInputTime) >= laserHoldMs) {
-          laserFading = true; laserFadeStart = now;
+        try {
+          const now = Date.now();
+          if (laserFading) {
+            laserFadeOpacity = Math.max(0, 1 - (now - laserFadeStart) / LASER_FADE_DURATION);
+            if (laserFadeOpacity <= 0) { laserStrokes = []; laserFading = false; laserFadeOpacity = 1; }
+          } else if (laserStrokes.length && (now - lastLaserInputTime) >= laserHoldMs) {
+            laserFading = true; laserFadeStart = now;
+          }
+          redrawLaserCanvas();
+          if (compareMode) redrawLaserCanvasB();
+        } catch (err) {
+          console.error('laserLoop error:', err);
+          laserStrokes = []; laserFading = false; laserFadeOpacity = 1;
         }
-        redrawLaserCanvas();
-        if (compareMode) redrawLaserCanvasB();
         requestAnimationFrame(laserLoop);
       }
       requestAnimationFrame(laserLoop);
