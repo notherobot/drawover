@@ -11,25 +11,10 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.3.3</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.3.4</span></div>
     </div>
 
-    <div id="main-body">
-      <div id="sidebar-overlay"></div>
-      <div id="sidebar">
-        <div id="sidebar-btns">
-          <button id="btn-add-video">+ Media</button>
-          <button id="btn-add-folder" title="New folder">📁 Folder</button>
-          <label id="trim-import-label" title="Show a trim preview before opening in the session">
-            <input type="checkbox" id="trim-import-cb"> Trim on import
-          </label>
-        </div>
-        <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*,image/*" multiple hidden>
-        <div id="playlist"></div>
-      </div>
-      <div id="sidebar-resizer"></div>
-
-      <div id="content">
+    <div id="content">
         <div id="tool-row">
           <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
           <button id="btn-compare" title="Compare two videos side-by-side">Compare</button>
@@ -71,6 +56,21 @@
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
+        <div id="main-body">
+        <div id="sidebar-overlay"></div>
+        <div id="sidebar">
+          <div id="sidebar-btns">
+            <button id="btn-add-video">+ Media</button>
+            <button id="btn-add-folder" title="New folder">📁 Folder</button>
+            <label id="trim-import-label" title="Show a trim preview before opening in the session">
+              <input type="checkbox" id="trim-import-cb"> Trim on import
+            </label>
+          </div>
+          <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*,image/*" multiple hidden>
+          <div id="playlist"></div>
+        </div>
+        <div id="sidebar-resizer"></div>
+
         <div id="video-area">
           <div id="panel-left" class="compare-panel">
             <div class="panel-label" id="panel-left-label">
@@ -99,6 +99,7 @@
             </div>
           </div>
         </div>
+        </div><!-- end #main-body (sidebar + video) -->
 
         <div id="scrub-bar-container">
           <div id="scrub-times-top">
@@ -156,10 +157,9 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.3.3 &nbsp;[Last Updated: 07/06/2026 9:11AM PST]</span>
+          <span id="status-version">DrawOver v0.3.4 &nbsp;[Last Updated: 07/06/2026 9:27AM PST]</span>
         </div>
       </div>
-    </div>
   </div>
 
   <!-- Keyboard shortcuts panel -->
@@ -277,7 +277,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.3</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.4</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
