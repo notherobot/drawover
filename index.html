@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.3.4</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.3.5</span></div>
     </div>
 
     <div id="content">
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.3.4 &nbsp;[Last Updated: 07/06/2026 9:27AM PST]</span>
+          <span id="status-version">DrawOver v0.3.5 &nbsp;[Last Updated: 07/06/2026 9:43AM PST]</span>
         </div>
       </div>
   </div>
@@ -277,7 +277,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.4</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.5</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -1879,11 +1879,39 @@
       });
 
       // ===== SCRUB BAR =====
+      // Total frames in the clip (frame indexing follows player.fps, same as
+      // player.currentFrame and the frame numbers stored on annotations/arc
+      // points) so every timeline chunk lines up with the playhead.
+      function getTotalFrames() {
+        const fps = player.fps || getFPS();
+        return Math.max(1, Math.round(player.duration * fps));
+      }
+      // Width of a single frame as a percentage of the whole bar.
+      function framePctWidth() { return 100 / getTotalFrames(); }
+
+      // Paints the bar background as alternating grey frame chunks. Percentage
+      // gradient stops are relative to the bar width, so this auto-scales when
+      // the window resizes — only needs recomputing when the frame count changes.
+      function updateScrubFrameGrid() {
+        if (!player.duration) { scrubBar.style.background = ''; return; }
+        const fw = framePctWidth();
+        scrubBar.style.background =
+          'repeating-linear-gradient(to right,' +
+          ' #242424 0, #242424 ' + fw + '%,' +
+          ' #2c2c2c ' + fw + '%, #2c2c2c ' + (2 * fw) + '%)';
+      }
+
       function updateScrubBar() {
         if (!player.duration) return;
         const pct = (player.getCurrentTime() / player.duration) * 100;
         scrubProgress.style.width = pct + '%';
-        scrubPlayhead.style.left = pct + '%';
+        // Playhead is a rectangle exactly one frame wide, snapped to the current
+        // frame's column.
+        const tf = getTotalFrames();
+        const fw = 100 / tf;
+        const frame = Math.max(0, Math.min(player.currentFrame, tf - 1));
+        scrubPlayhead.style.left = (frame * fw) + '%';
+        scrubPlayhead.style.width = fw + '%';
         // Clamp frame label so it doesn't overflow the bar edges
         const clampedPct = Math.max(3, Math.min(97, pct));
         scrubFrame.style.left = clampedPct + '%';
@@ -1979,17 +2007,19 @@
 
       function updateScrubTicks() {
         scrubTicks.innerHTML = '';
+        updateScrubFrameGrid();
         const entry = getActiveEntry();
         if (!entry || !player.duration) return;
+        const tf = getTotalFrames();
+        const fw = 100 / tf;
         Object.keys(entry.annotations).map(Number).forEach(frame => {
           if (!entry.annotations[frame] || !entry.annotations[frame].length) return;
-          const pct = (frame / getFPS() / player.duration) * 100;
-          if (pct >= 0 && pct <= 100) {
-            const tick = document.createElement('div');
-            tick.className = 'scrub-tick';
-            tick.style.left = pct + '%';
-            scrubTicks.appendChild(tick);
-          }
+          if (frame < 0 || frame >= tf) return;
+          const tick = document.createElement('div');
+          tick.className = 'scrub-tick';
+          tick.style.left = (frame * fw) + '%';
+          tick.style.width = fw + '%';
+          scrubTicks.appendChild(tick);
         });
       }
 
@@ -2400,12 +2430,14 @@
         scrubArcTicks.innerHTML = '';
         const entry = getActiveEntry();
         if (!entry || !entry.arcPoints || !player.duration) return;
+        const tf = getTotalFrames();
+        const fw = 100 / tf;
         Object.keys(entry.arcPoints).map(Number).forEach(f => {
-          const pct = (f / (entry.fps || 24) / player.duration) * 100;
-          if (pct < 0 || pct > 100) return;
+          if (f < 0 || f >= tf) return;
           const tick = document.createElement('div');
           tick.className = 'scrub-arc-tick';
-          tick.style.left = pct + '%';
+          tick.style.left = (f * fw) + '%';
+          tick.style.width = fw + '%';
           scrubArcTicks.appendChild(tick);
         });
       }
