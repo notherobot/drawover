@@ -486,6 +486,9 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
   overflow: visible; /* fixed-position overlay panels must not be clipped in fullscreen */
 }
 #content:fullscreen #video-area { flex: 1; min-height: 0; }
+/* Keep fullscreen focused on the video — the playlist is not needed there. */
+#content:fullscreen #sidebar,
+#content:fullscreen #sidebar-resizer { display: none; }
 
 /* ===== WELCOME OVERLAY ===== */
 #welcome-overlay {
