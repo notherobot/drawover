@@ -11,13 +11,14 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.3.9</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.4.0</span></div>
     </div>
 
     <div id="content">
         <div id="tool-row">
           <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
           <button id="btn-compare" title="Compare two videos side-by-side">Compare</button>
+          <button id="btn-compare-frame" title="Freeze this frame of A and compare it against a frame you pick on B">Compare Frame</button>
           <div class="tool-sep"></div>
           <div class="tool-group">
             <button class="tool-btn" data-tool="pan" title="Pan — click and drag (H)">✋</button>
@@ -158,7 +159,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.3.9 &nbsp;[Last Updated: 07/06/2026 3:28PM PST]</span>
+          <span id="status-version">DrawOver v0.4.0 &nbsp;[Last Updated: 07/06/2026 3:51PM PST]</span>
         </div>
       </div>
   </div>
@@ -278,7 +279,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.9</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.0</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -417,6 +418,11 @@
       let comparePanelLeft = true; // true = left panel is active for drawing/undo
       let compareIndex = -1;
       let playerB = null;
+      // Frame-compare mode: panel A is frozen on its current frame and the
+      // timeline/transport drive only panel B, so you can line up a single frame
+      // of B against the locked frame of A.
+      let lockCompare = false;
+      let lockedFrameA = 0;
       let panXB = 0, panYB = 0, vpZoomB = 1;
       let vpDragB = null;
       let isDrawingB = false, currentStrokeB = null, isErasingB = false;
@@ -649,6 +655,11 @@
         return (compareMode && !comparePanelLeft && playerB) ? playerB : player;
       }
 
+      // The player/entry the timeline (scrub bar + transport) drives. In
+      // frame-compare mode that is panel B; otherwise it is the main player A.
+      function timelinePlayer() { return (compareMode && lockCompare && playerB) ? playerB : player; }
+      function timelineEntry() { return (compareMode && lockCompare) ? getCompareEntry() : getActiveEntry(); }
+
       function setActivePanel(isLeft) {
         comparePanelLeft = isLeft;
         panelLeft.classList.toggle('active-compare-panel', isLeft);
@@ -657,7 +668,9 @@
 
       function updatePanelLabels() {
         const le = getActiveEntry();
-        panelLeftLabel.querySelector('.panel-label-name').textContent = le ? le.name : 'No video';
+        const leftName = le ? le.name : 'No video';
+        panelLeftLabel.querySelector('.panel-label-name').textContent =
+          (compareMode && lockCompare) ? `🔒 ${leftName} — frame ${lockedFrameA}` : leftName;
         const re = getCompareEntry();
         panelRightLabel.querySelector('.panel-label-name').textContent = re ? re.name : 'Click a video in the sidebar';
       }
@@ -1618,7 +1631,9 @@
           row.appendChild(removeBtn);
 
           row.addEventListener('click', () => {
-            if (compareMode && !comparePanelLeft) { loadVideoB(i); } else { loadVideo(i); }
+            // In frame-compare, A is locked — a sidebar pick always loads B.
+            if (compareMode && (lockCompare || !comparePanelLeft)) { loadVideoB(i); }
+            else { loadVideo(i); }
           });
           return row;
         }
@@ -1817,6 +1832,13 @@
       // ===== PLAYBACK =====
       btnPlay.addEventListener('click', () => {
         if (activeIndex < 0) return;
+        // Frame-compare: play/pause only panel B (A is frozen).
+        if (compareMode && lockCompare) {
+          if (!playerB || !playerB.video.src) return;
+          if (playerB.playing) { playerB.pause(); setPlayIcon(false); }
+          else { playerB.play(); setPlayIcon(true); }
+          return;
+        }
         if (player.playing) {
           player.pause();
           if (compareMode && playerB) playerB.pause();
@@ -1841,14 +1863,23 @@
       });
 
       btnFrameBack.addEventListener('click', () => {
-        if (activeIndex >= 0) { player.stepFrame(-1); if (compareMode && playerB) playerB.stepFrame(-1); }
+        if (activeIndex < 0) return;
+        if (compareMode && lockCompare) { if (playerB) playerB.stepFrame(-1); return; }
+        player.stepFrame(-1); if (compareMode && playerB) playerB.stepFrame(-1);
       });
       btnFrameFwd.addEventListener('click', () => {
-        if (activeIndex >= 0) { player.stepFrame(1); if (compareMode && playerB) playerB.stepFrame(1); }
+        if (activeIndex < 0) return;
+        if (compareMode && lockCompare) { if (playerB) playerB.stepFrame(1); return; }
+        player.stepFrame(1); if (compareMode && playerB) playerB.stepFrame(1);
       });
 
       btnToStart.addEventListener('click', () => {
         if (activeIndex < 0) return;
+        if (compareMode && lockCompare) {
+          const be = getCompareEntry();
+          if (playerB) playerB.seekToTime(be && be.inPoint !== null ? be.inPoint : 0);
+          return;
+        }
         const e = playlist[activeIndex];
         const t = e.inPoint !== null ? e.inPoint : 0;
         player.seekToTime(t);
@@ -1857,6 +1888,11 @@
 
       btnToEnd.addEventListener('click', () => {
         if (activeIndex < 0) return;
+        if (compareMode && lockCompare) {
+          const be = getCompareEntry();
+          if (playerB) playerB.seekToTime(be && be.outPoint !== null ? be.outPoint : playerB.duration);
+          return;
+        }
         const e = playlist[activeIndex];
         const t = e.outPoint !== null ? e.outPoint : player.duration;
         player.seekToTime(t);
@@ -1920,23 +1956,23 @@
 
       // ===== ANNOTATION NAVIGATION =====
       btnPrevAnnotation.addEventListener('click', () => {
-        const entry = getActiveEntry(); if (!entry) return;
+        const entry = timelineEntry(); const tp = timelinePlayer(); if (!entry) return;
         const frames = Object.keys(entry.annotations).map(Number)
           .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
           .sort((a, b) => a - b);
-        const prev = frames.filter(f => f < player.currentFrame).pop();
-        if (prev !== undefined) player.stepFrame(prev - player.currentFrame);
-        else player.seekToTime(entry.inPoint !== null ? entry.inPoint : 0);
+        const prev = frames.filter(f => f < tp.currentFrame).pop();
+        if (prev !== undefined) tp.stepFrame(prev - tp.currentFrame);
+        else tp.seekToTime(entry.inPoint !== null ? entry.inPoint : 0);
       });
 
       btnNextAnnotation.addEventListener('click', () => {
-        const entry = getActiveEntry(); if (!entry) return;
+        const entry = timelineEntry(); const tp = timelinePlayer(); if (!entry) return;
         const frames = Object.keys(entry.annotations).map(Number)
           .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
           .sort((a, b) => a - b);
-        const next = frames.find(f => f > player.currentFrame);
-        if (next !== undefined) player.stepFrame(next - player.currentFrame);
-        else player.seekToTime(entry.outPoint !== null ? entry.outPoint : player.duration);
+        const next = frames.find(f => f > tp.currentFrame);
+        if (next !== undefined) tp.stepFrame(next - tp.currentFrame);
+        else tp.seekToTime(entry.outPoint !== null ? entry.outPoint : tp.duration);
       });
 
       // ===== SCRUB BAR =====
@@ -1944,8 +1980,9 @@
       // player.currentFrame and the frame numbers stored on annotations/arc
       // points) so every timeline chunk lines up with the playhead.
       function getTotalFrames() {
-        const fps = player.fps || getFPS();
-        return Math.max(1, Math.round(player.duration * fps));
+        const tp = timelinePlayer();
+        const fps = tp.fps || getFPS();
+        return Math.max(1, Math.round(tp.duration * fps));
       }
       // Width of a single frame as a percentage of the whole bar.
       function framePctWidth() { return 100 / getTotalFrames(); }
@@ -1954,7 +1991,7 @@
       // gradient stops are relative to the bar width, so this auto-scales when
       // the window resizes — only needs recomputing when the frame count changes.
       function updateScrubFrameGrid() {
-        if (!player.duration) { scrubBar.style.background = ''; return; }
+        if (!timelinePlayer().duration) { scrubBar.style.background = ''; return; }
         const fw = framePctWidth();
         scrubBar.style.background =
           'repeating-linear-gradient(to right,' +
@@ -1963,8 +2000,9 @@
       }
 
       function updateScrubBar() {
-        if (!player.duration) return;
-        const pct = (player.getCurrentTime() / player.duration) * 100;
+        const tp = timelinePlayer();
+        if (!tp.duration) return;
+        const pct = (tp.getCurrentTime() / tp.duration) * 100;
         scrubProgress.style.width = pct + '%';
         // Playhead is a rectangle exactly one frame wide, snapped to the current
         // frame's column. Derive it from the live playback time (not currentFrame,
@@ -1972,8 +2010,8 @@
         // cursor immediately while scrubbing.
         const tf = getTotalFrames();
         const fw = 100 / tf;
-        const fps = player.fps || getFPS();
-        const frame = Math.max(0, Math.min(Math.round(player.getCurrentTime() * fps), tf - 1));
+        const fps = tp.fps || getFPS();
+        const frame = Math.max(0, Math.min(Math.round(tp.getCurrentTime() * fps), tf - 1));
         scrubPlayhead.style.left = (frame * fw) + '%';
         scrubPlayhead.style.width = fw + '%';
         // Clamp frame label so it doesn't overflow the bar edges
@@ -1982,17 +2020,28 @@
       }
 
       function updateScrubTimes() {
-        scrubCurrent.textContent = formatSMPTE(player.getCurrentTime(), player.fps);
+        const tp = timelinePlayer();
+        scrubCurrent.textContent = formatSMPTE(tp.getCurrentTime(), tp.fps);
         // Live-time frame so the label tracks the cursor during a scrub.
-        const fps = player.fps || getFPS();
-        scrubFrame.textContent = 'F: ' + Math.round(player.getCurrentTime() * fps);
-        if (player.duration) scrubTotal.textContent = formatSMPTE(player.duration, player.fps);
+        const fps = tp.fps || getFPS();
+        scrubFrame.textContent = 'F: ' + Math.round(tp.getCurrentTime() * fps);
+        if (tp.duration) scrubTotal.textContent = formatSMPTE(tp.duration, tp.fps);
       }
 
       function scrubFromEvent(e) {
         const rect = scrubBar.getBoundingClientRect();
         const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
         const pct = Math.max(0, Math.min(1, x / rect.width));
+        // Frame-compare mode: the timeline drives only panel B; A stays frozen.
+        if (compareMode && lockCompare) {
+          if (playerB && playerB.duration) {
+            const bFrame = Math.round(pct * playerB.duration * playerB.fps);
+            playerB.seekToTime(bFrame / playerB.fps + 1e-5);
+          }
+          updateScrubBar();
+          updateScrubTimes();
+          return;
+        }
         if (player.duration) {
           const rawTime = pct * player.duration;
           const frameNum = Math.round(rawTime * player.fps);
@@ -2080,8 +2129,8 @@
       function updateScrubTicks() {
         scrubTicks.innerHTML = '';
         updateScrubFrameGrid();
-        const entry = getActiveEntry();
-        if (!entry || !player.duration) return;
+        const entry = timelineEntry();
+        if (!entry || !timelinePlayer().duration) return;
         const tf = getTotalFrames();
         const fw = 100 / tf;
         Object.keys(entry.annotations).map(Number).forEach(frame => {
@@ -2902,7 +2951,12 @@
         const entry = playlist[index];
         if (!playerB) {
           playerB = new FramePlayer(mainCanvasB, mainCtxB);
-          playerB.onFrameChange = () => { redrawPenCanvasB(); };
+          // In frame-compare mode B drives the timeline, so refresh the scrub bar
+          // when its frame changes.
+          playerB.onFrameChange = () => {
+            redrawPenCanvasB();
+            if (compareMode && lockCompare) { updateScrubBar(); updateScrubTimes(); updateScrubTicks(); }
+          };
           setupPanelBPointerEvents();
         }
         playerB.fps = entry.fps;
@@ -3413,7 +3467,9 @@
       // ===== COMPARE MODE =====
       function exitCompareMode() {
         compareMode = false;
+        lockCompare = false;
         document.getElementById('btn-compare').classList.remove('active');
+        document.getElementById('btn-compare-frame').classList.remove('active');
         panelRight.style.display = 'none';
         document.getElementById('content').classList.remove('compare-mode');
         panelLeft.classList.remove('active-compare-panel');
@@ -3421,13 +3477,17 @@
         comparePanelLeft = true;
         compareIndex = -1;
         if (playerB) { playerB.pause(); }
+        setPlayIcon(false);
         resizeCanvases();
+        // Timeline reverts to panel A (still on its — now unlocked — frame).
+        updateScrubBar(); updateScrubTimes(); updateScrubTicks();
         renderPlaylist();
       }
 
       document.getElementById('btn-compare').addEventListener('click', () => {
         if (compareMode) { exitCompareMode(); return; }
         compareMode = true;
+        lockCompare = false;
         document.getElementById('btn-compare').classList.add('active');
         panelRight.style.display = '';
         document.getElementById('content').classList.add('compare-mode');
@@ -3435,6 +3495,25 @@
         updatePanelLabels();
         const secondIdx = playlist.findIndex((_, i) => i !== activeIndex);
         if (secondIdx >= 0) loadVideoB(secondIdx); else { resizeCanvases(); renderPlaylist(); }
+      });
+
+      // Frame-compare: freeze A on its current frame; the timeline drives B only.
+      document.getElementById('btn-compare-frame').addEventListener('click', () => {
+        if (compareMode) { exitCompareMode(); return; }
+        if (activeIndex < 0) return;
+        compareMode = true;
+        lockCompare = true;
+        lockedFrameA = player.currentFrame;
+        document.getElementById('btn-compare-frame').classList.add('active');
+        panelRight.style.display = '';
+        document.getElementById('content').classList.add('compare-mode');
+        // Default the drawable panel to B (so sidebar picks load B and scrubbing
+        // draws there); click panel A to draw on the frozen frame instead.
+        setActivePanel(false);
+        updatePanelLabels();
+        const secondIdx = playlist.findIndex((_, i) => i !== activeIndex);
+        loadVideoB(secondIdx >= 0 ? secondIdx : activeIndex);
+        updateScrubBar(); updateScrubTimes(); updateScrubTicks();
       });
 
       document.getElementById('btn-compare-close').addEventListener('click', () => exitCompareMode());
