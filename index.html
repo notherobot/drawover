@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.3.2</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.3.3</span></div>
     </div>
 
     <div id="main-body">
@@ -156,7 +156,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.3.2 &nbsp;[Last Updated: 07/02/2026 2:22PM PST]</span>
+          <span id="status-version">DrawOver v0.3.3 &nbsp;[Last Updated: 07/06/2026 9:11AM PST]</span>
         </div>
       </div>
     </div>
@@ -277,7 +277,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.2</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.3</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -1995,7 +1995,11 @@
 
       // ===== TOOLS =====
       function updateToolCursor() {
-        if (arcHoverFrame !== null || arcDragFrame !== null) {
+        // The move (4-way arrow) cursor for grabbing existing arc points is only
+        // offered when the Arc Tracer is NOT the active tool. While it is active
+        // you are placing new points, not dragging old ones, so keep the tool's
+        // own cursor.
+        if ((arcHoverFrame !== null || arcDragFrame !== null) && currentTool !== 'arc-tracer') {
           penCanvas.style.cursor = penCanvasB.style.cursor = 'move';
           return;
         }
@@ -2071,6 +2075,9 @@
         const showArc = tool === 'arc-tracer';
         arcControlsEl.style.display = showArc ? 'flex' : 'none';
         arcSepEl.style.display = showArc ? '' : 'none';
+        // Redraw so arc points switch between their shrunk (active) and full
+        // (inactive) appearance the moment the tool is toggled.
+        redrawArcCanvas();
         updateToolCursor();
       }
 
@@ -2576,18 +2583,23 @@
           arcCtx.restore();
         }
 
+        // While placing new points, existing points are shrunk and faded so
+        // they don't obscure where you're clicking. They return to full size
+        // and opacity once the Arc Tracer is deactivated.
+        const arcActive = currentTool === 'arc-tracer';
         // Dots at each visible point
         for (const f of visible) {
           const dist = Math.abs(f - currentFrame);
           const isCurrent = dist === 0;
-          const opacity = isCurrent ? 1 : Math.max(0.25, 1 - dist / (arcWindow + 1));
-          const radius = (isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35)) * dpr;
+          let opacity = isCurrent ? 1 : Math.max(0.25, 1 - dist / (arcWindow + 1));
+          let radius = (isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35)) * dpr;
+          if (arcActive) { radius *= 0.35; opacity *= 0.35; }
           const px = allPts[f].x * w, py = allPts[f].y * h;
           const color = isCurrent ? '#ffcc00' : (f < currentFrame ? '#ff7733' : '#44aaff');
           arcCtx.save();
           arcCtx.globalAlpha = opacity;
           arcCtx.beginPath();
-          arcCtx.arc(px, py, radius + 1.5 * dpr, 0, Math.PI * 2);
+          arcCtx.arc(px, py, radius + (arcActive ? 0.5 : 1.5) * dpr, 0, Math.PI * 2);
           arcCtx.fillStyle = 'rgba(0,0,0,0.5)';
           arcCtx.fill();
           arcCtx.beginPath();
