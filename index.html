@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.3.7</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.3.8</span></div>
     </div>
 
     <div id="content">
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.3.7 &nbsp;[Last Updated: 07/06/2026 10:23AM PST]</span>
+          <span id="status-version">DrawOver v0.3.8 &nbsp;[Last Updated: 07/06/2026 2:06PM PST]</span>
         </div>
       </div>
   </div>
@@ -277,7 +277,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.7</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.8</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -409,6 +409,7 @@
       let arcLastEvent = null;
       let arcHoverFrame = null;
       let arcDragFrame = null;
+      let arcDragStart = null; // arc point position at the start of a drag (for undo)
 
       let compareMode = false;
       let comparePanelLeft = true; // true = left panel is active for drawing/undo
@@ -939,16 +940,33 @@
           }
         }
 
-        stepFrame(dir) {
-          if (this.isImage) return;
-          this.pause();
-          // Cancel any prewarm started by pause() — its seeked listener would otherwise
-          // consume the seek below and then seek back to the original position.
+        // Pause the video without kicking off the pause-time decoder pre-warm.
+        // Rapid frame-stepping calls this on every keypress; triggering a prewarm
+        // each time spawns overlapping warm seeks that thrash the decoder and
+        // freeze rendering.
+        _pauseNoPrewarm() {
+          this.playing = false;
+          if (!this.isImage) this.video.pause();
+          this._cancelRAF();
           this._prewarmToken = null;
           this._prewarming = false;
-          const maxFrame = Math.ceil(this.duration * this.fps) - 1;
-          const target = Math.max(0, Math.min(maxFrame, this._frameNum + dir));
-          this.video.currentTime = this._frameToTime(target);
+        }
+
+        stepFrame(dir) {
+          if (this.isImage) return;
+          this._pauseNoPrewarm();
+          const maxFrame = Math.max(0, Math.ceil(this.duration * this.fps) - 1);
+          // Step from the latest *requested* frame (the queued/in-flight seek
+          // target), not the rendered frame, so rapid presses accumulate instead
+          // of all resolving to the same next frame. When idle, currentTime is
+          // the rendered frame, so this falls back to it cleanly.
+          const baseTime = this._pendingSeek != null ? this._pendingSeek : this.video.currentTime;
+          const base = Math.round(baseTime * this.fps);
+          const target = Math.max(0, Math.min(maxFrame, base + dir));
+          // Route through the serialised seek queue so rapid steps coalesce to
+          // the latest target and render as fast as the decoder can, rather than
+          // stacking raw currentTime writes that the browser drops on the floor.
+          this.seekToTime(this._frameToTime(target));
         }
 
         seekToTime(t) {
@@ -2945,8 +2963,12 @@
           const hit = getArcHitFrame(hitPos);
           if (hit !== null) {
             arcDragFrame = hit;
+            const dEntry = getActiveEntry();
+            arcDragStart = (dEntry && dEntry.arcPoints && dEntry.arcPoints[hit])
+              ? { ...dEntry.arcPoints[hit] } : null;
             penCanvas.setPointerCapture(e.pointerId);
             updateToolCursor();
+            showArcMagnifier(e, hitPos);
             return;
           }
         }
@@ -2954,10 +2976,15 @@
           const pos = getCanvasPos(e);
           const entry = getActiveEntry(); if (!entry) return;
           if (!entry.arcPoints) entry.arcPoints = {};
-          entry.arcPoints[player.currentFrame] = { x: pos.x, y: pos.y };
+          const af = player.currentFrame;
+          const prev = entry.arcPoints[af] ? { ...entry.arcPoints[af] } : null;
+          entry.arcPoints[af] = { x: pos.x, y: pos.y };
+          entry.undoStack.push({ type: 'addArc', frame: af, point: { x: pos.x, y: pos.y }, prev });
+          entry.redoStack = [];
           redrawArcCanvas();
           updateArcTicks();
           scheduleAnnotationSave();
+          updateControlAvailability();
           player.stepFrame(1);
           return;
         }
@@ -3017,6 +3044,7 @@
           if (entry && entry.arcPoints) {
             entry.arcPoints[arcDragFrame] = { x: pos.x, y: pos.y };
             redrawArcCanvas();
+            showArcMagnifier(e, pos);
           }
           return;
         }
@@ -3069,10 +3097,21 @@
 
       const finishStroke = () => {
         if (arcDragFrame !== null) {
+          const entry = getActiveEntry();
+          if (entry && entry.arcPoints && arcDragStart) {
+            const to = entry.arcPoints[arcDragFrame];
+            if (to && (to.x !== arcDragStart.x || to.y !== arcDragStart.y)) {
+              entry.undoStack.push({ type: 'moveArc', frame: arcDragFrame, from: arcDragStart, to: { ...to } });
+              entry.redoStack = [];
+            }
+          }
+          arcDragStart = null;
           arcDragFrame = null;
+          hideArcMagnifier();
           updateArcTicks();
           scheduleAnnotationSave();
           updateToolCursor();
+          updateControlAvailability();
           return;
         }
         if (currentTool === 'pen' && isDrawing && currentStroke) {
@@ -3154,9 +3193,28 @@
       }
 
       // ===== UNDO/REDO =====
+      // Refresh the arc overlay + timeline ticks after an arc undo/redo.
+      function refreshArc() {
+        redrawArcCanvas(); updateArcTicks(); scheduleAnnotationSave(); updateControlAvailability();
+      }
+
       function undo() {
         const entry = getActivePanelEntry(); if (!entry || !entry.undoStack.length) return;
         const action = entry.undoStack.pop();
+        if (action.type === 'moveArc') {
+          if (!entry.arcPoints) entry.arcPoints = {};
+          entry.arcPoints[action.frame] = { ...action.from };
+          entry.redoStack.push(action);
+          refreshArc();
+          return;
+        }
+        if (action.type === 'addArc') {
+          if (action.prev) { if (!entry.arcPoints) entry.arcPoints = {}; entry.arcPoints[action.frame] = { ...action.prev }; }
+          else if (entry.arcPoints) delete entry.arcPoints[action.frame];
+          entry.redoStack.push(action);
+          refreshArc();
+          return;
+        }
         if (action.type === 'add') {
           const removed = (entry.annotations[action.frame] || []).pop();
           entry.redoStack.push({ type: 'add', frame: action.frame, stroke: removed });
@@ -3175,6 +3233,20 @@
       function redo() {
         const entry = getActivePanelEntry(); if (!entry || !entry.redoStack.length) return;
         const action = entry.redoStack.pop();
+        if (action.type === 'moveArc') {
+          if (!entry.arcPoints) entry.arcPoints = {};
+          entry.arcPoints[action.frame] = { ...action.to };
+          entry.undoStack.push(action);
+          refreshArc();
+          return;
+        }
+        if (action.type === 'addArc') {
+          if (!entry.arcPoints) entry.arcPoints = {};
+          entry.arcPoints[action.frame] = { ...action.point };
+          entry.undoStack.push(action);
+          refreshArc();
+          return;
+        }
         if (action.type === 'add') {
           if (!entry.annotations[action.frame]) entry.annotations[action.frame] = [];
           entry.annotations[action.frame].push(action.stroke);
