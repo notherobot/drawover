@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.3.5</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.3.6</span></div>
     </div>
 
     <div id="content">
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.3.5 &nbsp;[Last Updated: 07/06/2026 9:43AM PST]</span>
+          <span id="status-version">DrawOver v0.3.6 &nbsp;[Last Updated: 07/06/2026 9:55AM PST]</span>
         </div>
       </div>
   </div>
@@ -277,7 +277,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.5</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.6</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -733,6 +733,7 @@
           this._hasVFCB = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
           this._prewarming = false;
           this._prewarmToken = null;
+          this._scrubbing = false;
           this.isImage = false;
           this.image = null;
 
@@ -885,7 +886,7 @@
           if (this.isImage) { this._cancelRAF(); return; }
           this.video.pause();
           this._cancelRAF();
-          this._prewarm(); // prime decoder while paused so next play() starts smooth
+          if (!this._scrubbing) this._prewarm(); // prime decoder while paused (skip mid-scrub)
         }
 
         async _prewarm() {
@@ -930,6 +931,14 @@
           if (this.isImage) return;
           this.video.currentTime = Math.max(0, Math.min(this.duration, t));
         }
+
+        // Scrubbing must not fight the pause-time decoder pre-warm: the prewarm's
+        // own 'seeked' listeners would otherwise swallow scrub seeks and yank the
+        // position back to where the scrub began, and the main 'seeked' handler
+        // skips rendering while _prewarming. Cancel any prewarm and suppress it
+        // for the duration of the scrub.
+        beginScrub() { this._prewarmToken = null; this._prewarming = false; this._scrubbing = true; }
+        endScrub() { this._scrubbing = false; }
 
         getCurrentTime() { return this.isImage ? 0 : this.video.currentTime; }
       }
@@ -1906,10 +1915,13 @@
         const pct = (player.getCurrentTime() / player.duration) * 100;
         scrubProgress.style.width = pct + '%';
         // Playhead is a rectangle exactly one frame wide, snapped to the current
-        // frame's column.
+        // frame's column. Derive it from the live playback time (not currentFrame,
+        // which only updates on the async 'seeked' event) so it follows the
+        // cursor immediately while scrubbing.
         const tf = getTotalFrames();
         const fw = 100 / tf;
-        const frame = Math.max(0, Math.min(player.currentFrame, tf - 1));
+        const fps = player.fps || getFPS();
+        const frame = Math.max(0, Math.min(Math.round(player.getCurrentTime() * fps), tf - 1));
         scrubPlayhead.style.left = (frame * fw) + '%';
         scrubPlayhead.style.width = fw + '%';
         // Clamp frame label so it doesn't overflow the bar edges
@@ -1919,7 +1931,9 @@
 
       function updateScrubTimes() {
         scrubCurrent.textContent = formatSMPTE(player.getCurrentTime(), player.fps);
-        scrubFrame.textContent = 'F: ' + player.currentFrame;
+        // Live-time frame so the label tracks the cursor during a scrub.
+        const fps = player.fps || getFPS();
+        scrubFrame.textContent = 'F: ' + Math.round(player.getCurrentTime() * fps);
         if (player.duration) scrubTotal.textContent = formatSMPTE(player.duration, player.fps);
       }
 
@@ -1936,6 +1950,10 @@
             const bFrame = Math.round(rawTime * playerB.fps);
             playerB.seekToTime(bFrame / playerB.fps + 1e-5);
           }
+          // Update the bar immediately so the playhead/label follow the cursor
+          // without waiting for the async 'seeked' event.
+          updateScrubBar();
+          updateScrubTimes();
         }
       }
 
@@ -1956,6 +1974,7 @@
       scrubBar.addEventListener('mousedown', (e) => {
         if (!draggingHandle) {
           isScrubbing = true;
+          player.beginScrub();
           if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
           scrubFromEvent(e);
         }
@@ -1964,14 +1983,15 @@
         if (draggingHandle) handleDragFromEvent(e);
         else if (isScrubbing) scrubFromEvent(e);
       });
-      document.addEventListener('mouseup', () => { isScrubbing = false; draggingHandle = null; });
+      document.addEventListener('mouseup', () => { if (isScrubbing) player.endScrub(); isScrubbing = false; draggingHandle = null; });
       scrubBar.addEventListener('touchstart', (e) => {
         isScrubbing = true;
+        player.beginScrub();
         if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
         scrubFromEvent(e);
       }, { passive: true });
       document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
-      document.addEventListener('touchend', () => { isScrubbing = false; });
+      document.addEventListener('touchend', () => { if (isScrubbing) player.endScrub(); isScrubbing = false; });
 
       function updateInOutUI() {
         const entry = getActiveEntry();
