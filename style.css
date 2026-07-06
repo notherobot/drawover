@@ -418,9 +418,28 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 .transport-btn {
   font-size: 14px; padding: 5px 11px; flex-shrink: 0;
 }
+/* Play / pause icons are drawn as CSS shapes (not text glyphs, which render
+   small and inconsistently) so they reliably fill the button. State is driven
+   by the .is-playing class. */
 #btn-play {
   width: 50px; height: 50px; border-radius: 50%; padding: 0;
-  font-size: 34px; background: #333; border-color: #4a4a4a; flex-shrink: 0;
+  font-size: 0; background: #333; border-color: #4a4a4a; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+/* Paused → show a large play triangle. */
+#btn-play::before {
+  content: ''; width: 0; height: 0;
+  border-style: solid;
+  border-width: 15px 0 15px 26px;
+  border-color: transparent transparent transparent #e6e6e6;
+  margin-left: 5px; /* optical centring of the triangle */
+}
+#btn-play::after { content: none; }
+/* Playing → show two pause bars (::before and ::after become the bars). */
+#btn-play.is-playing::before,
+#btn-play.is-playing::after {
+  content: ''; width: 8px; height: 30px;
+  border: none; border-radius: 2px; background: #e6e6e6; margin: 0;
 }
 #btn-play:hover { background: #444; }
 #speed-select {
@@ -569,7 +588,9 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
   #playback-row { gap: 2px; padding: 4px 6px; }
   #playback-row button { padding: 4px 6px; font-size: 10px; }
   .transport-btn { font-size: 12px; padding: 4px 8px; }
-  #btn-play { width: 42px; height: 42px; font-size: 20px; }
+  #btn-play { width: 42px; height: 42px; }
+  #btn-play::before { border-width: 12px 0 12px 21px; }
+  #btn-play.is-playing::before, #btn-play.is-playing::after { width: 7px; height: 24px; }
 
   /* Status bar: hide the note text, keep storage + version */
   #status-note { display: none; }

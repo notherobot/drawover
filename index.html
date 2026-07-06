@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.3.6</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.3.7</span></div>
     </div>
 
     <div id="content">
@@ -129,7 +129,7 @@
           <div class="pb-sep"></div>
           <button class="transport-btn" id="btn-to-start" title="Go to In / Start">|◀</button>
           <button class="transport-btn" id="btn-frame-back" title="Frame Back (←)">◀◀</button>
-          <button id="btn-play" title="Play/Pause (Space)">▶&#xFE0E;</button>
+          <button id="btn-play" title="Play/Pause (Space)"></button>
           <button class="transport-btn" id="btn-frame-fwd" title="Frame Forward (→)">▶▶</button>
           <button class="transport-btn" id="btn-to-end" title="Go to Out / End">▶|</button>
           <div class="pb-sep"></div>
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.3.6 &nbsp;[Last Updated: 07/06/2026 9:55AM PST]</span>
+          <span id="status-version">DrawOver v0.3.7 &nbsp;[Last Updated: 07/06/2026 10:23AM PST]</span>
         </div>
       </div>
   </div>
@@ -277,7 +277,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.6</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.3.7</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -347,6 +347,8 @@
       const btnAddVideo = document.getElementById('btn-add-video');
       const btnAddFolder = document.getElementById('btn-add-folder');
       const btnPlay = document.getElementById('btn-play');
+      // Toggle the CSS play/pause icon (drawn via .is-playing, not a text glyph).
+      function setPlayIcon(playing) { btnPlay.classList.toggle('is-playing', playing); }
       const btnFrameBack = document.getElementById('btn-frame-back');
       const btnFrameFwd = document.getElementById('btn-frame-fwd');
       const btnToStart = document.getElementById('btn-to-start');
@@ -734,6 +736,8 @@
           this._prewarming = false;
           this._prewarmToken = null;
           this._scrubbing = false;
+          this._seeking = false;      // a seekToTime() seek is in flight
+          this._pendingSeek = null;   // latest queued scrub target (seconds)
           this.isImage = false;
           this.image = null;
 
@@ -742,6 +746,22 @@
             this._frameNum = Math.round(this.video.currentTime * this.fps);
             this._renderFrame();
             if (this.onFrameChange) this.onFrameChange(this._frameNum);
+            // Serialised scrub seeks: now that this seek finished (and rendered),
+            // chain to the latest queued target so the video steps through the
+            // intermediate frames instead of coalescing to just the last one.
+            if (this._seeking) {
+              const curFrame = Math.round(this.video.currentTime * this.fps);
+              const wantFrame = this._pendingSeek !== null ? Math.round(this._pendingSeek * this.fps) : curFrame;
+              // Never chain a scrub seek while playing — it would fight playback.
+              if (!this.playing && this._pendingSeek !== null && wantFrame !== curFrame) {
+                const next = this._pendingSeek;
+                this._pendingSeek = null;
+                this.video.currentTime = next;
+              } else {
+                this._pendingSeek = null;
+                this._seeking = false;
+              }
+            }
           });
           this.video.addEventListener('ended', () => {
             if (this.loop) {
@@ -754,7 +774,7 @@
             }
             this.playing = false;
             this._cancelRAF();
-            btnPlay.textContent = '▶︎';
+            setPlayIcon(false);
             if (this.onFrameChange) this.onFrameChange(this._frameNum);
           });
         }
@@ -875,6 +895,10 @@
         play() {
           if (this.isImage || !this.video.src) return;
           this._prewarmToken = null; // cancel any in-progress pause pre-warm
+          this._prewarming = false;
+          // Drop any queued/in-flight scrub seek so its chained seek can't fire
+          // mid-playback and yank the video back to an earlier frame.
+          this._seeking = false; this._pendingSeek = null;
           this.playing = true;
           this.video.play().catch(() => {});
           if (this._hasVFCB) this._scheduleVFCB();
@@ -929,7 +953,15 @@
 
         seekToTime(t) {
           if (this.isImage) return;
-          this.video.currentTime = Math.max(0, Math.min(this.duration, t));
+          t = Math.max(0, Math.min(this.duration, t));
+          // A real seek supersedes any decoder pre-warm.
+          this._prewarmToken = null; this._prewarming = false;
+          // Serialise: if a seek is already in flight, just remember the latest
+          // target; the 'seeked' handler will chain to it. Otherwise start now.
+          this._pendingSeek = t;
+          if (this._seeking) return;
+          this._seeking = true;
+          this.video.currentTime = t;
         }
 
         // Scrubbing must not fight the pause-time decoder pre-warm: the prewarm's
@@ -1335,7 +1367,7 @@
           player.inPoint = null; player.outPoint = null;
           mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
           penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
-          btnPlay.textContent = '▶︎';
+          setPlayIcon(false);
           scrubProgress.style.width = '0%'; scrubPlayhead.style.left = '0%';
           scrubCurrent.textContent = '00:00:00:00'; scrubFrame.textContent = 'F: 0'; scrubTotal.textContent = '00:00:00:00';
           updateInOutUI(); updateScrubTicks(); updateControlAvailability();
@@ -1731,7 +1763,7 @@
         player.inPoint = entry.inPoint;
         player.outPoint = entry.outPoint;
         player.loop = loopEnabled;
-        btnPlay.textContent = '▶︎';
+        setPlayIcon(false);
         try {
           if (entry.isImage) {
             await player.loadImage(entry.objectUrl);
@@ -1768,7 +1800,7 @@
         if (player.playing) {
           player.pause();
           if (compareMode && playerB) playerB.pause();
-          btnPlay.textContent = '▶︎';
+          setPlayIcon(false);
         } else {
           if (loopEnabled) {
             const entry = playlist[activeIndex];
@@ -1784,7 +1816,7 @@
             playerB.seekToTime(player.getCurrentTime());
             playerB.play();
           }
-          btnPlay.textContent = '⏸︎';
+          setPlayIcon(true);
         }
       });
 
@@ -1975,7 +2007,7 @@
         if (!draggingHandle) {
           isScrubbing = true;
           player.beginScrub();
-          if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
+          if (player.playing) { player.pause(); setPlayIcon(false); }
           scrubFromEvent(e);
         }
       });
@@ -1987,7 +2019,7 @@
       scrubBar.addEventListener('touchstart', (e) => {
         isScrubbing = true;
         player.beginScrub();
-        if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
+        if (player.playing) { player.pause(); setPlayIcon(false); }
         scrubFromEvent(e);
       }, { passive: true });
       document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
@@ -2743,7 +2775,7 @@
           if (!isInVideoBoundsB(pos)) return;
           penCanvasB.setPointerCapture(e.pointerId);
           if (currentTool === 'pen') {
-            if (playerB.playing) { playerB.pause(); player.pause(); btnPlay.textContent = '▶︎'; }
+            if (playerB.playing) { playerB.pause(); player.pause(); setPlayIcon(false); }
             isDrawingB = true;
             currentStrokeB = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }] };
             redrawPenCanvasB();
@@ -2941,7 +2973,7 @@
         if (!isInVideoBounds(pos)) return;
         penCanvas.setPointerCapture(e.pointerId);
         if (currentTool === 'pen') {
-          if (player.playing) { player.pause(); btnPlay.textContent = '▶︎'; }
+          if (player.playing) { player.pause(); setPlayIcon(false); }
           isDrawing = true;
           currentStroke = { color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }] };
           redrawPenCanvas();
