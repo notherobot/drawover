@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.4.0</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.4.1</span></div>
     </div>
 
     <div id="content">
@@ -62,6 +62,7 @@
         <div id="sidebar">
           <div id="sidebar-btns">
             <button id="btn-add-video">+ Media</button>
+            <button id="btn-paste-image" title="Paste image from clipboard">📋</button>
             <button id="btn-add-folder" title="New folder">📁 Folder</button>
             <label id="trim-import-label" title="Show a trim preview before opening in the session">
               <input type="checkbox" id="trim-import-cb"> Trim on import
@@ -159,7 +160,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.4.0 &nbsp;[Last Updated: 07/06/2026 3:51PM PST]</span>
+          <span id="status-version">DrawOver v0.4.1 &nbsp;[Last Updated: 07/06/2026 11:03PM PST]</span>
         </div>
       </div>
   </div>
@@ -279,7 +280,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.0</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.1</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -347,6 +348,7 @@
       const sidebarEl = document.getElementById('sidebar');
       const sidebarResizer = document.getElementById('sidebar-resizer');
       const btnAddVideo = document.getElementById('btn-add-video');
+      const btnPasteImage = document.getElementById('btn-paste-image');
       const btnAddFolder = document.getElementById('btn-add-folder');
       const btnPlay = document.getElementById('btn-play');
       // Toggle the CSS play/pause icon (drawn via .is-playing, not a text glyph).
@@ -1018,6 +1020,31 @@
 
       // ===== PLAYLIST =====
       btnAddVideo.addEventListener('click', () => fileInput.click());
+
+      // Paste an image straight from the clipboard via a button (a click gesture
+      // lets us use the async Clipboard API; Ctrl/Cmd+V still works too).
+      async function pasteImageFromClipboard() {
+        if (!navigator.clipboard || !navigator.clipboard.read) {
+          alert('This browser can’t read images from the clipboard here. Copy the image, then press Ctrl/Cmd+V instead.');
+          return;
+        }
+        try {
+          const items = await navigator.clipboard.read();
+          const blobs = [];
+          for (const item of items) {
+            const imgType = item.types.find(t => t.startsWith('image/'));
+            if (imgType) blobs.push(await item.getType(imgType));
+          }
+          if (!blobs.length) {
+            alert('No image found on the clipboard. Copy an image first, then click Paste.');
+            return;
+          }
+          for (const blob of blobs) await addImageBlob(blob);
+        } catch (err) {
+          alert('Couldn’t read the clipboard (the browser may have blocked access). Try copying the image again, then press Ctrl/Cmd+V.');
+        }
+      }
+      btnPasteImage.addEventListener('click', pasteImageFromClipboard);
       btnAddFolder.addEventListener('click', () => {
         const folder = { id: uuid(), name: '', color: null, expanded: true, children: [] };
         folders.push(folder);
