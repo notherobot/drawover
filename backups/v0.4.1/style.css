@@ -415,33 +415,6 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #playback-row input[type="range"] { width: 70px; height: 16px; }
 .pb-sep { width: 1px; height: 20px; background: #303030; margin: 0 4px; flex-shrink: 0; }
 
-/* Ghosting toggle + settings caret */
-#btn-ghost-opts { padding: 4px 5px; }
-
-/* Ghosting settings popover */
-#ghost-panel {
-  position: fixed; display: none; z-index: 9500;
-  background: #1e1e1e; border: 1px solid #3a3a3a; border-radius: 8px;
-  padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.6);
-  min-width: 232px; color: #ddd; font-size: 12px;
-}
-#ghost-panel .ghost-title { font-size: 13px; font-weight: 600; color: #eee; }
-#ghost-panel .ghost-sub { font-size: 11px; color: #888; margin: 2px 0 12px; }
-#ghost-panel .ghost-row { display: flex; align-items: center; gap: 8px; }
-#ghost-panel .ghost-row > span:first-child { flex: 1; white-space: nowrap; color: #bbb; }
-#ghost-panel input[type=range] { width: 96px; accent-color: #3aa0ff; cursor: pointer; }
-#ghost-range-val { min-width: 16px; text-align: right; color: #fff; font-variant-numeric: tabular-nums; }
-#ghost-panel .ghost-legend { display: flex; gap: 14px; margin: 10px 0 12px; font-size: 11px; color: #aaa; }
-#ghost-panel .ghost-legend span { display: flex; align-items: center; gap: 5px; }
-#ghost-panel .ghost-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-#ghost-panel .ghost-swatch.past { background: #ff5a48; }
-#ghost-panel .ghost-swatch.next { background: #37a9ff; }
-#ghost-done {
-  width: 100%; padding: 6px; background: #3aa0ff; color: #fff; border: none;
-  border-radius: 5px; font-weight: 600; cursor: pointer;
-}
-#ghost-done:hover { background: #2b8de0; }
-
 .transport-btn {
   font-size: 14px; padding: 5px 11px; flex-shrink: 0;
 }
