@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.4.1</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.4.3</span></div>
     </div>
 
     <div id="content">
@@ -124,6 +124,8 @@
           <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
           <button id="btn-redo" title="Redo (Ctrl+Shift+Z)">↪ Redo</button>
           <button id="btn-toggle-drawings" class="active" title="Show/Hide Drawovers">Drawovers ON</button>
+          <button id="btn-ghost" title="Ghosting / onion-skin: show drawovers from nearby frames">Ghost</button>
+          <button id="btn-ghost-opts" title="Ghosting settings">▾</button>
           <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
           <button id="btn-export-frame" title="Export current frame with drawovers as PNG">⤓ PNG</button>
           <div class="pb-sep"></div>
@@ -160,7 +162,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.4.1 &nbsp;[Last Updated: 07/06/2026 11:03PM PST]</span>
+          <span id="status-version">DrawOver v0.4.3 &nbsp;[Last Updated: 07/07/2026 10:13AM PST]</span>
         </div>
       </div>
   </div>
@@ -276,11 +278,27 @@
     <canvas id="arc-magnifier-canvas" width="120" height="120"></canvas>
   </div>
 
+  <!-- Ghosting / onion-skin settings popover -->
+  <div id="ghost-panel">
+    <div class="ghost-title">Ghosting</div>
+    <div class="ghost-sub">Show drawovers from nearby frames</div>
+    <label class="ghost-row">
+      <span>Frames before &amp; after</span>
+      <input type="range" id="ghost-range" min="1" max="10" step="1" value="2">
+      <span id="ghost-range-val">2</span>
+    </label>
+    <div class="ghost-legend">
+      <span><i class="ghost-swatch past"></i> previous</span>
+      <span><i class="ghost-swatch next"></i> next</span>
+    </div>
+    <button id="ghost-done">Done</button>
+  </div>
+
   <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.1</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.3</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -369,6 +387,11 @@
       const btnUndo = document.getElementById('btn-undo');
       const btnRedo = document.getElementById('btn-redo');
       const btnToggleDrawings = document.getElementById('btn-toggle-drawings');
+      const btnGhost = document.getElementById('btn-ghost');
+      const btnGhostOpts = document.getElementById('btn-ghost-opts');
+      const ghostPanel = document.getElementById('ghost-panel');
+      const ghostRangeSlider = document.getElementById('ghost-range');
+      const ghostRangeVal = document.getElementById('ghost-range-val');
       const btnClearFrame = document.getElementById('btn-clear-frame');
       const btnExportFrame = document.getElementById('btn-export-frame');
       const btnFullscreen = document.getElementById('btn-fullscreen');
@@ -398,6 +421,8 @@
       let brushSize = 4;
       let brushOpacity = 1;
       let drawingsVisible = true;
+      let ghostEnabled = false;   // onion-skin toggle
+      let ghostRange = 2;         // frames before & after (1..10)
       let loopEnabled = false;
       let laserHoldMs = 1000;
 
@@ -2604,14 +2629,15 @@
       // exactly at the first sample (no catch-up straight line) and, because
       // every Bézier segment stays inside its control points, it never
       // overshoots however far apart fast-stroke samples are.
-      function drawStrokeOnCanvas(ctx, stroke, w, h, alpha) {
+      function drawStrokeOnCanvas(ctx, stroke, w, h, alpha, colorOverride) {
         const pts = stroke.points;
         if (!pts || !pts.length) return;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         ctx.save();
         ctx.globalAlpha = (alpha !== undefined ? alpha : 1) * (stroke.opacity || 1);
-        ctx.strokeStyle = stroke.color;
-        ctx.fillStyle = stroke.color;
+        const color = colorOverride || stroke.color;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
         ctx.lineWidth = stroke.size * dpr;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -2634,14 +2660,29 @@
         ctx.restore();
       }
 
+      // Onion-skin: draw drawovers from the `ghostRange` frames before/after the
+      // current one, faded by distance and tinted by direction (past = warm,
+      // future = cool). Drawn underneath the current frame's strokes.
+      function drawGhostFrames(ctx, entry, curFrame, w, h) {
+        if (!ghostEnabled || !entry || !entry.annotations) return;
+        for (let df = -ghostRange; df <= ghostRange; df++) {
+          if (df === 0) continue;
+          const gs = entry.annotations[curFrame + df];
+          if (!gs || !gs.length) continue;
+          const alpha = Math.max(0.06, 0.34 * (1 - (Math.abs(df) - 1) / (ghostRange + 0.5)));
+          const tint = df < 0 ? '#ff5a48' : '#37a9ff';
+          gs.forEach(s => drawStrokeOnCanvas(ctx, s, w, h, alpha, tint));
+        }
+      }
+
       function redrawPenCanvas() {
         penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
         const entry = getActiveEntry(); if (!entry) return;
-        const strokes = entry.annotations[player.currentFrame];
-        if (!strokes) return;
         penCtx.save();
         clipCtxToVideo(penCtx, mainCanvas, penCanvas);
-        strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
+        drawGhostFrames(penCtx, entry, player.currentFrame, penCanvas.width, penCanvas.height);
+        const strokes = entry.annotations[player.currentFrame];
+        if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtx, s, penCanvas.width, penCanvas.height));
         penCtx.restore();
       }
 
@@ -2690,11 +2731,11 @@
       function redrawPenCanvasB() {
         penCtxB.clearRect(0, 0, penCanvasB.width, penCanvasB.height);
         const entry = getCompareEntry(); if (!entry || !playerB) return;
-        const strokes = entry.annotations[playerB.currentFrame];
-        if (!strokes) return;
         penCtxB.save();
         clipCtxToVideo(penCtxB, mainCanvasB, penCanvasB);
-        strokes.forEach(s => drawStrokeOnCanvas(penCtxB, s, penCanvasB.width, penCanvasB.height));
+        drawGhostFrames(penCtxB, entry, playerB.currentFrame, penCanvasB.width, penCanvasB.height);
+        const strokes = entry.annotations[playerB.currentFrame];
+        if (strokes) strokes.forEach(s => drawStrokeOnCanvas(penCtxB, s, penCanvasB.width, penCanvasB.height));
         penCtxB.restore();
       }
 
@@ -3353,7 +3394,7 @@
         const isImage = !!(entry && entry.isImage);
         // No-video group — always needs a loaded item
         [btnToggleDrawings, btnPrevAnnotation, btnNextAnnotation,
-         btnClearFrame, btnExportFrame
+         btnClearFrame, btnExportFrame, btnGhost, btnGhostOpts
         ].forEach(el => { if (el) el.disabled = noVideo; });
         // Playback transport — meaningless for a still image
         [btnPlay, btnFrameBack, btnFrameFwd, btnToStart, btnToEnd,
@@ -3467,6 +3508,49 @@
         penCanvas.style.display = laserCanvas.style.display = drawingsVisible ? '' : 'none';
         btnToggleDrawings.textContent = drawingsVisible ? 'Drawovers ON' : 'Drawovers OFF';
         btnToggleDrawings.classList.toggle('active', drawingsVisible);
+      });
+
+      // ===== GHOSTING (onion-skin) =====
+      function refreshGhostDrawings() {
+        redrawPenCanvas();
+        if (compareMode) redrawPenCanvasB();
+      }
+      function openGhostPanel() {
+        ghostPanel.style.display = 'block';
+        const r = btnGhost.getBoundingClientRect();
+        const pw = ghostPanel.offsetWidth, ph = ghostPanel.offsetHeight;
+        let left = r.left;
+        if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+        ghostPanel.style.left = Math.max(8, left) + 'px';
+        ghostPanel.style.top = Math.max(8, r.top - ph - 8) + 'px';
+      }
+      function closeGhostPanel() { ghostPanel.style.display = 'none'; }
+      function setGhostEnabled(on) {
+        ghostEnabled = on;
+        btnGhost.classList.toggle('active', on);
+        btnGhost.textContent = on ? 'Ghost ON' : 'Ghost';
+        refreshGhostDrawings();
+      }
+      btnGhost.addEventListener('click', () => {
+        if (ghostEnabled) { setGhostEnabled(false); closeGhostPanel(); }
+        else { setGhostEnabled(true); openGhostPanel(); } // show settings on turn-on
+      });
+      btnGhostOpts.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Settings caret only opens/closes the popover — it never toggles ghosting.
+        if (ghostPanel.style.display === 'block') { closeGhostPanel(); return; }
+        openGhostPanel();
+      });
+      ghostRangeSlider.addEventListener('input', () => {
+        ghostRange = parseInt(ghostRangeSlider.value, 10) || 1;
+        ghostRangeVal.textContent = ghostRange;
+        if (ghostEnabled) refreshGhostDrawings();
+      });
+      document.getElementById('ghost-done').addEventListener('click', closeGhostPanel);
+      document.addEventListener('mousedown', (e) => {
+        if (ghostPanel.style.display !== 'block') return;
+        if (ghostPanel.contains(e.target) || e.target === btnGhost || e.target === btnGhostOpts) return;
+        closeGhostPanel();
       });
 
       btnFullscreen.addEventListener('click', () => {
