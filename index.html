@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.4.5</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.4.6</span></div>
     </div>
 
     <div id="content">
@@ -47,14 +47,7 @@
           </div>
           <div class="tool-sep"></div>
           <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)" style="width:auto;padding:4px 9px;font-size:11px;height:30px">Arc Tracer</button>
-          <div class="tool-sep" id="arc-sep" style="display:none"></div>
-          <div id="arc-controls" class="tool-group">
-            <span style="font-size:11px;color:#aaa;white-space:nowrap">Window:</span>
-            <input type="number" id="arc-window" min="1" max="50" value="5" title="Frames before/after current to show">
-            <span style="font-size:11px;color:#aaa">fr</span>
-            <button id="btn-clear-arc" style="font-size:11px;padding:0 6px">Clear</button>
-            <button id="btn-arc-done" style="font-size:11px;padding:0 8px;background:#1e3520;border-color:#3aa060">✓ Done</button>
-          </div>
+          <button class="tool-btn active" id="btn-arc-toggle" title="Show / hide arc points" style="width:32px">&#128065;</button>
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
@@ -163,7 +156,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.4.5 &nbsp;[Last Updated: 07/07/2026 11:05AM PST]</span>
+          <span id="status-version">DrawOver v0.4.6 &nbsp;[Last Updated: 07/07/2026 4:10PM PST]</span>
         </div>
       </div>
   </div>
@@ -295,11 +288,25 @@
     <button id="ghost-done">Done</button>
   </div>
 
+  <!-- Arc Tracer settings popover -->
+  <div id="arc-panel">
+    <div class="arc-title">Arc Tracer</div>
+    <div class="arc-sub">Click each frame to drop an arc point</div>
+    <label class="arc-row">
+      <span>Window (frames)</span>
+      <input type="number" id="arc-window" min="1" max="50" value="5" title="Frames before/after current to show">
+    </label>
+    <div class="arc-actions">
+      <button id="btn-clear-arc">Clear all</button>
+      <button id="btn-arc-done">✓ Done</button>
+    </div>
+  </div>
+
   <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.5</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.6</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -333,8 +340,9 @@
       const laserCtxB = laserCanvasB.getContext('2d');
       const arcCanvas = document.getElementById('arc-canvas');
       const arcCtx = arcCanvas.getContext('2d');
-      const arcControlsEl = document.getElementById('arc-controls');
-      const arcSepEl = document.getElementById('arc-sep');
+      const btnArcTracer = document.getElementById('btn-arc-tracer');
+      const btnArcToggle = document.getElementById('btn-arc-toggle');
+      const arcPanel = document.getElementById('arc-panel');
       const arcWindowInput = document.getElementById('arc-window');
       const btnClearArc = document.getElementById('btn-clear-arc');
       const btnArcDone = document.getElementById('btn-arc-done');
@@ -438,6 +446,7 @@
 
       // ===== COMPARE MODE STATE =====
       let arcWindow = 5;
+      let arcVisible = true; // show/hide the arc points + path overlay
       let arcCrosshairPos = null;
       let arcLastEvent = null;
       let arcHoverFrame = null;
@@ -2278,9 +2287,14 @@
         }
         currentTool = tool;
         toolBtns.forEach(b => { if (b.dataset.tool) b.classList.toggle('active', b.dataset.tool === tool); });
-        const showArc = tool === 'arc-tracer';
-        arcControlsEl.style.display = showArc ? 'flex' : 'none';
-        arcSepEl.style.display = showArc ? '' : 'none';
+        if (tool === 'arc-tracer') {
+          // Placing points is meaningless if the overlay is hidden, so ensure it's
+          // visible, and open the settings popover (like the ghosting flow).
+          if (!arcVisible) { arcVisible = true; btnArcToggle.classList.add('active'); }
+          openArcPanel();
+        } else {
+          closeArcPanel();
+        }
         // Redraw so arc points switch between their shrunk (active) and full
         // (inactive) appearance the moment the tool is toggled.
         redrawArcCanvas();
@@ -2319,6 +2333,33 @@
       });
 
       btnArcDone.addEventListener('click', () => activateTool(prevTool || 'pen'));
+
+      // Arc settings popover (anchored below the Arc Tracer button, which lives in
+      // the top tool row).
+      function openArcPanel() {
+        arcPanel.style.display = 'block';
+        const r = btnArcTracer.getBoundingClientRect();
+        const pw = arcPanel.offsetWidth;
+        let left = r.left;
+        if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+        arcPanel.style.left = Math.max(8, left) + 'px';
+        arcPanel.style.top = (r.bottom + 8) + 'px';
+      }
+      function closeArcPanel() { arcPanel.style.display = 'none'; }
+
+      // Show / hide the arc points + path overlay (independent of the tool).
+      btnArcToggle.addEventListener('click', () => {
+        arcVisible = !arcVisible;
+        btnArcToggle.classList.toggle('active', arcVisible);
+        redrawArcCanvas();
+      });
+
+      // Close the arc popover when clicking outside it (but keep the tool active).
+      document.addEventListener('mousedown', (e) => {
+        if (arcPanel.style.display !== 'block') return;
+        if (arcPanel.contains(e.target) || e.target === btnArcTracer) return;
+        closeArcPanel();
+      });
 
       // ===== COLOR SWATCHES =====
       function setDrawColor(hex) {
@@ -2550,11 +2591,13 @@
         const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
         eyedropHex.textContent = hex;
 
+        // Position the loupe centred above the cursor — same placement as the
+        // Arc Tracer magnifier.
         const W = 105, H = 128;
-        let left = e.clientX + 18;
-        let top = e.clientY + 18;
-        if (left + W > window.innerWidth) left = e.clientX - W - 10;
-        if (top + H > window.innerHeight) top = e.clientY - H - 10;
+        let left = e.clientX - W / 2, top = e.clientY - H - 18;
+        if (left < 0) left = 0;
+        if (left + W > window.innerWidth) left = window.innerWidth - W;
+        if (top < 0) top = e.clientY + 18;
         eyedropOverlay.style.left = left + 'px';
         eyedropOverlay.style.top = top + 'px';
         eyedropOverlay.style.display = 'block';
@@ -2881,6 +2924,7 @@
 
       function redrawArcCanvas() {
         arcCtx.clearRect(0, 0, arcCanvas.width, arcCanvas.height);
+        if (!arcVisible) return; // overlay hidden via the show/hide toggle
         const w = arcCanvas.width, h = arcCanvas.height;
         const dpr = window.devicePixelRatio || 1;
 
@@ -3739,8 +3783,9 @@
         document.getElementById('content').classList.add('compare-mode');
         setActivePanel(true);
         updatePanelLabels();
-        const secondIdx = playlist.findIndex((_, i) => i !== activeIndex);
-        if (secondIdx >= 0) loadVideoB(secondIdx); else { resizeCanvases(); renderPlaylist(); }
+        // Start panel B on the clip you're currently on; pick a different one from
+        // the sidebar to compare against.
+        if (activeIndex >= 0) loadVideoB(activeIndex); else { resizeCanvases(); renderPlaylist(); }
       });
 
       // Frame-compare: freeze A on its current frame; the timeline drives B only.
@@ -3757,8 +3802,9 @@
         // draws there); click panel A to draw on the frozen frame instead.
         setActivePanel(false);
         updatePanelLabels();
-        const secondIdx = playlist.findIndex((_, i) => i !== activeIndex);
-        loadVideoB(secondIdx >= 0 ? secondIdx : activeIndex);
+        // Start panel B on the clip you're currently on; pick a different one from
+        // the sidebar to compare its frame against A's locked frame.
+        loadVideoB(activeIndex);
         updateScrubBar(); updateScrubTimes(); updateScrubTicks();
       });
 

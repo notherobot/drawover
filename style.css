@@ -442,6 +442,30 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 }
 #ghost-done:hover { background: #2b8de0; }
 
+/* Arc Tracer settings popover */
+#arc-panel {
+  position: fixed; display: none; z-index: 9500;
+  background: #1e1e1e; border: 1px solid #3a3a3a; border-radius: 8px;
+  padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,0.6);
+  min-width: 224px; color: #ddd; font-size: 12px;
+}
+#arc-panel .arc-title { font-size: 13px; font-weight: 600; color: #eee; }
+#arc-panel .arc-sub { font-size: 11px; color: #888; margin: 2px 0 12px; }
+#arc-panel .arc-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+#arc-panel .arc-row > span { flex: 1; white-space: nowrap; color: #bbb; }
+#arc-panel .arc-row input[type=number] {
+  width: 56px; background: #2a2a2a; border: 1px solid #444; color: #fff;
+  border-radius: 4px; font-size: 12px; text-align: center; padding: 3px 5px;
+}
+#arc-panel .arc-actions { display: flex; gap: 8px; }
+#arc-panel .arc-actions button {
+  flex: 1; padding: 6px; border-radius: 5px; cursor: pointer; font-weight: 600; border: 1px solid #3a3a3a;
+}
+#btn-clear-arc { background: #2a2a2a; color: #ddd; }
+#btn-clear-arc:hover { background: #333; }
+#btn-arc-done { background: #1e3520; border-color: #3aa060 !important; color: #7ddb8e; }
+#btn-arc-done:hover { background: #24421f; }
+
 .transport-btn {
   font-size: 14px; padding: 5px 11px; flex-shrink: 0;
 }
