@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.4.7</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.4.8</span></div>
     </div>
 
     <div id="content">
@@ -155,7 +155,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.4.7 &nbsp;[Last Updated: 07/07/2026 4:38PM PST]</span>
+          <span id="status-version">DrawOver v0.4.8 &nbsp;[Last Updated: 07/07/2026 5:37PM PST]</span>
         </div>
       </div>
   </div>
@@ -305,7 +305,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.7</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.8</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2969,6 +2969,7 @@
             laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }] });
             lastLaserInputTime = Date.now();
             if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+            kickLaserLoop();
           } else if (currentTool === 'eraser') {
             isErasingB = true; eraseAtB(pos);
           }
@@ -3181,6 +3182,7 @@
           laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }] });
           lastLaserInputTime = Date.now();
           if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+          kickLaserLoop();
           redrawLaserCanvas();
         } else if (currentTool === 'eraser') {
           isErasing = true; eraseAt(pos);
@@ -3678,7 +3680,14 @@
       document.getElementById('btn-compare-close').addEventListener('click', () => exitCompareMode());
 
       // ===== LASER FADE =====
+      // The loop only runs while there are laser strokes to draw/fade, and never
+      // while the tab is hidden. A continuously-scheduled rAF keeps the tab
+      // repainting in the background, which (in Firefox) leaks this canvas's
+      // custom cursor into whatever tab you're actually looking at. Going idle
+      // when there's nothing to animate stops that.
+      let laserRafId = null;
       function laserLoop() {
+        laserRafId = null;
         try {
           const now = Date.now();
           if (laserFading) {
@@ -3693,9 +3702,24 @@
           console.error('laserLoop error:', err);
           laserStrokes = []; laserFading = false; laserFadeOpacity = 1;
         }
-        requestAnimationFrame(laserLoop);
+        // Keep animating only while there's something to show, and only while the
+        // tab is visible.
+        if (!document.hidden && (laserStrokes.length || laserFading)) {
+          laserRafId = requestAnimationFrame(laserLoop);
+        }
       }
-      requestAnimationFrame(laserLoop);
+      // Wake the loop when a new laser stroke starts (or the tab becomes visible
+      // again with strokes still fading).
+      function kickLaserLoop() {
+        if (laserRafId === null && !document.hidden) laserRafId = requestAnimationFrame(laserLoop);
+      }
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          if (laserRafId !== null) { cancelAnimationFrame(laserRafId); laserRafId = null; }
+        } else if (laserStrokes.length || laserFading) {
+          kickLaserLoop();
+        }
+      });
 
       // ===== SIDEBAR TOGGLE =====
       const btnSidebarToggle = document.getElementById('btn-sidebar-toggle');
