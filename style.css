@@ -457,6 +457,8 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   width: 56px; background: #2a2a2a; border: 1px solid #444; color: #fff;
   border-radius: 4px; font-size: 12px; text-align: center; padding: 3px 5px;
 }
+#arc-panel .arc-row input[type=range] { width: 96px; accent-color: #3aa0ff; cursor: pointer; }
+#arc-panel .arc-row span.arc-val { flex: none; width: 20px; text-align: right; color: #bbb; }
 #arc-panel .arc-actions { display: flex; gap: 8px; }
 #arc-panel .arc-actions button {
   flex: 1; padding: 6px; border-radius: 5px; cursor: pointer; font-weight: 600; border: 1px solid #3a3a3a;

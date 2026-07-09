@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.4.8</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.4.9</span></div>
     </div>
 
     <div id="content">
@@ -155,7 +155,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.4.8 &nbsp;[Last Updated: 07/07/2026 5:37PM PST]</span>
+          <span id="status-version">DrawOver v0.4.9 &nbsp;[Last Updated: 07/09/2026 2:09PM PST]</span>
         </div>
       </div>
   </div>
@@ -295,6 +295,11 @@
       <span>Window (frames)</span>
       <input type="number" id="arc-window" min="1" max="50" value="5" title="Frames before/after current to show">
     </label>
+    <label class="arc-row">
+      <span>Point size</span>
+      <input type="range" id="arc-point-size" min="0.5" max="2.5" step="0.1" value="1" title="Size of the arc points">
+      <span class="arc-val" id="arc-point-size-val">1.0</span>
+    </label>
     <div class="arc-actions">
       <button id="btn-clear-arc">Clear all</button>
       <button id="btn-arc-done">✓ Done</button>
@@ -305,7 +310,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.8</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.9</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -343,6 +348,8 @@
       const btnArcToggle = document.getElementById('btn-arc-toggle');
       const arcPanel = document.getElementById('arc-panel');
       const arcWindowInput = document.getElementById('arc-window');
+      const arcPointSizeInput = document.getElementById('arc-point-size');
+      const arcPointSizeVal = document.getElementById('arc-point-size-val');
       const btnClearArc = document.getElementById('btn-clear-arc');
       const btnArcDone = document.getElementById('btn-arc-done');
       const scrubArcTicks = document.getElementById('scrub-arc-ticks');
@@ -443,6 +450,7 @@
 
       // ===== COMPARE MODE STATE =====
       let arcWindow = 5;
+      let arcPointSize = 1; // relative scale applied to the dot radii below
       let arcVisible = true; // show/hide the arc points + path overlay
       let arcCrosshairPos = null;
       let arcLastEvent = null;
@@ -2258,20 +2266,19 @@
         penCanvasB.style.cursor = cur;
       }
 
+      // Only the current frame's own arc point can ever be grabbed/dragged —
+      // nearby frames' points are just reference guides.
       function getArcHitFrame(pos) {
         const entry = getActiveEntry();
         if (!entry || !entry.arcPoints) return null;
-        const rect = penCanvas.getBoundingClientRect();
-        const HIT = 12;
         const cf = player.currentFrame;
-        for (const fStr of Object.keys(entry.arcPoints)) {
-          const f = Number(fStr);
-          if (Math.abs(f - cf) > arcWindow) continue;
-          const pt = entry.arcPoints[f];
-          const dx = (pt.x - pos.x) * rect.width;
-          const dy = (pt.y - pos.y) * rect.height;
-          if (Math.sqrt(dx * dx + dy * dy) <= HIT) return f;
-        }
+        const pt = entry.arcPoints[cf];
+        if (!pt) return null;
+        const rect = penCanvas.getBoundingClientRect();
+        const HIT = 12 * arcPointSize;
+        const dx = (pt.x - pos.x) * rect.width;
+        const dy = (pt.y - pos.y) * rect.height;
+        if (Math.sqrt(dx * dx + dy * dy) <= HIT) return cf;
         return null;
       }
 
@@ -2318,6 +2325,12 @@
 
       arcWindowInput.addEventListener('input', () => {
         arcWindow = Math.max(1, parseInt(arcWindowInput.value, 10) || 5);
+        redrawArcCanvas();
+      });
+
+      arcPointSizeInput.addEventListener('input', () => {
+        arcPointSize = parseFloat(arcPointSizeInput.value) || 1;
+        arcPointSizeVal.textContent = arcPointSize.toFixed(1);
         redrawArcCanvas();
       });
 
@@ -2853,12 +2866,14 @@
         // they don't obscure where you're clicking. They return to full size
         // and opacity once the Arc Tracer is deactivated.
         const arcActive = currentTool === 'arc-tracer';
-        // Dots at each visible point
-        for (const f of visible) {
+        // Dots at each visible point. Drawn in two passes — other frames first,
+        // then the current frame's point last — so the current point always
+        // sits on top even when another point overlaps it.
+        const drawDot = (f) => {
           const dist = Math.abs(f - currentFrame);
           const isCurrent = dist === 0;
           let opacity = isCurrent ? 1 : Math.max(0.25, 1 - dist / (arcWindow + 1));
-          let radius = (isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35)) * dpr;
+          let radius = (isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35)) * arcPointSize * dpr;
           if (arcActive) { radius *= 0.35; opacity *= 0.35; }
           const px = allPts[f].x * w, py = allPts[f].y * h;
           const color = isCurrent ? '#ffcc00' : (f < currentFrame ? '#ff7733' : '#44aaff');
@@ -2873,7 +2888,9 @@
           arcCtx.fillStyle = color;
           arcCtx.fill();
           arcCtx.restore();
-        }
+        };
+        for (const f of visible) if (f !== currentFrame) drawDot(f);
+        if (visible.includes(currentFrame)) drawDot(currentFrame);
       }
 
       function resizeCanvasesB() {
