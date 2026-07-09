@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.4.9</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.5.0</span></div>
     </div>
 
     <div id="content">
@@ -125,11 +125,13 @@
           <button id="btn-prev-annotation" title="Previous Drawover (↑)">◀ Drawover</button>
           <button id="btn-next-annotation" title="Next Drawover (↓)">Drawover ▶</button>
           <div class="pb-sep"></div>
+          <button class="transport-btn" id="btn-prev-media" title="Previous media in playlist">||◀</button>
           <button class="transport-btn" id="btn-to-start" title="Go to In / Start">|◀</button>
           <button class="transport-btn" id="btn-frame-back" title="Frame Back (←)">◀◀</button>
           <button id="btn-play" title="Play/Pause (Space)"></button>
           <button class="transport-btn" id="btn-frame-fwd" title="Frame Forward (→)">▶▶</button>
           <button class="transport-btn" id="btn-to-end" title="Go to Out / End">▶|</button>
+          <button class="transport-btn" id="btn-next-media" title="Next media in playlist">▶||</button>
           <div class="pb-sep"></div>
           <button id="btn-set-in" title="Set In Point (I)">[ In</button>
           <button id="btn-set-out" title="Set Out Point (O)">Out ]</button>
@@ -155,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.4.9 &nbsp;[Last Updated: 07/09/2026 2:09PM PST]</span>
+          <span id="status-version">DrawOver v0.5.0 &nbsp;[Last Updated: 07/09/2026 2:31PM PST]</span>
         </div>
       </div>
   </div>
@@ -310,7 +312,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.4.9</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.0</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -390,6 +392,8 @@
       const btnFrameFwd = document.getElementById('btn-frame-fwd');
       const btnToStart = document.getElementById('btn-to-start');
       const btnToEnd = document.getElementById('btn-to-end');
+      const btnPrevMedia = document.getElementById('btn-prev-media');
+      const btnNextMedia = document.getElementById('btn-next-media');
       const btnSetIn = document.getElementById('btn-set-in');
       const btnSetOut = document.getElementById('btn-set-out');
       const btnClearInOut = document.getElementById('btn-clear-inout');
@@ -1499,6 +1503,27 @@
         playlistOrder = playlistOrder.filter(id => valid.has(id));
       }
 
+      // Flat list of playlist entries in the same top-to-bottom order they're
+      // rendered in the sidebar (folders expand inline), used by the
+      // prev/next-media transport buttons.
+      function getFlatPlaylistEntries() {
+        ensurePlaylistOrder();
+        const out = [];
+        playlistOrder.forEach(id => {
+          const folder = folders.find(f => f.id === id);
+          if (folder) {
+            (folder.children || []).forEach(eid => {
+              const e = playlist.find(p => p.id === eid);
+              if (e) out.push(e);
+            });
+          } else {
+            const e = playlist.find(p => p.id === id);
+            if (e) out.push(e);
+          }
+        });
+        return out;
+      }
+
       function setEntryFolder(entry, newFolderId) {
         if (entry.folderId) {
           const old = folders.find(f => f.id === entry.folderId);
@@ -1782,6 +1807,9 @@
           }
         });
 
+        // Sidebar order/contents just changed — refresh prev/next-media
+        // enabled state (and everything else availability-gated) to match.
+        updateControlAvailability();
       }
 
       // ---- Playlist drag-over / drop (wired once) ----
@@ -1966,6 +1994,27 @@
         const t = e.outPoint !== null ? e.outPoint : player.duration;
         player.seekToTime(t);
         if (compareMode && playerB) playerB.seekToTime(t);
+      });
+
+      // Which playlist entry prev/next-media should navigate from, and where a
+      // pick should land — mirrors the sidebar row click logic: in frame-compare
+      // (locked) or with the right panel active, picks go to panel B.
+      function mediaNavTargetsB() { return compareMode && (lockCompare || !comparePanelLeft); }
+      function mediaNavCurrentIndex() { return mediaNavTargetsB() ? compareIndex : activeIndex; }
+      function loadMediaNavIndex(i) { if (mediaNavTargetsB()) loadVideoB(i); else loadVideo(i); }
+
+      btnPrevMedia.addEventListener('click', () => {
+        const entries = getFlatPlaylistEntries();
+        const cur = playlist[mediaNavCurrentIndex()];
+        const pos = cur ? entries.indexOf(cur) : -1;
+        if (pos > 0) loadMediaNavIndex(playlist.indexOf(entries[pos - 1]));
+      });
+
+      btnNextMedia.addEventListener('click', () => {
+        const entries = getFlatPlaylistEntries();
+        const cur = playlist[mediaNavCurrentIndex()];
+        const pos = cur ? entries.indexOf(cur) : -1;
+        if (pos !== -1 && pos < entries.length - 1) loadMediaNavIndex(playlist.indexOf(entries[pos + 1]));
       });
 
       function setAutoLoop() {
@@ -3476,6 +3525,13 @@
           btnPrevAnnotation.disabled = frames.length === 0;
           btnNextAnnotation.disabled = frames.length === 0;
         }
+        // Prev/next media — enabled only if there's another entry before/after
+        // the current one in the sidebar's display order.
+        const navEntries = getFlatPlaylistEntries();
+        const navCur = playlist[mediaNavCurrentIndex()];
+        const navPos = navCur ? navEntries.indexOf(navCur) : -1;
+        btnPrevMedia.disabled = navPos <= 0;
+        btnNextMedia.disabled = navPos === -1 || navPos >= navEntries.length - 1;
       }
 
       btnUndo.addEventListener('click', undo);
