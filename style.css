@@ -467,6 +467,14 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #btn-clear-arc:hover { background: #333; }
 #btn-arc-done { background: #1e3520; border-color: #3aa060 !important; color: #7ddb8e; }
 #btn-arc-done:hover { background: #24421f; }
+#btn-arc-start {
+  display: block; width: 100%; padding: 8px; margin-bottom: 12px;
+  border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 12px;
+  border: 1px solid #3aa0ff; background: #1e3550; color: #3aa0ff;
+}
+#btn-arc-start:hover { background: #234163; }
+#btn-arc-start.active { background: #4a2020; border-color: #d15050; color: #ff8a8a; }
+#btn-arc-start.active:hover { background: #542424; }
 
 .transport-btn {
   font-size: 14px; padding: 5px 11px; flex-shrink: 0;

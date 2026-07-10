@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.5.0</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.5.1</span></div>
     </div>
 
     <div id="content">
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.5.0 &nbsp;[Last Updated: 07/09/2026 2:31PM PST]</span>
+          <span id="status-version">DrawOver v0.5.1 &nbsp;[Last Updated: 07/10/2026 4:49PM PST]</span>
         </div>
       </div>
   </div>
@@ -299,9 +299,10 @@
     </label>
     <label class="arc-row">
       <span>Point size</span>
-      <input type="range" id="arc-point-size" min="0.5" max="2.5" step="0.1" value="1" title="Size of the arc points">
+      <input type="range" id="arc-point-size" min="0.1" max="2" step="0.1" value="1" title="Size of the arc points">
       <span class="arc-val" id="arc-point-size-val">1.0</span>
     </label>
+    <button id="btn-arc-start">▶ Start Placing Points</button>
     <div class="arc-actions">
       <button id="btn-clear-arc">Clear all</button>
       <button id="btn-arc-done">✓ Done</button>
@@ -312,7 +313,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.0</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.1</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -352,6 +353,7 @@
       const arcWindowInput = document.getElementById('arc-window');
       const arcPointSizeInput = document.getElementById('arc-point-size');
       const arcPointSizeVal = document.getElementById('arc-point-size-val');
+      const btnArcStart = document.getElementById('btn-arc-start');
       const btnClearArc = document.getElementById('btn-clear-arc');
       const btnArcDone = document.getElementById('btn-arc-done');
       const scrubArcTicks = document.getElementById('scrub-arc-ticks');
@@ -2352,9 +2354,33 @@
         // (inactive) appearance the moment the tool is toggled.
         redrawArcCanvas();
         updateToolCursor();
+        updateArcStartBtn();
       }
 
-      toolBtns.forEach(btn => { if (btn.dataset.tool) btn.addEventListener('click', () => activateTool(btn.dataset.tool)); });
+      // The Arc Tracer toolbar button (and its T shortcut) only ever open the
+      // settings popover — they never engage point-placing by themselves. The
+      // popover's own "Start Placing Points" button is what actually switches
+      // to the arc-tracer tool, so tweaking Window/Point size never accidentally
+      // drops a point on the canvas.
+      function toggleArcPanelOnly() {
+        if (arcPanel.style.display === 'block') closeArcPanel();
+        else openArcPanel();
+      }
+
+      toolBtns.forEach(btn => {
+        if (!btn.dataset.tool) return;
+        if (btn === btnArcTracer) { btn.addEventListener('click', toggleArcPanelOnly); return; }
+        btn.addEventListener('click', () => activateTool(btn.dataset.tool));
+      });
+
+      function updateArcStartBtn() {
+        const active = currentTool === 'arc-tracer';
+        btnArcStart.textContent = active ? '■ Stop Placing Points' : '▶ Start Placing Points';
+        btnArcStart.classList.toggle('active', active);
+      }
+      btnArcStart.addEventListener('click', () => {
+        activateTool(currentTool === 'arc-tracer' ? (prevTool || 'pen') : 'arc-tracer');
+      });
 
       brushSizeSlider.addEventListener('input', () => {
         brushSize = parseInt(brushSizeSlider.value, 10);
@@ -2391,7 +2417,12 @@
         updateArcTicks();
       });
 
-      btnArcDone.addEventListener('click', () => activateTool(prevTool || 'pen'));
+      btnArcDone.addEventListener('click', () => {
+        // Only stop-and-revert if placing points was actually started — if the
+        // panel was just opened to peek at settings, Done should merely close it.
+        if (currentTool === 'arc-tracer') activateTool(prevTool || 'pen');
+        else closeArcPanel();
+      });
 
       // Arc settings popover (anchored below the Arc Tracer button, which lives in
       // the top tool row).
@@ -3596,7 +3627,7 @@
           if (e.key === 'b' || e.key === 'B') activateTool('pen');
           else if (e.key === 'e' || e.key === 'E') activateTool('eraser');
           else if (e.key === 'l' || e.key === 'L') activateTool('laser');
-          else if (e.key === 't' || e.key === 'T') activateTool('arc-tracer');
+          else if (e.key === 't' || e.key === 'T') toggleArcPanelOnly();
           else if (e.key === 'h' || e.key === 'H') activateTool('pan');
           else if (e.key === 'z' || e.key === 'Z') activateTool('zoom');
           else if (e.key === 'i' || e.key === 'I') btnSetIn.click();
@@ -3684,7 +3715,7 @@
         setTimeout(resizeCanvases, 100);
         // Panels use position:fixed; they must be descendants of the fullscreen
         // element to appear in fullscreen. Move them in/out of #content as needed.
-        [shortcutsPanel, devtoolsPanel].forEach(p => {
+        [shortcutsPanel, devtoolsPanel, arcPanel].forEach(p => {
           if (fsEl) fsEl.appendChild(p);
           else document.body.appendChild(p);
         });
@@ -3931,6 +3962,7 @@
       // ===== INIT =====
       setDrawColor(drawColor);
       updateToolCursor();
+      updateArcStartBtn();
       mainCanvas.style.display = 'block';
       setSidebarOpen(!isMobile());
       resizeCanvases();
