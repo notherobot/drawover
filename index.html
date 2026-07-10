@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.5.1</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.5.2</span></div>
     </div>
 
     <div id="content">
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.5.1 &nbsp;[Last Updated: 07/10/2026 4:49PM PST]</span>
+          <span id="status-version">DrawOver v0.5.2 &nbsp;[Last Updated: 07/10/2026 4:53PM PST]</span>
         </div>
       </div>
   </div>
@@ -304,8 +304,8 @@
     </label>
     <button id="btn-arc-start">▶ Start Placing Points</button>
     <div class="arc-actions">
+      <button id="btn-clear-arc-point">Clear point</button>
       <button id="btn-clear-arc">Clear all</button>
-      <button id="btn-arc-done">✓ Done</button>
     </div>
   </div>
 
@@ -313,7 +313,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.1</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.2</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -355,7 +355,7 @@
       const arcPointSizeVal = document.getElementById('arc-point-size-val');
       const btnArcStart = document.getElementById('btn-arc-start');
       const btnClearArc = document.getElementById('btn-clear-arc');
-      const btnArcDone = document.getElementById('btn-arc-done');
+      const btnClearArcPoint = document.getElementById('btn-clear-arc-point');
       const scrubArcTicks = document.getElementById('scrub-arc-ticks');
       const arcMagnifierOverlay = document.getElementById('arc-magnifier');
       const arcMagnifierCanvas = document.getElementById('arc-magnifier-canvas');
@@ -2417,11 +2417,18 @@
         updateArcTicks();
       });
 
-      btnArcDone.addEventListener('click', () => {
-        // Only stop-and-revert if placing points was actually started — if the
-        // panel was just opened to peek at settings, Done should merely close it.
-        if (currentTool === 'arc-tracer') activateTool(prevTool || 'pen');
-        else closeArcPanel();
+      btnClearArcPoint.addEventListener('click', () => {
+        const entry = getActiveEntry(); if (!entry || !entry.arcPoints) return;
+        const cf = player.currentFrame;
+        const prev = entry.arcPoints[cf];
+        if (!prev) return; // nothing on this frame to clear
+        delete entry.arcPoints[cf];
+        entry.undoStack.push({ type: 'removeArc', frame: cf, prev: { ...prev } });
+        entry.redoStack = [];
+        scheduleAnnotationSave();
+        redrawArcCanvas();
+        updateArcTicks();
+        updateControlAvailability();
       });
 
       // Arc settings popover (anchored below the Arc Tracer button, which lives in
@@ -3483,6 +3490,13 @@
           refreshArc();
           return;
         }
+        if (action.type === 'removeArc') {
+          if (!entry.arcPoints) entry.arcPoints = {};
+          entry.arcPoints[action.frame] = { ...action.prev };
+          entry.redoStack.push(action);
+          refreshArc();
+          return;
+        }
         if (action.type === 'add') {
           const removed = (entry.annotations[action.frame] || []).pop();
           entry.redoStack.push({ type: 'add', frame: action.frame, stroke: removed });
@@ -3511,6 +3525,12 @@
         if (action.type === 'addArc') {
           if (!entry.arcPoints) entry.arcPoints = {};
           entry.arcPoints[action.frame] = { ...action.point };
+          entry.undoStack.push(action);
+          refreshArc();
+          return;
+        }
+        if (action.type === 'removeArc') {
+          if (entry.arcPoints) delete entry.arcPoints[action.frame];
           entry.undoStack.push(action);
           refreshArc();
           return;

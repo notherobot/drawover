@@ -463,10 +463,8 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #arc-panel .arc-actions button {
   flex: 1; padding: 6px; border-radius: 5px; cursor: pointer; font-weight: 600; border: 1px solid #3a3a3a;
 }
-#btn-clear-arc { background: #2a2a2a; color: #ddd; }
-#btn-clear-arc:hover { background: #333; }
-#btn-arc-done { background: #1e3520; border-color: #3aa060 !important; color: #7ddb8e; }
-#btn-arc-done:hover { background: #24421f; }
+#btn-clear-arc, #btn-clear-arc-point { background: #2a2a2a; color: #ddd; }
+#btn-clear-arc:hover, #btn-clear-arc-point:hover { background: #333; }
 #btn-arc-start {
   display: block; width: 100%; padding: 8px; margin-bottom: 12px;
   border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 12px;
