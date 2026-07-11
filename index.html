@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.5.2</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.5.3</span></div>
     </div>
 
     <div id="content">
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.5.2 &nbsp;[Last Updated: 07/10/2026 4:53PM PST]</span>
+          <span id="status-version">DrawOver v0.5.3 &nbsp;[Last Updated: 07/11/2026 12:25PM PST]</span>
         </div>
       </div>
   </div>
@@ -313,7 +313,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.2</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.3</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2214,6 +2214,24 @@
       document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
       document.addEventListener('touchend', () => { if (isScrubbing) player.endScrub(); isScrubbing = false; });
 
+      // Safety net: a mouseup/pointerup can be missed entirely — e.g. the button
+      // is released outside the browser window, or a native context menu swallows
+      // it — leaving a scrub/draw/erase/pan/zoom flag stuck "on" so the tool keeps
+      // acting as the cursor moves even though no button is held. Every pointermove
+      // reports the *current* button state in e.buttons, so if one arrives with no
+      // buttons down while a flag is still set, the corresponding stop was missed —
+      // force everything back to idle rather than leaving it stuck until the next
+      // click.
+      window.addEventListener('pointermove', (e) => {
+        if (e.buttons & 1) return;
+        if (isDrawing || isErasing || arcDragFrame !== null) finishStroke();
+        if (isDrawingB || isErasingB || currentStrokeB) finishStrokeB();
+        if (isScrubbing) { player.endScrub(); isScrubbing = false; }
+        if (draggingHandle) draggingHandle = null;
+        if (vpDrag) { videoViewport.classList.remove('panning', 'zooming'); vpDrag = null; updateToolCursor(); }
+        if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; }
+      });
+
       function updateInOutUI() {
         const entry = getActiveEntry();
         const dur = player.duration;
@@ -2265,15 +2283,29 @@
       }
 
       // ===== TOOLS =====
+      // Memoized so repeated calls with no *effective* change (e.g. hover-detect
+      // running on every pointermove) don't keep touching style.cursor. That
+      // matters most for the pen/eraser brush cursor: it's a url() data image,
+      // and reassigning it to a freshly-encoded-but-visually-identical data URI
+      // makes the browser reload the cursor image, which is what caused the
+      // constant flicker between the tool cursor and the default arrow.
+      let _lastCursorKey = null;
       function updateToolCursor() {
         // The move (4-way arrow) cursor for grabbing existing arc points is only
         // offered when the Arc Tracer is NOT the active tool. While it is active
         // you are placing new points, not dragging old ones, so keep the tool's
         // own cursor.
-        if ((arcHoverFrame !== null || arcDragFrame !== null) && currentTool !== 'arc-tracer') {
-          penCanvas.style.cursor = penCanvasB.style.cursor = 'move';
-          return;
-        }
+        const arcMoveActive = (arcHoverFrame !== null || arcDragFrame !== null) && currentTool !== 'arc-tracer';
+        const key = arcMoveActive ? 'arc-move'
+          : currentTool === 'pan' ? ('pan:' + (vpDrag ? 1 : 0))
+          : currentTool === 'zoom' ? 'zoom'
+          : currentTool === 'arc-tracer' ? 'arc-tracer'
+          : (currentTool === 'laser' || currentTool === 'eyedrop') ? 'crosshair'
+          : currentTool + ':' + Math.max(brushSize, 4);
+        if (key === _lastCursorKey) return;
+        _lastCursorKey = key;
+
+        if (arcMoveActive) { penCanvas.style.cursor = penCanvasB.style.cursor = 'move'; return; }
         if (currentTool === 'pan') {
           penCanvas.style.cursor = penCanvasB.style.cursor = vpDrag ? 'grabbing' : 'grab';
           return;
@@ -3025,6 +3057,28 @@
         }
       }
 
+      // Top-level (not inside setupPanelBPointerEvents) so the global stuck-state
+      // watchdog below can call it too. See finishStroke (panel A) — commits
+      // regardless of currentTool so a tool switch mid-drag can't leave
+      // isDrawingB/currentStrokeB stuck.
+      const finishStrokeB = () => {
+        if (currentStrokeB) {
+          const frame = playerB ? playerB.currentFrame : 0;
+          const entry = playlist[compareIndex];
+          const b = getVideoBoundsFor(mainCanvasB, penCanvasB);
+          if (entry && currentStrokeB.points.some(p => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1)) {
+            if (!entry.annotations[frame]) entry.annotations[frame] = [];
+            entry.annotations[frame].push(currentStrokeB);
+            entry.undoStack.push({ type: 'add', frame, stroke: currentStrokeB });
+            entry.redoStack = [];
+          }
+          currentStrokeB = null;
+          redrawPenCanvasB(); updateScrubTicks(); scheduleAnnotationSaveB();
+        }
+        isDrawingB = false;
+        isErasingB = false;
+      };
+
       function setupPanelBPointerEvents() {
         penCanvasB.addEventListener('pointerdown', (e) => {
           setActivePanel(false);
@@ -3117,24 +3171,6 @@
             eraseAtB(pos);
           }
         });
-
-        const finishStrokeB = () => {
-          if (currentTool === 'pen' && isDrawingB && currentStrokeB) {
-            isDrawingB = false;
-            const frame = playerB ? playerB.currentFrame : 0;
-            const entry = playlist[compareIndex]; if (!entry) return;
-            const b = getVideoBoundsFor(mainCanvasB, penCanvasB);
-            if (currentStrokeB.points.some(p => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1)) {
-              if (!entry.annotations[frame]) entry.annotations[frame] = [];
-              entry.annotations[frame].push(currentStrokeB);
-              entry.undoStack.push({ type: 'add', frame, stroke: currentStrokeB });
-              entry.redoStack = [];
-            }
-            currentStrokeB = null;
-            redrawPenCanvasB(); updateScrubTicks(); scheduleAnnotationSaveB();
-          } else if (currentTool === 'laser') { isDrawingB = false; }
-          else if (currentTool === 'eraser') { isErasingB = false; }
-        };
 
         penCanvasB.addEventListener('pointerup', (e) => {
           if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
@@ -3389,12 +3425,17 @@
           updateControlAvailability();
           return;
         }
-        if (currentTool === 'pen' && isDrawing && currentStroke) {
-          isDrawing = false;
+        // Commit whatever pen stroke was in progress regardless of which tool is
+        // active *now* — the tool can change mid-drag (e.g. a keyboard shortcut
+        // fired while the mouse button was still held), and dispatching on
+        // currentTool here left isDrawing/currentStroke stuck when the tool no
+        // longer matched, which made the pen/laser/eraser keep acting on mere
+        // cursor movement with no button held until the next pointerdown.
+        if (currentStroke) {
           const frame = player.currentFrame;
           const entry = playlist[activeIndex];
           const b = getVideoBounds();
-          if (currentStroke.points.some(p => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1)) {
+          if (entry && currentStroke.points.some(p => p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1)) {
             if (!entry.annotations[frame]) entry.annotations[frame] = [];
             entry.annotations[frame].push(currentStroke);
             entry.undoStack.push({ type: 'add', frame, stroke: currentStroke });
@@ -3402,8 +3443,9 @@
           }
           currentStroke = null;
           redrawPenCanvas(); updateScrubTicks(); scheduleAnnotationSave(); updateControlAvailability();
-        } else if (currentTool === 'laser') { isDrawing = false; }
-        else if (currentTool === 'eraser') { isErasing = false; }
+        }
+        isDrawing = false;
+        isErasing = false;
       };
 
       penCanvas.addEventListener('pointerleave', () => {
