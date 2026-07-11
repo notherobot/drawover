@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.5.3</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.5.4</span></div>
     </div>
 
     <div id="content">
@@ -157,7 +157,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.5.3 &nbsp;[Last Updated: 07/11/2026 12:25PM PST]</span>
+          <span id="status-version">DrawOver v0.5.4 &nbsp;[Last Updated: 07/11/2026 12:33PM PST]</span>
         </div>
       </div>
   </div>
@@ -313,7 +313,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.3</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.4</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2796,6 +2796,32 @@
         return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
       }
 
+      // Fast mouse/trackpad movement can leave consecutive raw samples far
+      // apart (the browser just doesn't deliver more mousemove/pointermove
+      // events than that), so that segment renders as a hard, straight facet
+      // no matter how the curve through it is smoothed — there's no data to
+      // curve through. Linearly interpolating extra points along any
+      // over-long segment before smoothing gives the midpoint-quadratic pass
+      // below enough samples to actually round it off. This only *adds*
+      // points on the straight line between two real samples, so it can't
+      // introduce the overshoot that a real spline (e.g. Catmull-Rom) risked.
+      function resampleForSmoothing(pts, w, h) {
+        if (pts.length < 3) return pts;
+        const MAX_SEG = 5; // device px between samples before we interpolate
+        const out = [pts[0]];
+        for (let i = 1; i < pts.length; i++) {
+          const a = pts[i - 1], b = pts[i];
+          const dist = Math.hypot((b.x - a.x) * w, (b.y - a.y) * h);
+          const steps = Math.min(10, Math.floor(dist / MAX_SEG));
+          for (let s = 1; s <= steps; s++) {
+            const t = s / (steps + 1);
+            out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+          }
+          out.push(b);
+        }
+        return out;
+      }
+
       // Strokes are rendered with a native quadratic-through-midpoints path:
       // each raw sample is the control point of a quadratic Bézier that runs
       // between the midpoints of its two neighbouring segments, and the path is
@@ -2805,7 +2831,7 @@
       // every Bézier segment stays inside its control points, it never
       // overshoots however far apart fast-stroke samples are.
       function drawStrokeOnCanvas(ctx, stroke, w, h, alpha, colorOverride) {
-        const pts = stroke.points;
+        const pts = stroke.points && stroke.points.length > 2 ? resampleForSmoothing(stroke.points, w, h) : stroke.points;
         if (!pts || !pts.length) return;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const color = colorOverride || stroke.color;
@@ -2863,9 +2889,10 @@
       }
 
       // Draws laser stroke — caller sets globalAlpha to the current fade level.
-      // Same native quadratic-through-midpoints path as the pen.
+      // Same native quadratic-through-midpoints path as the pen (plus the same
+      // fast-segment resampling — see resampleForSmoothing above).
       function drawLaserStroke(ctx, stroke, w, h) {
-        const pts = stroke.points;
+        const pts = stroke.points && stroke.points.length > 2 ? resampleForSmoothing(stroke.points, w, h) : stroke.points;
         if (!pts || !pts.length) return;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         ctx.save();
