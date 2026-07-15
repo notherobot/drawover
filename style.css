@@ -87,7 +87,8 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #btn-sidebar-toggle:hover { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
 #btn-sidebar-toggle.active { color: var(--accent-hi); border-color: #2a4a6e; }
 #app-title {
-  flex: 0 0 auto; text-align: center; font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
+  flex: 0 0 auto; text-align: center; font-size: 17px; font-weight: 700; letter-spacing: 0.5px;
+  font-family: 'Trebuchet MS', Tahoma, Verdana, sans-serif; /* the quintessential early-2000s logo/UI face */
   color: var(--accent-hi); white-space: nowrap;
   text-shadow: 0 0 10px var(--accent-glow), 0 1px 0 rgba(0,0,0,0.6);
 }
@@ -113,7 +114,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #sidebar-overlay.open { display: block; }
 
 #sidebar {
-  background: linear-gradient(to right, #1c1c1c 0%, #171717 100%);
+  background: #1a1a1a;
   border-right: 1px solid #000;
   display: flex;
   flex-direction: column; flex-shrink: 0;
@@ -746,7 +747,10 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 #welcome-overlay.dismissing { opacity: 0; pointer-events: none; }
 #welcome-overlay.hidden { display: none !important; }
 #welcome-icon { font-size: 80px; line-height: 1; margin-bottom: 20px; }
-#welcome-title { font-size: 28px; font-weight: 700; color: var(--accent-hi); text-shadow: 0 0 18px var(--accent-glow); margin-bottom: 8px; }
+#welcome-title {
+  font-size: 28px; font-weight: 700; font-family: 'Trebuchet MS', Tahoma, Verdana, sans-serif;
+  color: var(--accent-hi); text-shadow: 0 0 18px var(--accent-glow); margin-bottom: 8px;
+}
 #welcome-sub {
   font-size: 13px; color: #aaa; margin-bottom: 40px;
   text-align: center; max-width: 380px; line-height: 1.6;
