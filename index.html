@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
-      <div id="app-title">DrawOver <span id="version">v0.5.5</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.6.0</span></div>
     </div>
 
     <div id="content">
@@ -74,6 +74,7 @@
             <div id="video-container">
               <div id="video-viewport">
                 <canvas id="main-canvas"></canvas>
+                <canvas id="guides-canvas"></canvas>
                 <canvas id="pen-canvas"></canvas>
                 <canvas id="laser-canvas"></canvas>
                 <canvas id="arc-canvas"></canvas>
@@ -119,6 +120,9 @@
           <button id="btn-toggle-drawings" class="active" title="Show/Hide Drawovers">Drawovers ON</button>
           <button id="btn-ghost" title="Ghosting / onion-skin: show drawovers from nearby frames">Ghost</button>
           <button id="btn-ghost-opts" title="Ghosting settings">▾</button>
+          <div class="pb-sep"></div>
+          <button id="btn-guides" title="Composition guides: overlay framing/grid lines for composition">Guides</button>
+          <button id="btn-guides-opts" title="Composition guide settings">▾</button>
           <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
           <button id="btn-export-frame" title="Export current frame with drawovers as PNG">⤓ PNG</button>
           <div class="pb-sep"></div>
@@ -157,7 +161,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.5.5 &nbsp;[Last Updated: 07/11/2026 12:46PM PST]</span>
+          <span id="status-version">DrawOver v0.6.0 &nbsp;[Last Updated: 07/15/2026 7:08AM PST]</span>
         </div>
       </div>
   </div>
@@ -309,11 +313,50 @@
     </div>
   </div>
 
+  <!-- Composition Guides settings popover -->
+  <div id="guides-panel">
+    <div class="guides-title">Composition Guides</div>
+    <div class="guides-sub">Overlay framing &amp; composition lines</div>
+    <label class="guides-row">
+      <span>Guide</span>
+      <select id="guides-type" title="Which composition guide to overlay">
+        <option value="thirds">Rule of Thirds</option>
+        <option value="phi">Phi Grid (Golden Ratio)</option>
+        <option value="fifths">Rule of Fifths</option>
+        <option value="rabatment">Rabatment of the Rectangle</option>
+        <option value="triangle">Golden Triangle</option>
+        <option value="fibonacci">Fibonacci Spiral</option>
+        <option value="cross">Center Cross</option>
+        <option value="diagonals">Diagonals</option>
+      </select>
+    </label>
+    <label class="guides-row">
+      <span>Frame aspect ratio</span>
+      <select id="guides-aspect" title="Matte the guide to a specific aspect ratio, e.g. if your footage is letterboxed">
+        <option value="video">Match footage</option>
+        <option value="16:9">16:9</option>
+        <option value="1.85:1">1.85:1</option>
+        <option value="2:1">2:1</option>
+        <option value="2.35:1">2.35:1</option>
+        <option value="2.39:1">2.39:1</option>
+        <option value="4:3">4:3</option>
+        <option value="1:1">1:1</option>
+        <option value="4:5">4:5</option>
+        <option value="9:16">9:16</option>
+      </select>
+    </label>
+    <label class="guides-row">
+      <span>Line color</span>
+      <input type="color" id="guides-color" value="#ffcc00" title="Guide line color">
+    </label>
+    <button id="guides-done">Done</button>
+  </div>
+
   <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.5.5</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.0</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -413,6 +456,14 @@
       const ghostPanel = document.getElementById('ghost-panel');
       const ghostRangeSlider = document.getElementById('ghost-range');
       const ghostRangeVal = document.getElementById('ghost-range-val');
+      const btnGuides = document.getElementById('btn-guides');
+      const btnGuidesOpts = document.getElementById('btn-guides-opts');
+      const guidesPanel = document.getElementById('guides-panel');
+      const guidesTypeSelect = document.getElementById('guides-type');
+      const guidesAspectSelect = document.getElementById('guides-aspect');
+      const guidesColorInput = document.getElementById('guides-color');
+      const guidesCanvas = document.getElementById('guides-canvas');
+      const guidesCtx = guidesCanvas.getContext('2d');
       const btnClearFrame = document.getElementById('btn-clear-frame');
       const btnExportFrame = document.getElementById('btn-export-frame');
       const btnFullscreen = document.getElementById('btn-fullscreen');
@@ -444,6 +495,10 @@
       let drawingsVisible = true;
       let ghostEnabled = false;   // onion-skin toggle
       let ghostRange = 2;         // frames before & after (1..10)
+      let guidesEnabled = false;  // composition-guide overlay toggle
+      let guidesType = 'thirds';
+      let guidesAspect = 'video'; // 'video' = match the footage's own displayed bounds
+      let guidesColor = '#ffcc00';
       let loopEnabled = false;
       let laserHoldMs = 1000;
 
@@ -1923,7 +1978,8 @@
         penCanvas.width   = rect.width * dpr; penCanvas.height   = rect.height * dpr;
         laserCanvas.width = rect.width * dpr; laserCanvas.height = rect.height * dpr;
         arcCanvas.width   = rect.width * dpr; arcCanvas.height   = rect.height * dpr;
-        redrawPenCanvas(); redrawLaserCanvas(); redrawArcCanvas(); updateScrubTicks();
+        guidesCanvas.width = rect.width * dpr; guidesCanvas.height = rect.height * dpr;
+        redrawPenCanvas(); redrawLaserCanvas(); redrawArcCanvas(); redrawGuidesCanvas(); updateScrubTicks();
         updateToolCursor();
       }
       new ResizeObserver(resizeCanvases).observe(videoContainer);
@@ -2921,6 +2977,217 @@
         laserCtx.restore();
       }
 
+      // ===== COMPOSITION GUIDES =====
+      // Aspect ratios the guide frame can be matted to, independent of the
+      // video file's own dimensions — e.g. footage that's really 2.35:1 but
+      // hard-letterboxed inside a 16:9 file needs the guide matted to 2.35:1
+      // to line up with the actual image area, not the file's full frame.
+      const GUIDE_ASPECTS = {
+        '16:9': 16 / 9, '1.85:1': 1.85, '2:1': 2, '2.35:1': 2.35, '2.39:1': 2.39,
+        '4:3': 4 / 3, '1:1': 1, '4:5': 4 / 5, '9:16': 9 / 16,
+      };
+
+      // The guide rect in guidesCanvas pixel space: the video's own displayed
+      // bounds, further matted (letterboxed/pillarboxed) to the chosen aspect
+      // ratio if one other than "match footage" is selected.
+      function getGuideRect(canvasW, canvasH) {
+        const b = getVideoBounds();
+        const vx0 = b.x0 * canvasW, vy0 = b.y0 * canvasH, vx1 = b.x1 * canvasW, vy1 = b.y1 * canvasH;
+        const vw = vx1 - vx0, vh = vy1 - vy0;
+        const targetRatio = GUIDE_ASPECTS[guidesAspect];
+        if (!targetRatio || !vw || !vh) return { x0: vx0, y0: vy0, x1: vx1, y1: vy1 };
+        const videoRatio = vw / vh;
+        let gw, gh;
+        if (targetRatio > videoRatio) { gw = vw; gh = vw / targetRatio; }
+        else { gh = vh; gw = vh * targetRatio; }
+        const gx0 = vx0 + (vw - gw) / 2, gy0 = vy0 + (vh - gh) / 2;
+        return { x0: gx0, y0: gy0, x1: gx0 + gw, y1: gy0 + gh };
+      }
+
+      function strokeRectOutline(ctx, r) {
+        ctx.beginPath();
+        ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+        ctx.stroke();
+      }
+
+      function drawThirds(ctx, r) {
+        const w = r.x1 - r.x0, h = r.y1 - r.y0;
+        ctx.beginPath();
+        for (let i = 1; i <= 2; i++) {
+          const x = r.x0 + w * i / 3;
+          ctx.moveTo(x, r.y0); ctx.lineTo(x, r.y1);
+          const y = r.y0 + h * i / 3;
+          ctx.moveTo(r.x0, y); ctx.lineTo(r.x1, y);
+        }
+        ctx.stroke();
+      }
+
+      function drawPhiGrid(ctx, r) {
+        const w = r.x1 - r.x0, h = r.y1 - r.y0;
+        const b = 1 / 1.6180339887498949, a = 1 - b; // ≈0.382, ≈0.618
+        ctx.beginPath();
+        [a, b].forEach(f => { const x = r.x0 + w * f; ctx.moveTo(x, r.y0); ctx.lineTo(x, r.y1); });
+        [a, b].forEach(f => { const y = r.y0 + h * f; ctx.moveTo(r.x0, y); ctx.lineTo(r.x1, y); });
+        ctx.stroke();
+      }
+
+      function drawFifths(ctx, r) {
+        const w = r.x1 - r.x0;
+        ctx.beginPath();
+        for (let i = 1; i <= 4; i++) { const x = r.x0 + w * i / 5; ctx.moveTo(x, r.y0); ctx.lineTo(x, r.y1); }
+        ctx.stroke();
+      }
+
+      // Classic "rabatment of the rectangle": square the shorter side off both
+      // ends and draw diagonals in each square. For a rect wider than 2:1 (e.g.
+      // 2.35:1) this leaves a clear gap between the two squares; for anything
+      // narrower than 2:1 (e.g. 16:9) the two squares overlap in the middle —
+      // that overlap/gap difference is the whole point of the guide, and is
+      // why it looks so different at 16:9 vs. scope aspect ratios.
+      function drawRabatment(ctx, r) {
+        const w = r.x1 - r.x0, h = r.y1 - r.y0;
+        ctx.beginPath();
+        if (w >= h) {
+          const s = h;
+          ctx.moveTo(r.x0, r.y0); ctx.lineTo(r.x0 + s, r.y1);
+          ctx.moveTo(r.x0, r.y1); ctx.lineTo(r.x0 + s, r.y0);
+          ctx.moveTo(r.x1 - s, r.y0); ctx.lineTo(r.x1, r.y1);
+          ctx.moveTo(r.x1 - s, r.y1); ctx.lineTo(r.x1, r.y0);
+          ctx.moveTo(r.x0 + s, r.y0); ctx.lineTo(r.x0 + s, r.y1);
+          if (r.x1 - s !== r.x0 + s) { ctx.moveTo(r.x1 - s, r.y0); ctx.lineTo(r.x1 - s, r.y1); }
+        } else {
+          const s = w;
+          ctx.moveTo(r.x0, r.y0); ctx.lineTo(r.x1, r.y0 + s);
+          ctx.moveTo(r.x1, r.y0); ctx.lineTo(r.x0, r.y0 + s);
+          ctx.moveTo(r.x0, r.y1 - s); ctx.lineTo(r.x1, r.y1);
+          ctx.moveTo(r.x1, r.y1 - s); ctx.lineTo(r.x0, r.y1);
+          ctx.moveTo(r.x0, r.y0 + s); ctx.lineTo(r.x1, r.y0 + s);
+          if (r.y1 - s !== r.y0 + s) { ctx.moveTo(r.x0, r.y1 - s); ctx.lineTo(r.x1, r.y1 - s); }
+        }
+        ctx.stroke();
+      }
+
+      function projectPerp(px, py, ax, ay, bx, by) {
+        const dx = bx - ax, dy = by - ay;
+        const t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+        return { x: ax + t * dx, y: ay + t * dy };
+      }
+
+      function drawGoldenTriangle(ctx, r) {
+        ctx.beginPath();
+        ctx.moveTo(r.x0, r.y0); ctx.lineTo(r.x1, r.y1);
+        const footTR = projectPerp(r.x1, r.y0, r.x0, r.y0, r.x1, r.y1);
+        ctx.moveTo(r.x1, r.y0); ctx.lineTo(footTR.x, footTR.y);
+        const footBL = projectPerp(r.x0, r.y1, r.x0, r.y0, r.x1, r.y1);
+        ctx.moveTo(r.x0, r.y1); ctx.lineTo(footBL.x, footBL.y);
+        ctx.stroke();
+      }
+
+      function drawCenterCross(ctx, r) {
+        const cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, r.y0); ctx.lineTo(cx, r.y1);
+        ctx.moveTo(r.x0, cy); ctx.lineTo(r.x1, cy);
+        ctx.stroke();
+      }
+
+      function drawDiagonals(ctx, r) {
+        ctx.beginPath();
+        ctx.moveTo(r.x0, r.y0); ctx.lineTo(r.x1, r.y1);
+        ctx.moveTo(r.x1, r.y0); ctx.lineTo(r.x0, r.y1);
+        ctx.stroke();
+      }
+
+      // Largest golden-ratio (Φ≈1.618) rectangle that fits centred inside r,
+      // in the same orientation as r. The Fibonacci spiral is only properly
+      // defined for a golden rectangle, so rather than distorting it to fit an
+      // arbitrary chosen aspect ratio, we inscribe a true golden rect within
+      // the (possibly very different — e.g. 2.35:1 or 9:16) guide frame.
+      function largestGoldenRectIn(r) {
+        const w = r.x1 - r.x0, h = r.y1 - r.y0;
+        const PHI = 1.6180339887498949;
+        let gw, gh;
+        if (w >= h) { gw = w; gh = w / PHI; if (gh > h) { gh = h; gw = h * PHI; } }
+        else { gh = h; gw = h / PHI; if (gw > w) { gw = w; gh = w * PHI; } }
+        const gx0 = r.x0 + (w - gw) / 2, gy0 = r.y0 + (h - gh) / 2;
+        return { x0: gx0, y0: gy0, x1: gx0 + gw, y1: gy0 + gh };
+      }
+
+      // Successive Fibonacci squares carved off a golden rect, cycling through
+      // the 4 sides. For an exact golden rect this cycle always leaves a
+      // smaller golden rect (rotated 90°) behind, which is what keeps the
+      // spiral mathematically correct rather than just an approximation.
+      function computeFibonacciSquares(r, iterations) {
+        const squares = [];
+        let x0 = r.x0, y0 = r.y0, x1 = r.x1, y1 = r.y1;
+        const seq = (x1 - x0) >= (y1 - y0) ? ['left', 'top', 'right', 'bottom'] : ['top', 'right', 'bottom', 'left'];
+        for (let i = 0; i < iterations; i++) {
+          const w = x1 - x0, h = y1 - y0;
+          if (w < 2 || h < 2) break;
+          const s = Math.min(w, h);
+          const side = seq[i % 4];
+          let sq;
+          if (side === 'left') { sq = { x0, y0, x1: x0 + s, y1 }; x0 += s; }
+          else if (side === 'right') { sq = { x0: x1 - s, y0, x1, y1 }; x1 -= s; }
+          else if (side === 'top') { sq = { x0, y0, x1, y1: y0 + s }; y0 += s; }
+          else { sq = { x0, y0: y1 - s, x1, y1 }; y1 -= s; }
+          sq.side = side;
+          squares.push(sq);
+        }
+        return squares;
+      }
+
+      // Center corner + entry/exit angle for each square's quarter-circle arc,
+      // chosen so each arc's exit point exactly matches the next arc's entry
+      // point — a single continuous clockwise spiral rather than 4 disjoint arcs.
+      const FIB_ARC = {
+        left:   { cx: 'x1', cy: 'y1', a0: Math.PI,       a1: Math.PI * 1.5 },
+        top:    { cx: 'x0', cy: 'y1', a0: Math.PI * 1.5, a1: Math.PI * 2 },
+        right:  { cx: 'x0', cy: 'y0', a0: 0,             a1: Math.PI * 0.5 },
+        bottom: { cx: 'x1', cy: 'y0', a0: Math.PI * 0.5, a1: Math.PI },
+      };
+
+      function drawFibonacciSpiral(ctx, r) {
+        const g = largestGoldenRectIn(r);
+        const squares = computeFibonacciSquares(g, 9);
+        ctx.beginPath();
+        squares.forEach(sq => ctx.rect(sq.x0, sq.y0, sq.x1 - sq.x0, sq.y1 - sq.y0));
+        ctx.stroke();
+        ctx.beginPath();
+        squares.forEach((sq, i) => {
+          const m = FIB_ARC[sq.side];
+          const cx = sq[m.cx], cy = sq[m.cy];
+          const radius = Math.min(sq.x1 - sq.x0, sq.y1 - sq.y0);
+          if (i === 0) ctx.moveTo(cx + radius * Math.cos(m.a0), cy + radius * Math.sin(m.a0));
+          ctx.arc(cx, cy, radius, m.a0, m.a1, false);
+        });
+        ctx.stroke();
+      }
+
+      function redrawGuidesCanvas() {
+        guidesCtx.clearRect(0, 0, guidesCanvas.width, guidesCanvas.height);
+        if (!guidesEnabled) return;
+        const w = guidesCanvas.width, h = guidesCanvas.height;
+        if (!w || !h) return;
+        const r = getGuideRect(w, h);
+        if (r.x1 - r.x0 < 2 || r.y1 - r.y0 < 2) return;
+        guidesCtx.save();
+        guidesCtx.strokeStyle = guidesColor;
+        guidesCtx.lineWidth = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+        guidesCtx.globalAlpha = 0.9;
+        guidesCtx.lineCap = 'round';
+        strokeRectOutline(guidesCtx, r);
+        if (guidesType === 'thirds') drawThirds(guidesCtx, r);
+        else if (guidesType === 'phi') drawPhiGrid(guidesCtx, r);
+        else if (guidesType === 'fifths') drawFifths(guidesCtx, r);
+        else if (guidesType === 'rabatment') drawRabatment(guidesCtx, r);
+        else if (guidesType === 'triangle') drawGoldenTriangle(guidesCtx, r);
+        else if (guidesType === 'fibonacci') drawFibonacciSpiral(guidesCtx, r);
+        else if (guidesType === 'cross') drawCenterCross(guidesCtx, r);
+        else if (guidesType === 'diagonals') drawDiagonals(guidesCtx, r);
+        guidesCtx.restore();
+      }
+
       function redrawPenCanvasB() {
         penCtxB.clearRect(0, 0, penCanvasB.width, penCanvasB.height);
         const entry = getCompareEntry(); if (!entry || !playerB) return;
@@ -3617,7 +3884,7 @@
         const isImage = !!(entry && entry.isImage);
         // No-video group — always needs a loaded item
         [btnToggleDrawings, btnPrevAnnotation, btnNextAnnotation,
-         btnClearFrame, btnExportFrame, btnGhost, btnGhostOpts
+         btnClearFrame, btnExportFrame, btnGhost, btnGhostOpts, btnGuides, btnGuidesOpts
         ].forEach(el => { if (el) el.disabled = noVideo; });
         // Playback transport — meaningless for a still image
         [btnPlay, btnFrameBack, btnFrameFwd, btnToStart, btnToEnd,
@@ -3784,6 +4051,52 @@
         closeGhostPanel();
       });
 
+      // ===== COMPOSITION GUIDES =====
+      function openGuidesPanel() {
+        guidesPanel.style.display = 'block';
+        const r = btnGuides.getBoundingClientRect();
+        const pw = guidesPanel.offsetWidth, ph = guidesPanel.offsetHeight;
+        let left = r.left;
+        if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+        guidesPanel.style.left = Math.max(8, left) + 'px';
+        guidesPanel.style.top = Math.max(8, r.top - ph - 8) + 'px';
+      }
+      function closeGuidesPanel() { guidesPanel.style.display = 'none'; }
+      function setGuidesEnabled(on) {
+        guidesEnabled = on;
+        btnGuides.classList.toggle('active', on);
+        btnGuides.textContent = on ? 'Guides ON' : 'Guides';
+        redrawGuidesCanvas();
+      }
+      btnGuides.addEventListener('click', () => {
+        if (guidesEnabled) { setGuidesEnabled(false); closeGuidesPanel(); }
+        else { setGuidesEnabled(true); openGuidesPanel(); } // show settings on turn-on
+      });
+      btnGuidesOpts.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Settings caret only opens/closes the popover — it never toggles guides.
+        if (guidesPanel.style.display === 'block') { closeGuidesPanel(); return; }
+        openGuidesPanel();
+      });
+      guidesTypeSelect.addEventListener('change', () => {
+        guidesType = guidesTypeSelect.value;
+        if (guidesEnabled) redrawGuidesCanvas();
+      });
+      guidesAspectSelect.addEventListener('change', () => {
+        guidesAspect = guidesAspectSelect.value;
+        if (guidesEnabled) redrawGuidesCanvas();
+      });
+      guidesColorInput.addEventListener('input', () => {
+        guidesColor = guidesColorInput.value;
+        if (guidesEnabled) redrawGuidesCanvas();
+      });
+      document.getElementById('guides-done').addEventListener('click', closeGuidesPanel);
+      document.addEventListener('mousedown', (e) => {
+        if (guidesPanel.style.display !== 'block') return;
+        if (guidesPanel.contains(e.target) || e.target === btnGuides || e.target === btnGuidesOpts) return;
+        closeGuidesPanel();
+      });
+
       btnFullscreen.addEventListener('click', () => {
         if (document.fullscreenElement) document.exitFullscreen();
         else document.getElementById('content').requestFullscreen().catch(() => {});
@@ -3794,7 +4107,7 @@
         setTimeout(resizeCanvases, 100);
         // Panels use position:fixed; they must be descendants of the fullscreen
         // element to appear in fullscreen. Move them in/out of #content as needed.
-        [shortcutsPanel, devtoolsPanel, arcPanel].forEach(p => {
+        [shortcutsPanel, devtoolsPanel, arcPanel, ghostPanel, guidesPanel].forEach(p => {
           if (fsEl) fsEl.appendChild(p);
           else document.body.appendChild(p);
         });
