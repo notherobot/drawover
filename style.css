@@ -164,8 +164,8 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   border-left: 3px solid transparent;
 }
 .playlist-row:hover { background: #2a2a2a; }
-.playlist-row.active { background: linear-gradient(to right, #1e3550, #202020 65%); border-color: var(--accent); box-shadow: -1px 0 6px rgba(58,160,255,0.25); }
-.playlist-row.compare-active { background: linear-gradient(to right, #1e3520, #202020 65%); border-color: #3aa060; box-shadow: -1px 0 6px rgba(58,160,96,0.25); }
+.playlist-row.active { background: #1e3550; border-color: var(--accent); box-shadow: -1px 0 6px rgba(58,160,255,0.25); }
+.playlist-row.compare-active { background: #1e3520; border-color: #3aa060; box-shadow: -1px 0 6px rgba(58,160,96,0.25); }
 .playlist-row.in-folder { padding-left: 14px; }
 .playlist-thumb {
   width: 64px; height: 36px; object-fit: cover; border-radius: 3px;
@@ -606,8 +606,10 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #guides-done:hover { background: #2b8de0; }
 
 .transport-btn {
-  font-size: 14px; padding: 5px 11px; flex-shrink: 0;
+  padding: 5px 11px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
 }
+.transport-btn svg { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5)); }
 /* Play / pause icons are drawn as CSS shapes (not text glyphs, which render
    small and inconsistently) so they reliably fill the button. State is driven
    by the .is-playing class. */
@@ -636,16 +638,16 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #btn-play::before {
   content: ''; width: 0; height: 0;
   border-style: solid;
-  border-width: 15px 0 15px 26px;
+  border-width: 12.75px 0 12.75px 22.1px; /* 15/26, scaled down 15% */
   border-color: transparent transparent transparent #e6e6e6;
-  margin-left: 5px; /* optical centring of the triangle */
+  margin-left: 4.25px; /* optical centring of the triangle, scaled with it */
   filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5));
 }
 #btn-play::after { content: none; }
 /* Playing → show two pause bars (::before and ::after become the bars). */
 #btn-play.is-playing::before,
 #btn-play.is-playing::after {
-  content: ''; width: 8px; height: 30px;
+  content: ''; width: 6.8px; height: 25.5px; /* 8/30, scaled down 15% */
   border: none; border-radius: 2px; background: #052540; margin: 0;
   filter: none; box-shadow: 0 1px 1px rgba(255,255,255,0.3);
 }
@@ -808,10 +810,11 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
   .pb-zone-center { order: -1; }
   .pb-zone-left, .pb-zone-right { flex-wrap: wrap; overflow-x: visible; justify-content: center; }
   #playback-row button { padding: 4px 6px; font-size: 10px; }
-  .transport-btn { font-size: 12px; padding: 4px 8px; }
+  .transport-btn { padding: 4px 8px; }
+  .transport-btn svg { width: 18px; height: 18px; }
   #btn-play { width: 42px; height: 42px; }
-  #btn-play::before { border-width: 12px 0 12px 21px; }
-  #btn-play.is-playing::before, #btn-play.is-playing::after { width: 7px; height: 24px; }
+  #btn-play::before { border-width: 10.2px 0 10.2px 17.85px; } /* 12/21, scaled down 15% */
+  #btn-play.is-playing::before, #btn-play.is-playing::after { width: 5.95px; height: 20.4px; } /* 7/24, scaled down 15% */
 
   /* Status bar: hide the note text, keep storage + version */
   #status-note { display: none; }

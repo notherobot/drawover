@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.6.3</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.6.4</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -147,13 +147,13 @@
             </select>
           </div>
           <div class="pb-zone pb-zone-center">
-            <button class="transport-btn" id="btn-prev-media" title="Previous media in playlist">||◀</button>
-            <button class="transport-btn" id="btn-to-start" title="Go to In / Start">|◀</button>
-            <button class="transport-btn" id="btn-frame-back" title="Frame Back (←)">◀◀</button>
+            <button class="transport-btn" id="btn-prev-media" title="Previous media in playlist"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M2 6h2v12H2zM6 6h2v12H6zm14 0l-10 6 10 6z"/></svg></button>
+            <button class="transport-btn" id="btn-to-start" title="Go to In / Start"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 6h2v12H6zm12 0l-10 6 10 6z"/></svg></button>
+            <button class="transport-btn" id="btn-frame-back" title="Frame Back (←)"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M11 6L2.5 12 11 18zM20 6l-8.5 6 8.5 6z"/></svg></button>
             <button id="btn-play" title="Play/Pause (Space)"></button>
-            <button class="transport-btn" id="btn-frame-fwd" title="Frame Forward (→)">▶▶</button>
-            <button class="transport-btn" id="btn-to-end" title="Go to Out / End">▶|</button>
-            <button class="transport-btn" id="btn-next-media" title="Next media in playlist">▶||</button>
+            <button class="transport-btn" id="btn-frame-fwd" title="Frame Forward (→)"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M13 6l8.5 6-8.5 6zM4 6l8.5 6L4 18z"/></svg></button>
+            <button class="transport-btn" id="btn-to-end" title="Go to Out / End"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 6l10 6-10 6zM16 6h2v12h-2z"/></svg></button>
+            <button class="transport-btn" id="btn-next-media" title="Next media in playlist"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6 6l10 6-10 6zM16 6h2v12h-2zM20 6h2v12h-2z"/></svg></button>
           </div>
           <div class="pb-zone pb-zone-right">
             <button id="btn-prev-annotation" title="Previous Drawover (↑)">◀ Drawover</button>
@@ -173,7 +173,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.6.3 &nbsp;[Last Updated: 07/15/2026 12:24PM PST]</span>
+          <span id="status-version">DrawOver v0.6.4 &nbsp;[Last Updated: 07/15/2026 12:49PM PST]</span>
         </div>
       </div>
   </div>
@@ -340,7 +340,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.3</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.4</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -4212,20 +4212,29 @@
       });
 
       // ===== TOOL HINT (Maya-style) =====
-      // Instead of relying solely on the browser's native title tooltip near
-      // the cursor, mirror whatever's hovered into a status line in the
-      // top-right of the topbar — delegated on document so one listener
-      // covers every current and future titled control, no per-button wiring.
+      // Mirror whatever's hovered into a status line in the top-right of the
+      // topbar — delegated on document so one listener covers every current
+      // and future titled control, no per-button wiring. The native title
+      // tooltip would otherwise show up too (redundant with this line), so
+      // while hovered we blank the title attribute (not remove it — an empty
+      // title doesn't trigger the browser tooltip, but the element still
+      // matches [title] for the mouseout lookup) and restore it on mouseout.
       const toolHint = document.getElementById('tool-hint');
       document.addEventListener('mouseover', (e) => {
         const el = e.target.closest('[title]');
-        if (el && el.title) toolHint.textContent = el.title;
+        const t = el && el.getAttribute('title');
+        if (!t) return;
+        toolHint.textContent = t;
+        el.dataset.hintTitle = t;
+        el.setAttribute('title', '');
       });
       document.addEventListener('mouseout', (e) => {
-        const el = e.target.closest('[title]');
+        const el = e.target.closest('[data-hint-title]');
         if (!el) return;
+        el.setAttribute('title', el.dataset.hintTitle);
+        delete el.dataset.hintTitle;
         const related = e.relatedTarget && e.relatedTarget.closest ? e.relatedTarget.closest('[title]') : null;
-        if (!related) toolHint.textContent = '';
+        if (!related || !related.getAttribute('title')) toolHint.textContent = '';
       });
 
       // ===== SIDEBAR TOGGLE =====
