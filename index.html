@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.6.2</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.6.3</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -48,10 +48,11 @@
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group sliders">
-            <label>Size <input type="range" id="brush-size" min="1" max="40" step="1" value="4"><span id="brush-size-val">4</span></label>
-            <label>Opacity <input type="range" id="brush-opacity" min="1" max="100" value="100"><span id="brush-opacity-val">100</span>%</label>
-            <label>Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="1"><span id="laser-hold-val">1</span>s</label>
+            <label title="Brush/eraser stroke width">Size <input type="range" id="brush-size" min="1" max="40" step="1" value="4"><span id="brush-size-val">4</span></label>
+            <label title="Brush stroke opacity">Opacity <input type="range" id="brush-opacity" min="1" max="100" value="100"><span id="brush-opacity-val">100</span>%</label>
+            <label title="How long a laser stroke stays on screen before fading">Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="1"><span id="laser-hold-val">1</span>s</label>
           </div>
+          <button id="btn-devtools" title="Developer Tools">Dev</button>
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
 
@@ -121,17 +122,29 @@
 
         <div id="playback-row">
           <div class="pb-zone pb-zone-left">
-            <button id="btn-toggle-drawings" class="active" title="Show/Hide Drawovers">Drawovers ON</button>
-            <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
             <button id="btn-export-frame" title="Export current frame with drawovers as PNG">⤓ PNG</button>
+            <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
             <div class="pb-sep"></div>
-            <button id="btn-prev-annotation" title="Previous Drawover (↑)">◀ Drawover</button>
-            <button id="btn-next-annotation" title="Next Drawover (↓)">Drawover ▶</button>
+            <div class="split-btn">
+              <button id="btn-ghost" title="Ghosting / onion-skin: show drawovers from nearby frames">Ghost</button><button id="btn-ghost-opts" title="Ghosting settings">▾</button>
+            </div>
+            <div class="split-btn">
+              <button id="btn-guides" title="Composition guides: overlay framing/grid lines for composition">Guides</button><button id="btn-guides-opts" title="Composition guide settings">▾</button>
+            </div>
+            <div class="split-btn">
+              <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)" style="width:auto;padding:4px 9px;font-size:11px;height:26px">Arc Tracer</button><button class="tool-btn active" id="btn-arc-toggle" title="Show / hide arc points" style="width:28px;height:26px">&#128065;</button>
+            </div>
             <div class="pb-sep"></div>
-            <button id="btn-set-in" title="Set In Point (I)">[ In</button>
-            <button id="btn-set-out" title="Set Out Point (O)">Out ]</button>
-            <button id="btn-clear-inout" title="Clear In/Out">✕ Range</button>
-            <button id="btn-loop" title="Loop In/Out">↺ Loop</button>
+            <button id="btn-toggle-drawings" class="active" title="Show/Hide Drawovers">Drawovers ON</button>
+            <div class="pb-sep"></div>
+            <select id="speed-select" title="Playback speed">
+              <option value="0.1">0.1×</option>
+              <option value="0.25">0.25×</option>
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
           </div>
           <div class="pb-zone pb-zone-center">
             <button class="transport-btn" id="btn-prev-media" title="Previous media in playlist">||◀</button>
@@ -143,64 +156,26 @@
             <button class="transport-btn" id="btn-next-media" title="Next media in playlist">▶||</button>
           </div>
           <div class="pb-zone pb-zone-right">
-            <button id="btn-ghost" title="Ghosting / onion-skin: show drawovers from nearby frames">Ghost</button>
-            <button id="btn-ghost-opts" title="Ghosting settings">▾</button>
-            <button id="btn-guides" title="Composition guides: overlay framing/grid lines for composition">Guides</button>
-            <button id="btn-guides-opts" title="Composition guide settings">▾</button>
-            <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)" style="width:auto;padding:4px 9px;font-size:11px;height:26px">Arc Tracer</button>
-            <button class="tool-btn active" id="btn-arc-toggle" title="Show / hide arc points" style="width:28px;height:26px">&#128065;</button>
+            <button id="btn-prev-annotation" title="Previous Drawover (↑)">◀ Drawover</button>
+            <button id="btn-next-annotation" title="Next Drawover (↓)">Drawover ▶</button>
             <div class="pb-sep"></div>
-            <select id="speed-select" title="Playback speed">
-              <option value="0.1">0.1×</option>
-              <option value="0.25">0.25×</option>
-              <option value="0.5">0.5×</option>
-              <option value="1" selected>1×</option>
-              <option value="1.5">1.5×</option>
-              <option value="2">2×</option>
-            </select>
+            <button id="btn-set-in" title="Set In Point (I)">[ In</button>
+            <button id="btn-set-out" title="Set Out Point (O)">Out ]</button>
+            <button id="btn-clear-inout" title="Clear In/Out">✕ Range</button>
+            <button id="btn-loop" title="Loop In/Out">↺ Loop</button>
             <div class="pb-sep"></div>
             <button id="btn-mute" title="Mute">🔊</button>
             <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
-            <button id="btn-fullscreen" title="Fullscreen">⛶</button>
-            <button id="btn-shortcuts" title="Keyboard shortcuts">⌨</button>
-            <button id="btn-devtools" title="Developer Tools">Dev</button>
+            <button id="btn-fullscreen" title="Fullscreen">Full Screen</button>
           </div>
         </div>
 
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.6.2 &nbsp;[Last Updated: 07/15/2026 11:52AM PST]</span>
+          <span id="status-version">DrawOver v0.6.3 &nbsp;[Last Updated: 07/15/2026 12:24PM PST]</span>
         </div>
       </div>
-  </div>
-
-  <!-- Keyboard shortcuts panel -->
-  <div id="shortcuts-panel">
-    <h3>Keyboard Shortcuts</h3>
-    <table>
-      <tr class="sc-section"><td colspan="2">Playback</td></tr>
-      <tr><td>Space</td><td>Play / Pause</td></tr>
-      <tr><td>← / →</td><td>Frame back / forward</td></tr>
-      <tr><td>↑ / ↓</td><td>Prev / next drawover (wraps to start / end)</td></tr>
-      <tr class="sc-section"><td colspan="2">Drawing</td></tr>
-      <tr><td>B</td><td>Pen tool</td></tr>
-      <tr><td>E</td><td>Eraser tool</td></tr>
-      <tr><td>L</td><td>Laser tool</td></tr>
-      <tr><td>T</td><td>Arc Tracer</td></tr>
-      <tr><td>Ctrl+Z</td><td>Undo</td></tr>
-      <tr><td>Ctrl+⇧+Z</td><td>Redo</td></tr>
-      <tr class="sc-section"><td colspan="2">Range &amp; View</td></tr>
-      <tr><td>A</td><td>Reframe (reset pan &amp; zoom)</td></tr>
-      <tr><td>I</td><td>Set In point</td></tr>
-      <tr><td>O</td><td>Set Out point</td></tr>
-      <tr class="sc-section"><td colspan="2">Pan &amp; Zoom (mouse or toolbar buttons)</td></tr>
-      <tr><td>✥ Pan hold+drag</td><td>Pan viewport</td></tr>
-      <tr><td>⌕ Zoom hold+drag</td><td>Zoom viewport</td></tr>
-      <tr><td>Right-drag</td><td>Zoom at click point</td></tr>
-      <tr><td>MMB drag</td><td>Pan</td></tr>
-      <tr><td>Scroll</td><td>Zoom at cursor</td></tr>
-    </table>
   </div>
 
   <!-- Developer Tools panel -->
@@ -365,7 +340,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.2</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.3</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2550,11 +2525,11 @@
       function openArcPanel() {
         arcPanel.style.display = 'block';
         const r = btnArcTracer.getBoundingClientRect();
-        const pw = arcPanel.offsetWidth;
+        const pw = arcPanel.offsetWidth, ph = arcPanel.offsetHeight;
         let left = r.left;
         if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
         arcPanel.style.left = Math.max(8, left) + 'px';
-        arcPanel.style.top = (r.bottom + 8) + 'px';
+        arcPanel.style.top = Math.max(8, r.top - ph - 8) + 'px';
       }
       function closeArcPanel() { arcPanel.style.display = 'none'; }
 
@@ -4116,7 +4091,7 @@
         setTimeout(resizeCanvases, 100);
         // Panels use position:fixed; they must be descendants of the fullscreen
         // element to appear in fullscreen. Move them in/out of #content as needed.
-        [shortcutsPanel, devtoolsPanel, arcPanel, ghostPanel, guidesPanel].forEach(p => {
+        [devtoolsPanel, arcPanel, ghostPanel, guidesPanel].forEach(p => {
           if (fsEl) fsEl.appendChild(p);
           else document.body.appendChild(p);
         });
@@ -4299,20 +4274,6 @@
       sidebarResizer.addEventListener('pointerup', () => {
         sidebarResizer.classList.remove('dragging');
         resizeCanvases();
-      });
-
-      // ===== SHORTCUTS PANEL =====
-      const btnShortcuts = document.getElementById('btn-shortcuts');
-      const shortcutsPanel = document.getElementById('shortcuts-panel');
-      btnShortcuts.addEventListener('click', () => {
-        const open = shortcutsPanel.classList.toggle('open');
-        btnShortcuts.classList.toggle('active', open);
-      });
-      document.addEventListener('click', (e) => {
-        if (!shortcutsPanel.contains(e.target) && e.target !== btnShortcuts) {
-          shortcutsPanel.classList.remove('open');
-          btnShortcuts.classList.remove('active');
-        }
       });
 
       // ===== DEVELOPER TOOLS PANEL =====
