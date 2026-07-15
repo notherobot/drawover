@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.6.5</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.6.6</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -173,7 +173,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.6.5 &nbsp;[Last Updated: 07/15/2026 1:17PM PST]</span>
+          <span id="status-version">DrawOver v0.6.6 &nbsp;[Last Updated: 07/15/2026 1:32PM PST]</span>
         </div>
       </div>
   </div>
@@ -340,7 +340,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.5</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.6</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -487,8 +487,7 @@
       btnLoop.classList.add('active');
       let laserHoldMs = 1000;
 
-      let laserStrokes = [];
-      let lastLaserInputTime = 0;
+      let laserStrokes = []; // each stroke tracks its own lastActivity so strokes fade independently
 
       // ===== PAN/ZOOM STATE =====
       let panX = 0, panY = 0, vpZoom = 1;
@@ -518,9 +517,6 @@
       let isDrawingB = false, currentStrokeB = null, isErasingB = false;
       let _annoSaveTimerB = null;
 
-      let laserFadeOpacity = 1;
-      let laserFading = false;
-      let laserFadeStart = 0;
       const LASER_FADE_DURATION = 500;
 
       let isDrawing = false;
@@ -2951,14 +2947,28 @@
         ctx.restore();
       }
 
+      // Each stroke fades on its own timeline: full opacity until laserHoldMs
+      // after its own last point was drawn, then linearly out over
+      // LASER_FADE_DURATION -- independent of whatever other strokes are doing.
+      function laserStrokeAlpha(stroke, now) {
+        const age = now - stroke.lastActivity - laserHoldMs;
+        if (age <= 0) return 1;
+        return Math.max(0, 1 - age / LASER_FADE_DURATION);
+      }
+
       function redrawLaserCanvas() {
         laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
         if (!laserStrokes.length) return;
         const w = laserCanvas.width, h = laserCanvas.height;
         if (!w || !h) return;
+        const now = Date.now();
         laserCtx.save();
-        laserCtx.globalAlpha = laserFadeOpacity;
-        laserStrokes.forEach(s => drawLaserStroke(laserCtx, s, w, h));
+        laserStrokes.forEach(s => {
+          const alpha = laserStrokeAlpha(s, now);
+          if (alpha <= 0) return;
+          laserCtx.globalAlpha = alpha;
+          drawLaserStroke(laserCtx, s, w, h);
+        });
         laserCtx.restore();
       }
 
@@ -3189,9 +3199,14 @@
         if (!laserStrokes.length) return;
         const w = laserCanvasB.width, h = laserCanvasB.height;
         if (!w || !h) return;
+        const now = Date.now();
         laserCtxB.save();
-        laserCtxB.globalAlpha = laserFadeOpacity;
-        laserStrokes.forEach(s => drawLaserStroke(laserCtxB, s, w, h));
+        laserStrokes.forEach(s => {
+          const alpha = laserStrokeAlpha(s, now);
+          if (alpha <= 0) return;
+          laserCtxB.globalAlpha = alpha;
+          drawLaserStroke(laserCtxB, s, w, h);
+        });
         laserCtxB.restore();
       }
 
@@ -3393,9 +3408,7 @@
             penCtxB.restore();
           } else if (currentTool === 'laser') {
             isDrawingB = true;
-            laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }] });
-            lastLaserInputTime = Date.now();
-            if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+            laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }], lastActivity: Date.now() });
             kickLaserLoop();
           } else if (currentTool === 'eraser') {
             isErasingB = true; eraseAtB(pos);
@@ -3434,8 +3447,7 @@
             for (const ce of (eventsLB.length ? eventsLB : [e])) {
               laserB.points.push({ ...getCanvasPosB(ce) });
             }
-            lastLaserInputTime = Date.now();
-            if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+            laserB.lastActivity = Date.now();
           } else if (currentTool === 'eraser' && isErasingB) {
             eraseAtB(pos);
           }
@@ -3588,9 +3600,7 @@
           penCtx.restore();
         } else if (currentTool === 'laser') {
           isDrawing = true;
-          laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }] });
-          lastLaserInputTime = Date.now();
-          if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+          laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }], lastActivity: Date.now() });
           kickLaserLoop();
           redrawLaserCanvas();
         } else if (currentTool === 'eraser') {
@@ -3663,12 +3673,12 @@
           drawStrokeOnCanvas(penCtx, currentStroke, penCanvas.width, penCanvas.height);
           penCtx.restore();
         } else if (currentTool === 'laser' && isDrawing && laserStrokes.length) {
+          const laserStroke = laserStrokes[laserStrokes.length - 1];
           const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
           for (const ce of (events.length ? events : [e])) {
-            laserStrokes[laserStrokes.length - 1].points.push({ ...getCanvasPos(ce) });
+            laserStroke.points.push({ ...getCanvasPos(ce) });
           }
-          lastLaserInputTime = Date.now();
-          if (laserFading) { laserFading = false; laserFadeOpacity = 1; }
+          laserStroke.lastActivity = Date.now();
           redrawLaserCanvas();
         } else if (currentTool === 'eraser' && isErasing) {
           eraseAt(pos);
@@ -4171,21 +4181,17 @@
         laserRafId = null;
         try {
           const now = Date.now();
-          if (laserFading) {
-            laserFadeOpacity = Math.max(0, 1 - (now - laserFadeStart) / LASER_FADE_DURATION);
-            if (laserFadeOpacity <= 0) { laserStrokes = []; laserFading = false; laserFadeOpacity = 1; }
-          } else if (laserStrokes.length && (now - lastLaserInputTime) >= laserHoldMs) {
-            laserFading = true; laserFadeStart = now;
-          }
+          // Drop strokes that have fully faded out (each on its own timeline).
+          laserStrokes = laserStrokes.filter(s => laserStrokeAlpha(s, now) > 0);
           redrawLaserCanvas();
           if (compareMode) redrawLaserCanvasB();
         } catch (err) {
           console.error('laserLoop error:', err);
-          laserStrokes = []; laserFading = false; laserFadeOpacity = 1;
+          laserStrokes = [];
         }
         // Keep animating only while there's something to show, and only while the
         // tab is visible.
-        if (!document.hidden && (laserStrokes.length || laserFading)) {
+        if (!document.hidden && laserStrokes.length) {
           laserRafId = requestAnimationFrame(laserLoop);
         }
       }
@@ -4207,7 +4213,7 @@
           penCanvasB.style.cursor = 'default';
           _lastCursorKey = null;
         } else {
-          if (laserStrokes.length || laserFading) kickLaserLoop();
+          if (laserStrokes.length) kickLaserLoop();
           updateToolCursor();
         }
       });
