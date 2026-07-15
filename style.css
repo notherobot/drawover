@@ -72,16 +72,30 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #main-body { display: flex; flex: 1; overflow: hidden; }
 
 /* ===== SIDEBAR TOGGLE BUTTON ===== */
+/* #topbar-left and #tool-hint share flex:1 1 0 (equal, forced width) so
+   #app-title — sized to its own content in between — sits on the bar's true
+   midpoint regardless of how long the toggle label or the hover-hint text
+   currently is (same trick used for the playback row's transport zone). The
+   button itself stays content-sized inside its flex:1 wrapper — growing the
+   button's own box instead just stretched its visible border across half
+   the bar. */
+#topbar-left { flex: 1 1 0; display: flex; justify-content: flex-start; min-width: 0; }
 #btn-sidebar-toggle {
   background: none; border: 1px solid #2e2e2e; color: #aaa; font-size: 11px;
-  padding: 3px 10px; flex-shrink: 0; border-radius: 4px; white-space: nowrap; cursor: pointer;
+  padding: 3px 10px; border-radius: 4px; white-space: nowrap; cursor: pointer; flex-shrink: 0;
 }
 #btn-sidebar-toggle:hover { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
 #btn-sidebar-toggle.active { color: var(--accent-hi); border-color: #2a4a6e; }
 #app-title {
-  flex: 1; text-align: center; font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
-  color: var(--accent-hi);
+  flex: 0 0 auto; text-align: center; font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
+  color: var(--accent-hi); white-space: nowrap;
   text-shadow: 0 0 10px var(--accent-glow), 0 1px 0 rgba(0,0,0,0.6);
+}
+/* Maya-style tool hint: hovering any control updates this instead of (well,
+   in addition to) the browser's native title tooltip near the cursor. */
+#tool-hint {
+  flex: 1 1 0; text-align: right; padding-left: 16px;
+  font-size: 11px; color: #9db8cc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* Reframe + Compare live in tool-row */
 #btn-reset-view, #btn-compare, #btn-compare-frame {
@@ -581,13 +595,20 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 /* Play / pause icons are drawn as CSS shapes (not text glyphs, which render
    small and inconsistently) so they reliably fill the button. State is driven
    by the .is-playing class. */
+/* Round buttons need a distinct treatment from the rectangular bevel: a
+   linear top-to-bottom gradient clipped to a circle reads as a flat crescent
+   rather than a lit sphere. Instead, layer a soft specular highlight ellipse
+   (near the top, like a light reflecting off glass) over a radial base
+   gradient — the classic "candy button" gumdrop look. */
 #btn-play {
   width: 50px; height: 50px; border-radius: 50%; padding: 0;
   font-size: 0; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  background: radial-gradient(circle at 50% 32%, #565656 0%, #2e2e2e 60%, #191919 100%);
-  border: 1px solid #050505; border-top-color: #5a5a5a;
-  box-shadow: inset 0 8px 10px -6px rgba(255,255,255,0.28), inset 0 -6px 10px -4px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.5);
+  background:
+    radial-gradient(ellipse 62% 28% at 50% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%),
+    radial-gradient(circle at 50% 42%, #6e6e6e 0%, #3a3a3a 55%, #161616 100%);
+  border: 1px solid #050505; border-top-color: #6a6a6a;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), inset 0 -8px 12px -6px rgba(0,0,0,0.7), 0 2px 6px rgba(0,0,0,0.5);
 }
 /* Paused → show a large play triangle. */
 #btn-play::before {
@@ -606,13 +627,23 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   border: none; border-radius: 2px; background: #052540; margin: 0;
   filter: none; box-shadow: 0 1px 1px rgba(255,255,255,0.3);
 }
-#btn-play:hover { background: radial-gradient(circle at 50% 32%, #626262 0%, #363636 60%, #1e1e1e 100%); }
-#btn-play.is-playing {
-  background: radial-gradient(circle at 50% 32%, var(--accent-hi) 0%, var(--accent) 55%, var(--accent-lo) 100%);
-  border-color: var(--accent-lo); border-top-color: var(--accent-hi);
-  box-shadow: inset 0 8px 10px -6px rgba(255,255,255,0.5), inset 0 -6px 10px -4px rgba(0,20,40,0.35), 0 0 14px var(--accent-glow);
+#btn-play:hover {
+  background:
+    radial-gradient(ellipse 62% 28% at 50% 20%, rgba(255,255,255,0.68) 0%, rgba(255,255,255,0) 100%),
+    radial-gradient(circle at 50% 42%, #7a7a7a 0%, #444 55%, #1c1c1c 100%);
 }
-#btn-play.is-playing:hover { background: radial-gradient(circle at 50% 32%, #93d2ff 0%, #4facff 55%, var(--accent-lo) 100%); }
+#btn-play.is-playing {
+  background:
+    radial-gradient(ellipse 62% 28% at 50% 20%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 100%),
+    radial-gradient(circle at 50% 42%, var(--accent-hi) 0%, var(--accent) 55%, var(--accent-lo) 100%);
+  border-color: var(--accent-lo); border-top-color: var(--accent-hi);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2), inset 0 -8px 12px -6px rgba(0,20,40,0.5), 0 0 14px var(--accent-glow);
+}
+#btn-play.is-playing:hover {
+  background:
+    radial-gradient(ellipse 62% 28% at 50% 20%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 100%),
+    radial-gradient(circle at 50% 42%, #b3e0ff 0%, #4facff 55%, var(--accent-lo) 100%);
+}
 #speed-select {
   background: #2a2a2a; color: #d0d0d0; border: 1px solid #3a3a3a;
   border-radius: 4px; padding: 3px 5px; font-size: 11px; cursor: pointer;
@@ -839,9 +870,18 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 }
 #trim-play-btn {
   width: 36px; height: 36px; border-radius: 50%; font-size: 16px;
-  background: #333; border-color: #4a4a4a; flex-shrink: 0; padding: 0;
+  background:
+    radial-gradient(ellipse 62% 28% at 50% 20%, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%),
+    radial-gradient(circle at 50% 42%, #6e6e6e 0%, #3a3a3a 55%, #161616 100%);
+  border: 1px solid #050505; border-top-color: #6a6a6a;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), inset 0 -6px 8px -4px rgba(0,0,0,0.7);
+  flex-shrink: 0; padding: 0;
 }
-#trim-play-btn:hover { background: #444; }
+#trim-play-btn:hover {
+  background:
+    radial-gradient(ellipse 62% 28% at 50% 20%, rgba(255,255,255,0.68) 0%, rgba(255,255,255,0) 100%),
+    radial-gradient(circle at 50% 42%, #7a7a7a 0%, #444 55%, #1c1c1c 100%);
+}
 .trim-io-group { display: flex; align-items: center; gap: 6px; }
 .trim-io-group button { font-size: 11px; padding: 4px 8px; }
 .trim-io-group span { font-size: 11px; color: #888; font-variant-numeric: tabular-nums; white-space: nowrap; }
