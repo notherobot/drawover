@@ -11,16 +11,17 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.6.6</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.6.7</span></div>
       <div id="tool-hint"></div>
     </div>
 
     <div id="content">
         <div id="tool-row">
+          <div id="tool-row-tools">
           <div class="tool-group" id="view-group">
-            <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reframe</button>
-            <button id="btn-compare" title="Compare two videos side-by-side">Compare</button>
-            <button id="btn-compare-frame" title="Freeze this frame of A and compare it against a frame you pick on B">Compare Frame</button>
+            <div class="split-btn">
+              <button id="btn-compare" title="Compare two videos (click ▾ for options)">Compare</button><button id="btn-compare-opts" title="Compare settings">▾</button>
+            </div>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group">
@@ -44,13 +45,14 @@
             <button class="d-swatch" data-color="#00aaff" style="background:#00aaff" title="Blue"></button>
             <button class="d-swatch" data-color="#ffffff" style="background:#ffffff" title="White"></button>
             <button class="d-swatch" id="color-custom-btn" style="background:#ff0000" title="Custom color — click to open picker"></button>
-            <button class="tool-btn" data-tool="eyedrop" title="Eyedropper — sample color from video"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20.71 5.63l-2.34-2.34a1 1 0 00-1.41 0l-3.12 3.12-1.41-1.42-1.42 1.42 1.41 1.41-6.6 6.6A2 2 0 005 16v3h3a2 2 0 001.42-.59l6.6-6.6 1.41 1.42 1.42-1.42-1.42-1.41 3.12-3.12a1 1 0 000-1.65z"/></svg></button>
+            <button class="tool-btn" data-tool="eyedrop" title="Eyedropper — sample color from video"><svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor"><path d="M20.71 5.63l-2.34-2.34a1 1 0 00-1.41 0l-3.12 3.12-1.41-1.42-1.42 1.42 1.41 1.41-6.6 6.6A2 2 0 005 16v3h3a2 2 0 001.42-.59l6.6-6.6 1.41 1.42 1.42-1.42-1.42-1.41 3.12-3.12a1 1 0 000-1.65z"/></svg></button>
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group sliders">
             <label title="Brush/eraser stroke width">Size <input type="range" id="brush-size" min="1" max="40" step="1" value="4"><span id="brush-size-val">4</span></label>
             <label title="Brush stroke opacity">Opacity <input type="range" id="brush-opacity" min="1" max="100" value="100"><span id="brush-opacity-val">100</span>%</label>
             <label title="How long a laser stroke stays on screen before fading">Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="1"><span id="laser-hold-val">1</span>s</label>
+          </div>
           </div>
           <button id="btn-devtools" title="Developer Tools">Dev</button>
         </div>
@@ -122,6 +124,8 @@
 
         <div id="playback-row">
           <div class="pb-zone pb-zone-left">
+            <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reset View</button>
+            <div class="pb-sep"></div>
             <button id="btn-export-frame" title="Export current frame with drawovers as PNG">⤓ PNG</button>
             <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
             <div class="pb-sep"></div>
@@ -173,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.6.6 &nbsp;[Last Updated: 07/15/2026 1:32PM PST]</span>
+          <span id="status-version">DrawOver v0.6.7 &nbsp;[Last Updated: 07/16/2026 1:07PM PST]</span>
         </div>
       </div>
   </div>
@@ -213,6 +217,20 @@
       <div id="cp-preview"></div>
       <input type="text" id="cp-hex" maxlength="7" spellcheck="false" placeholder="#rrggbb">
     </div>
+  </div>
+
+  <!-- Compare settings popover -->
+  <div id="compare-panel">
+    <div class="compare-title">Compare</div>
+    <div class="compare-sub">View two videos at once</div>
+    <label class="compare-row">
+      <input type="radio" name="compare-mode" id="compare-mode-side" checked> Side by Side
+    </label>
+    <label class="compare-row">
+      <input type="radio" name="compare-mode" id="compare-mode-frame"> Frame Compare (freeze A)
+    </label>
+    <button id="btn-compare-flip" title="Swap which clip is on the left (A) and which is on the right (B)">⇄ Flip A / B</button>
+    <button id="compare-done">Done</button>
   </div>
 
   <!-- Trim modal -->
@@ -340,7 +358,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.6</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.7</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -448,6 +466,12 @@
       const guidesColorInput = document.getElementById('guides-color');
       const guidesCanvas = document.getElementById('guides-canvas');
       const guidesCtx = guidesCanvas.getContext('2d');
+      const btnCompare = document.getElementById('btn-compare');
+      const btnCompareOpts = document.getElementById('btn-compare-opts');
+      const comparePanel = document.getElementById('compare-panel');
+      const compareModeSideRadio = document.getElementById('compare-mode-side');
+      const compareModeFrameRadio = document.getElementById('compare-mode-frame');
+      const btnCompareFlip = document.getElementById('btn-compare-flip');
       const btnClearFrame = document.getElementById('btn-clear-frame');
       const btnExportFrame = document.getElementById('btn-export-frame');
       const btnFullscreen = document.getElementById('btn-fullscreen');
@@ -2719,6 +2743,15 @@
       }
 
       videoContainer.addEventListener('contextmenu', e => e.preventDefault());
+      // preventDefault() on pointerdown doesn't reliably stop Chrome/Firefox's
+      // native middle-click autoscroll (it's wired to the raw mousedown/auxclick,
+      // not the pointer event) -- left unblocked, autoscroll silently steals the
+      // button state mid-drag and the safety-net pointermove listener above reads
+      // e.buttons as 0, so our own MMB pan looks like it "disengages" partway
+      // through. Blocking default here at the mouse-event level stops it at the
+      // source instead of trying to detect it after the fact.
+      videoContainer.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+      videoContainer.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 
       videoContainer.addEventListener('wheel', (e) => {
         e.preventDefault();
@@ -3466,6 +3499,8 @@
         });
 
         videoContainerB.addEventListener('contextmenu', e => e.preventDefault());
+        videoContainerB.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+        videoContainerB.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
         videoContainerB.addEventListener('wheel', (e) => {
           e.preventDefault();
           const rect = videoContainerB.getBoundingClientRect();
@@ -4102,7 +4137,7 @@
         setTimeout(resizeCanvases, 100);
         // Panels use position:fixed; they must be descendants of the fullscreen
         // element to appear in fullscreen. Move them in/out of #content as needed.
-        [devtoolsPanel, arcPanel, ghostPanel, guidesPanel].forEach(p => {
+        [devtoolsPanel, arcPanel, ghostPanel, guidesPanel, comparePanel].forEach(p => {
           if (fsEl) fsEl.appendChild(p);
           else document.body.appendChild(p);
         });
@@ -4115,11 +4150,21 @@
 
 
       // ===== COMPARE MODE =====
+      // 'side' = side-by-side (both panels scrub together), 'frame' = freeze A
+      // on its current frame and let the timeline drive only B. Remembered
+      // across toggles so re-opening Compare (or switching modes from the
+      // popover while already comparing) keeps whichever one you last picked.
+      let compareUIMode = 'side';
+
+      function updateCompareButtonUI() {
+        btnCompare.classList.toggle('active', compareMode);
+        btnCompare.textContent = (compareMode && lockCompare) ? 'Frame Compare' : 'Compare';
+        btnCompareFlip.disabled = !(compareMode && compareIndex >= 0);
+      }
+
       function exitCompareMode() {
         compareMode = false;
         lockCompare = false;
-        document.getElementById('btn-compare').classList.remove('active');
-        document.getElementById('btn-compare-frame').classList.remove('active');
         panelRight.style.display = 'none';
         document.getElementById('content').classList.remove('compare-mode');
         panelLeft.classList.remove('active-compare-panel');
@@ -4132,43 +4177,101 @@
         // Timeline reverts to panel A (still on its — now unlocked — frame).
         updateScrubBar(); updateScrubTimes(); updateScrubTicks();
         renderPlaylist();
+        updateCompareButtonUI();
       }
 
-      document.getElementById('btn-compare').addEventListener('click', () => {
-        if (compareMode) { exitCompareMode(); return; }
+      // Side-by-side: both panels scrub together.
+      function enterSideCompare() {
         compareMode = true;
         lockCompare = false;
-        document.getElementById('btn-compare').classList.add('active');
         panelRight.style.display = '';
         document.getElementById('content').classList.add('compare-mode');
         setActivePanel(true);
         updatePanelLabels();
-        // Start panel B on the clip you're currently on; pick a different one from
-        // the sidebar to compare against.
-        if (activeIndex >= 0) loadVideoB(activeIndex); else { resizeCanvases(); renderPlaylist(); }
-      });
+        // Prefer whatever clip was already loaded in B (e.g. switching modes
+        // mid-session); otherwise default to the clip you're currently on.
+        const target = compareIndex >= 0 ? compareIndex : activeIndex;
+        if (target >= 0) loadVideoB(target); else { resizeCanvases(); renderPlaylist(); }
+        updateCompareButtonUI();
+      }
 
       // Frame-compare: freeze A on its current frame; the timeline drives B only.
-      document.getElementById('btn-compare-frame').addEventListener('click', () => {
-        if (compareMode) { exitCompareMode(); return; }
+      function enterFrameCompare() {
         if (activeIndex < 0) return;
         compareMode = true;
         lockCompare = true;
         lockedFrameA = player.currentFrame;
-        document.getElementById('btn-compare-frame').classList.add('active');
         panelRight.style.display = '';
         document.getElementById('content').classList.add('compare-mode');
         // Default the drawable panel to B (so sidebar picks load B and scrubbing
         // draws there); click panel A to draw on the frozen frame instead.
         setActivePanel(false);
         updatePanelLabels();
-        // Start panel B on the clip you're currently on; pick a different one from
-        // the sidebar to compare its frame against A's locked frame.
-        loadVideoB(activeIndex);
+        const target = compareIndex >= 0 ? compareIndex : activeIndex;
+        loadVideoB(target);
         updateScrubBar(); updateScrubTimes(); updateScrubTicks();
+        updateCompareButtonUI();
+      }
+
+      btnCompare.addEventListener('click', () => {
+        if (compareMode) { exitCompareMode(); return; }
+        if (compareUIMode === 'frame') enterFrameCompare(); else enterSideCompare();
       });
 
       document.getElementById('btn-compare-close').addEventListener('click', () => exitCompareMode());
+
+      // Swap which clip occupies panel A vs. panel B (and each panel's own
+      // pan/zoom), instead of only ever being able to put a new pick in B.
+      async function flipComparePanels() {
+        if (!compareMode || activeIndex < 0 || compareIndex < 0) return;
+        const oldA = activeIndex, oldB = compareIndex;
+        const swapPanX = panX, swapPanY = panY, swapZoom = vpZoom;
+        panX = panXB; panY = panYB; vpZoom = vpZoomB;
+        panXB = swapPanX; panYB = swapPanY; vpZoomB = swapZoom;
+        await loadVideo(oldB);
+        await loadVideoB(oldA);
+        applyViewport(); applyViewportB();
+        if (lockCompare) lockedFrameA = player.currentFrame;
+        updatePanelLabels();
+        updateScrubBar(); updateScrubTimes(); updateScrubTicks();
+        renderPlaylist();
+      }
+      btnCompareFlip.addEventListener('click', flipComparePanels);
+
+      function openComparePanel() {
+        comparePanel.style.display = 'block';
+        const r = btnCompare.getBoundingClientRect();
+        const pw = comparePanel.offsetWidth, ph = comparePanel.offsetHeight;
+        let left = r.left;
+        if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+        comparePanel.style.left = Math.max(8, left) + 'px';
+        // Unlike Ghost/Guides/Arc-Tracer (all in the bottom playback row, with
+        // room to open upward), Compare's button lives in the TOP toolbar --
+        // opening above it would push the popover off-screen and clamp it back
+        // down on top of the button itself. Open below instead.
+        comparePanel.style.top = (r.bottom + 8) + 'px';
+        btnCompareFlip.disabled = !(compareMode && compareIndex >= 0);
+      }
+      function closeComparePanel() { comparePanel.style.display = 'none'; }
+      btnCompareOpts.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (comparePanel.style.display === 'block') { closeComparePanel(); return; }
+        openComparePanel();
+      });
+      document.getElementById('compare-done').addEventListener('click', closeComparePanel);
+      document.addEventListener('mousedown', (e) => {
+        if (comparePanel.style.display !== 'block') return;
+        if (comparePanel.contains(e.target) || e.target === btnCompare || e.target === btnCompareOpts) return;
+        closeComparePanel();
+      });
+      function setCompareUIMode(mode) {
+        compareUIMode = mode;
+        // If we're already comparing, switching the radio takes effect right away
+        // instead of waiting for the next time Compare is turned on.
+        if (compareMode) { if (mode === 'frame') enterFrameCompare(); else enterSideCompare(); }
+      }
+      compareModeSideRadio.addEventListener('change', () => { if (compareModeSideRadio.checked) setCompareUIMode('side'); });
+      compareModeFrameRadio.addEventListener('change', () => { if (compareModeFrameRadio.checked) setCompareUIMode('frame'); });
 
       // ===== LASER FADE =====
       // The loop only runs while there are laser strokes to draw/fade, and never
