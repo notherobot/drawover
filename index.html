@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.6.8</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.6.9</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.6.8 &nbsp;[Last Updated: 07/16/2026 1:33PM PST]</span>
+          <span id="status-version">DrawOver v0.6.9 &nbsp;[Last Updated: 07/16/2026 1:48PM PST]</span>
         </div>
       </div>
   </div>
@@ -358,7 +358,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.8</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.9</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2275,6 +2275,48 @@
       document.addEventListener('touchmove', (e) => { if (isScrubbing) scrubFromEvent(e); }, { passive: true });
       document.addEventListener('touchend', () => { if (isScrubbing) player.endScrub(); isScrubbing = false; });
 
+      // vpDrag/vpDragB pan & zoom math lives here at the window level rather
+      // than on the individual canvases (the canvas-scoped pointermove
+      // handlers below just early-return while a drag is active). Pointer
+      // capture from setPointerCapture() has been observed to become
+      // unreliable under some pen/tablet driver stacks — notably Windows Ink
+      // — where the physical button stays held and movement keeps happening,
+      // but the browser stops routing pointermove to the captured element
+      // partway through, so a canvas-scoped listener alone silently stops
+      // updating and the pan/zoom looks like it "disengages" mid-drag even
+      // though nothing ever told it to stop. Listening at the window level
+      // means we keep receiving pointermove for as long as the pointer moves
+      // anywhere in the document, regardless of which element it's nominally
+      // targeting or whether capture held.
+      function applyVpDrag(e) {
+        if (vpDrag) {
+          if (vpDrag.type === 'pan') {
+            panX = vpDrag.startPanX + (e.clientX - vpDrag.startX);
+            panY = vpDrag.startPanY + (e.clientY - vpDrag.startY);
+          } else {
+            const dy = e.clientY - vpDrag.startY;
+            const newZoom = Math.max(0.1, Math.min(20, vpDrag.startZoom * Math.pow(1.005, dy)));
+            panX = vpDrag.cx - (vpDrag.cx - vpDrag.startPanX) * (newZoom / vpDrag.startZoom);
+            panY = vpDrag.cy - (vpDrag.cy - vpDrag.startPanY) * (newZoom / vpDrag.startZoom);
+            vpZoom = newZoom;
+          }
+          applyViewport();
+        }
+        if (vpDragB) {
+          if (vpDragB.type === 'pan') {
+            panXB = vpDragB.startPanX + (e.clientX - vpDragB.startX);
+            panYB = vpDragB.startPanY + (e.clientY - vpDragB.startY);
+          } else {
+            const dy = e.clientY - vpDragB.startY;
+            const newZoom = Math.max(0.1, Math.min(20, vpDragB.startZoom * Math.pow(1.005, dy)));
+            panXB = vpDragB.cx - (vpDragB.cx - vpDragB.startPanX) * (newZoom / vpDragB.startZoom);
+            panYB = vpDragB.cy - (vpDragB.cy - vpDragB.startPanY) * (newZoom / vpDragB.startZoom);
+            vpZoomB = newZoom;
+          }
+          applyViewportB();
+        }
+      }
+
       // Safety net: a mouseup/pointerup can be missed entirely — e.g. the button
       // is released outside the browser window, or a native context menu swallows
       // it — leaving a scrub/draw/erase/pan/zoom flag stuck "on" so the tool keeps
@@ -2283,14 +2325,33 @@
       // buttons down while a flag is still set, the corresponding stop was missed —
       // force everything back to idle rather than leaving it stuck until the next
       // click.
+      //
+      // missedReleaseStreak requires that "no button held" reading to repeat
+      // across a couple of consecutive events before acting on it. Pen/tablet
+      // input (again, Windows Ink is the known offender) has been observed to
+      // report e.buttons as 0 on an occasional single frame while the physical
+      // button is still held -- a driver-level blip, not a real release. Acting
+      // on the very first zero reading was cancelling in-progress pans/draws on
+      // those blips; a real release keeps reporting 0 on every subsequent event,
+      // so requiring a short streak still catches genuinely-missed releases
+      // promptly while ignoring one-frame glitches.
+      let missedReleaseStreak = 0;
+      // Also reset on every genuine pointerdown -- otherwise idle hover
+      // movement (which reports buttons=0 just like a real release) can leave
+      // the streak sitting at 1 from before a drag even starts, so a single
+      // glitch during the drag itself would immediately hit the threshold.
+      window.addEventListener('pointerdown', () => { missedReleaseStreak = 0; });
       window.addEventListener('pointermove', (e) => {
+        applyVpDrag(e);
         // vpDrag/vpDragB can be started by the left button (pan/zoom tools),
         // the middle button (universal pan), or the right button (universal
         // zoom) — checking only bit 1 (left) treated every right- or
         // middle-button drag as "no button held" and cancelled pan/zoom on
         // literally every pointermove during the drag. Any button held at all
         // means nothing is stuck.
-        if (e.buttons !== 0) return;
+        if (e.buttons !== 0) { missedReleaseStreak = 0; return; }
+        missedReleaseStreak++;
+        if (missedReleaseStreak < 2) return;
         if (isDrawing || isErasing || arcDragFrame !== null) finishStroke();
         if (isDrawingB || isErasingB || currentStrokeB) finishStrokeB();
         if (isScrubbing) { player.endScrub(); isScrubbing = false; }
@@ -3454,19 +3515,9 @@
         });
 
         penCanvasB.addEventListener('pointermove', (e) => {
-          if (vpDragB) {
-            if (vpDragB.type === 'pan') {
-              panXB = vpDragB.startPanX + (e.clientX - vpDragB.startX);
-              panYB = vpDragB.startPanY + (e.clientY - vpDragB.startY);
-            } else {
-              const dy = e.clientY - vpDragB.startY;
-              const newZoom = Math.max(0.1, Math.min(20, vpDragB.startZoom * Math.pow(1.005, dy)));
-              panXB = vpDragB.cx - (vpDragB.cx - vpDragB.startPanX) * (newZoom / vpDragB.startZoom);
-              panYB = vpDragB.cy - (vpDragB.cy - vpDragB.startPanY) * (newZoom / vpDragB.startZoom);
-              vpZoomB = newZoom;
-            }
-            applyViewportB(); return;
-          }
+          // See the matching comment in penCanvas's pointermove -- vpDragB
+          // math runs at the window level now so it survives lost capture.
+          if (vpDragB) return;
           if (!drawingsVisible) return;
           const pos = getCanvasPosB(e);
           if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
@@ -3657,21 +3708,10 @@
       });
 
       penCanvas.addEventListener('pointermove', (e) => {
-        // Handle pan/zoom drag
-        if (vpDrag) {
-          if (vpDrag.type === 'pan') {
-            panX = vpDrag.startPanX + (e.clientX - vpDrag.startX);
-            panY = vpDrag.startPanY + (e.clientY - vpDrag.startY);
-          } else {
-            const dy = e.clientY - vpDrag.startY;
-            const newZoom = Math.max(0.1, Math.min(20, vpDrag.startZoom * Math.pow(1.005, dy)));
-            panX = vpDrag.cx - (vpDrag.cx - vpDrag.startPanX) * (newZoom / vpDrag.startZoom);
-            panY = vpDrag.cy - (vpDrag.cy - vpDrag.startPanY) * (newZoom / vpDrag.startZoom);
-            vpZoom = newZoom;
-          }
-          applyViewport();
-          return;
-        }
+        // Pan/zoom drag math runs at the window level (see applyVpDrag above)
+        // so it keeps working even if this element loses pointer capture
+        // mid-drag; just skip the rest of this handler while one is active.
+        if (vpDrag) return;
 
         if (!drawingsVisible) return;
         const pos = getCanvasPos(e);
