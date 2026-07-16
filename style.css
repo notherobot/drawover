@@ -279,8 +279,13 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   border-bottom: 1px solid #000; box-shadow: 0 1px 0 rgba(255,255,255,0.05), 0 2px 5px rgba(0,0,0,0.35);
   flex-shrink: 0; height: 42px; overflow-x: auto; position: relative; z-index: 1;
 }
-/* Dev sits pinned to the far right, next to the sliders group, via auto margin
-   rather than a 3-column grid — everything else keeps flowing from the left. */
+/* Dev sits pinned to the far right; #tool-row-tools is the only other child
+   and grows to fill the remaining space, centering its own contents within it
+   — so the rest of the toolbar reads as centered while Dev stays put on the
+   right. When there isn't enough room the wrapper refuses to shrink below its
+   content's natural width, so #tool-row's own overflow-x:auto still kicks in
+   and scrolls exactly as it did before this was split into two children. */
+#tool-row-tools { display: flex; align-items: center; gap: 0; flex: 1 1 auto; justify-content: center; }
 #tool-row #btn-devtools { margin-left: auto; flex-shrink: 0; }
 #tool-row::-webkit-scrollbar { height: 3px; }
 #tool-row::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
@@ -304,6 +309,9 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 }
 .d-swatch:hover { transform: scale(1.2); border-color: #fff !important; background: inherit; }
 .d-swatch.active { border-color: #fff; box-shadow: inset 0 6px 8px -4px rgba(255,255,255,0.55), inset 0 -4px 6px -2px rgba(0,0,0,0.35), 0 0 0 1px #aaa, 0 0 6px rgba(255,255,255,0.5); }
+/* Custom-color swatch is square (vs. the round preset dots) so it reads as
+   its own distinct control rather than another preset color. */
+#color-custom-btn { border-radius: var(--radius); }
 /* ===== CUSTOM COLOR PICKER ===== */
 #color-picker-panel {
   position: fixed; z-index: 9100; display: none; flex-direction: column; gap: 8px;
@@ -605,6 +613,31 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   border-radius: 5px; font-weight: 600; cursor: pointer;
 }
 #guides-done:hover { background: #2b8de0; }
+
+/* Compare settings popover */
+#compare-panel {
+  position: fixed; display: none; z-index: 9500;
+  background: linear-gradient(to bottom, #2a2a2a 0%, #1c1c1c 100%);
+  border: 1px solid #050505; border-top-color: #444; border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 30px rgba(0,0,0,0.7);
+  min-width: 210px; color: #ddd; font-size: 12px;
+}
+#compare-panel .compare-title { font-size: 13px; font-weight: 700; color: var(--accent-hi); text-shadow: 0 0 6px var(--accent-glow); }
+#compare-panel .compare-sub { font-size: 11px; color: #888; margin: 2px 0 12px; }
+#compare-panel .compare-row { display: flex; align-items: center; gap: 8px; color: #ccc; cursor: pointer; padding: 4px 0; }
+#compare-panel .compare-row input[type=radio] { accent-color: #3aa0ff; cursor: pointer; }
+#btn-compare-flip {
+  width: 100%; padding: 6px; margin: 8px 0 10px; background: #2a2a2a; color: #ddd;
+  border: 1px solid #3a3a3a; border-radius: 5px; font-weight: 600; cursor: pointer;
+}
+#btn-compare-flip:hover { background: #333; }
+#btn-compare-flip:disabled { opacity: 0.4; cursor: not-allowed; }
+#compare-done {
+  width: 100%; padding: 6px; background: #3aa0ff; color: #fff; border: none;
+  border-radius: 5px; font-weight: 600; cursor: pointer;
+}
+#compare-done:hover { background: #2b8de0; }
 
 .transport-btn {
   padding: 5px 11px; flex-shrink: 0;
