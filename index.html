@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.6.9</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.0</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.6.9 &nbsp;[Last Updated: 07/16/2026 1:48PM PST]</span>
+          <span id="status-version">DrawOver v0.7.0 &nbsp;[Last Updated: 07/17/2026 9:09AM PST]</span>
         </div>
       </div>
   </div>
@@ -351,6 +351,16 @@
       <span>Line color</span>
       <input type="color" id="guides-color" value="#ffcc00" title="Guide line color">
     </label>
+    <label class="guides-row">
+      <span>Opacity</span>
+      <input type="range" id="guides-opacity" min="10" max="100" step="5" value="90" title="Guide line opacity">
+      <span id="guides-opacity-val">90</span>%
+    </label>
+    <label class="guides-row">
+      <span>Line thickness</span>
+      <input type="range" id="guides-thickness" min="1" max="5" step="1" value="1" title="Guide line thickness in pixels">
+      <span id="guides-thickness-val">1</span>px
+    </label>
     <button id="guides-done">Done</button>
   </div>
 
@@ -358,7 +368,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.6.9</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.0</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -464,6 +474,10 @@
       const guidesTypeSelect = document.getElementById('guides-type');
       const guidesAspectSelect = document.getElementById('guides-aspect');
       const guidesColorInput = document.getElementById('guides-color');
+      const guidesOpacitySlider = document.getElementById('guides-opacity');
+      const guidesOpacityVal = document.getElementById('guides-opacity-val');
+      const guidesThicknessSlider = document.getElementById('guides-thickness');
+      const guidesThicknessVal = document.getElementById('guides-thickness-val');
       const guidesCanvas = document.getElementById('guides-canvas');
       const guidesCtx = guidesCanvas.getContext('2d');
       const btnCompare = document.getElementById('btn-compare');
@@ -507,6 +521,8 @@
       let guidesType = 'thirds';
       let guidesAspect = 'video'; // 'video' = match the footage's own displayed bounds
       let guidesColor = '#ffcc00';
+      let guidesOpacity = 0.9;
+      let guidesLineWidth = 1; // CSS pixels; scaled by DPR when actually drawn
       let loopEnabled = true;
       btnLoop.classList.add('active');
       let laserHoldMs = 1000;
@@ -3267,8 +3283,8 @@
         if (r.x1 - r.x0 < 2 || r.y1 - r.y0 < 2) return;
         guidesCtx.save();
         guidesCtx.strokeStyle = guidesColor;
-        guidesCtx.lineWidth = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-        guidesCtx.globalAlpha = 0.9;
+        guidesCtx.lineWidth = guidesLineWidth * Math.min(window.devicePixelRatio || 1, 2);
+        guidesCtx.globalAlpha = guidesOpacity;
         guidesCtx.lineCap = 'round';
         strokeRectOutline(guidesCtx, r);
         if (guidesType === 'thirds') drawThirds(guidesCtx, r);
@@ -4171,6 +4187,16 @@
       });
       guidesColorInput.addEventListener('input', () => {
         guidesColor = guidesColorInput.value;
+        if (guidesEnabled) redrawGuidesCanvas();
+      });
+      guidesOpacitySlider.addEventListener('input', () => {
+        guidesOpacity = parseInt(guidesOpacitySlider.value, 10) / 100;
+        guidesOpacityVal.textContent = guidesOpacitySlider.value;
+        if (guidesEnabled) redrawGuidesCanvas();
+      });
+      guidesThicknessSlider.addEventListener('input', () => {
+        guidesLineWidth = parseInt(guidesThicknessSlider.value, 10) || 1;
+        guidesThicknessVal.textContent = guidesLineWidth;
         if (guidesEnabled) redrawGuidesCanvas();
       });
       document.getElementById('guides-done').addEventListener('click', closeGuidesPanel);
