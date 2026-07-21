@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.1</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.2</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.1 &nbsp;[Last Updated: 07/21/2026 12:48PM PST]</span>
+          <span id="status-version">DrawOver v0.7.2 &nbsp;[Last Updated: 07/21/2026 12:57PM PST]</span>
         </div>
       </div>
   </div>
@@ -369,7 +369,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.1</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.2</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -3166,6 +3166,11 @@
           ctx.moveTo(r.x1 - s, r.y1); ctx.lineTo(r.x1, r.y0);
           ctx.moveTo(r.x0 + s, r.y0); ctx.lineTo(r.x0 + s, r.y1);
           if (r.x1 - s !== r.x0 + s) { ctx.moveTo(r.x1 - s, r.y0); ctx.lineTo(r.x1 - s, r.y1); }
+          // Full-height line through each square's diagonal crossing point
+          // (its center), running the full frame height like the square-off
+          // lines above -- not just within the square.
+          ctx.moveTo(r.x0 + s / 2, r.y0); ctx.lineTo(r.x0 + s / 2, r.y1);
+          ctx.moveTo(r.x1 - s / 2, r.y0); ctx.lineTo(r.x1 - s / 2, r.y1);
         } else {
           const s = w;
           ctx.moveTo(r.x0, r.y0); ctx.lineTo(r.x1, r.y0 + s);
@@ -3174,13 +3179,17 @@
           ctx.moveTo(r.x1, r.y1 - s); ctx.lineTo(r.x0, r.y1);
           ctx.moveTo(r.x0, r.y0 + s); ctx.lineTo(r.x1, r.y0 + s);
           if (r.y1 - s !== r.y0 + s) { ctx.moveTo(r.x0, r.y1 - s); ctx.lineTo(r.x1, r.y1 - s); }
+          ctx.moveTo(r.x0, r.y0 + s / 2); ctx.lineTo(r.x1, r.y0 + s / 2);
+          ctx.moveTo(r.x0, r.y1 - s / 2); ctx.lineTo(r.x1, r.y1 - s / 2);
         }
         ctx.stroke();
       }
 
       // "Fifths (Rabatment)": the same square-off lines as the rabatment
-      // guide above, minus the diagonals -- just the two lines marking where
-      // the shorter side squares off from each end.
+      // guide above, minus the diagonals -- just the lines marking where the
+      // shorter side squares off from each end, plus a line through where
+      // each square's diagonals would have crossed (its center) if they were
+      // drawn.
       function drawRabatmentLines(ctx, r) {
         const w = r.x1 - r.x0, h = r.y1 - r.y0;
         ctx.beginPath();
@@ -3188,10 +3197,14 @@
           const s = h;
           ctx.moveTo(r.x0 + s, r.y0); ctx.lineTo(r.x0 + s, r.y1);
           if (r.x1 - s !== r.x0 + s) { ctx.moveTo(r.x1 - s, r.y0); ctx.lineTo(r.x1 - s, r.y1); }
+          ctx.moveTo(r.x0 + s / 2, r.y0); ctx.lineTo(r.x0 + s / 2, r.y1);
+          ctx.moveTo(r.x1 - s / 2, r.y0); ctx.lineTo(r.x1 - s / 2, r.y1);
         } else {
           const s = w;
           ctx.moveTo(r.x0, r.y0 + s); ctx.lineTo(r.x1, r.y0 + s);
           if (r.y1 - s !== r.y0 + s) { ctx.moveTo(r.x0, r.y1 - s); ctx.lineTo(r.x1, r.y1 - s); }
+          ctx.moveTo(r.x0, r.y0 + s / 2); ctx.lineTo(r.x1, r.y0 + s / 2);
+          ctx.moveTo(r.x0, r.y1 - s / 2); ctx.lineTo(r.x1, r.y1 - s / 2);
         }
         ctx.stroke();
       }
