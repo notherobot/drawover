@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.2</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.3</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.2 &nbsp;[Last Updated: 07/21/2026 12:57PM PST]</span>
+          <span id="status-version">DrawOver v0.7.3 &nbsp;[Last Updated: 07/21/2026 1:29PM PST]</span>
         </div>
       </div>
   </div>
@@ -227,9 +227,9 @@
       <input type="radio" name="compare-mode" id="compare-mode-side" checked> Side by Side
     </label>
     <label class="compare-row">
-      <input type="radio" name="compare-mode" id="compare-mode-frame"> Frame Compare (freeze A)
+      <input type="radio" name="compare-mode" id="compare-mode-full"> Full Frame
     </label>
-    <button id="btn-compare-flip" title="Swap which clip is on the left (A) and which is on the right (B)">⇄ Flip A / B</button>
+    <button id="btn-compare-flip" title="Flip between full-frame A and full-frame B">⇄ Flip A / B</button>
     <button id="compare-done">Done</button>
   </div>
 
@@ -369,7 +369,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.2</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.3</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -485,7 +485,7 @@
       const btnCompareOpts = document.getElementById('btn-compare-opts');
       const comparePanel = document.getElementById('compare-panel');
       const compareModeSideRadio = document.getElementById('compare-mode-side');
-      const compareModeFrameRadio = document.getElementById('compare-mode-frame');
+      const compareModeFullRadio = document.getElementById('compare-mode-full');
       const btnCompareFlip = document.getElementById('btn-compare-flip');
       const btnClearFrame = document.getElementById('btn-clear-frame');
       const btnExportFrame = document.getElementById('btn-export-frame');
@@ -548,11 +548,9 @@
       let comparePanelLeft = true; // true = left panel is active for drawing/undo
       let compareIndex = -1;
       let playerB = null;
-      // Frame-compare mode: panel A is frozen on its current frame and the
-      // timeline/transport drive only panel B, so you can line up a single frame
-      // of B against the locked frame of A.
-      let lockCompare = false;
-      let lockedFrameA = 0;
+      // Full Frame compare mode: only one panel is visible at a time, filling
+      // the whole video area; compareFullFrameShowingB picks which.
+      let compareFullFrameShowingB = false;
       let panXB = 0, panYB = 0, vpZoomB = 1;
       let vpDragB = null;
       let isDrawingB = false, currentStrokeB = null, isErasingB = false;
@@ -782,11 +780,6 @@
         return (compareMode && !comparePanelLeft && playerB) ? playerB : player;
       }
 
-      // The player/entry the timeline (scrub bar + transport) drives. In
-      // frame-compare mode that is panel B; otherwise it is the main player A.
-      function timelinePlayer() { return (compareMode && lockCompare && playerB) ? playerB : player; }
-      function timelineEntry() { return (compareMode && lockCompare) ? getCompareEntry() : getActiveEntry(); }
-
       function setActivePanel(isLeft) {
         comparePanelLeft = isLeft;
         panelLeft.classList.toggle('active-compare-panel', isLeft);
@@ -795,9 +788,7 @@
 
       function updatePanelLabels() {
         const le = getActiveEntry();
-        const leftName = le ? le.name : 'No video';
-        panelLeftLabel.querySelector('.panel-label-name').textContent =
-          (compareMode && lockCompare) ? `🔒 ${leftName} — frame ${lockedFrameA}` : leftName;
+        panelLeftLabel.querySelector('.panel-label-name').textContent = le ? le.name : 'No video';
         const re = getCompareEntry();
         panelRightLabel.querySelector('.panel-label-name').textContent = re ? re.name : 'Click a video in the sidebar';
       }
@@ -1804,8 +1795,7 @@
           row.appendChild(removeBtn);
 
           row.addEventListener('click', () => {
-            // In frame-compare, A is locked — a sidebar pick always loads B.
-            if (compareMode && (lockCompare || !comparePanelLeft)) { loadVideoB(i); }
+            if (compareMode && !comparePanelLeft) { loadVideoB(i); }
             else { loadVideo(i); }
           });
           return row;
@@ -2009,13 +1999,6 @@
       // ===== PLAYBACK =====
       btnPlay.addEventListener('click', () => {
         if (activeIndex < 0) return;
-        // Frame-compare: play/pause only panel B (A is frozen).
-        if (compareMode && lockCompare) {
-          if (!playerB || !playerB.video.src) return;
-          if (playerB.playing) { playerB.pause(); setPlayIcon(false); }
-          else { playerB.play(); setPlayIcon(true); }
-          return;
-        }
         if (player.playing) {
           player.pause();
           if (compareMode && playerB) playerB.pause();
@@ -2041,22 +2024,15 @@
 
       btnFrameBack.addEventListener('click', () => {
         if (activeIndex < 0) return;
-        if (compareMode && lockCompare) { if (playerB) playerB.stepFrame(-1); return; }
         player.stepFrame(-1); if (compareMode && playerB) playerB.stepFrame(-1);
       });
       btnFrameFwd.addEventListener('click', () => {
         if (activeIndex < 0) return;
-        if (compareMode && lockCompare) { if (playerB) playerB.stepFrame(1); return; }
         player.stepFrame(1); if (compareMode && playerB) playerB.stepFrame(1);
       });
 
       btnToStart.addEventListener('click', () => {
         if (activeIndex < 0) return;
-        if (compareMode && lockCompare) {
-          const be = getCompareEntry();
-          if (playerB) playerB.seekToTime(be && be.inPoint !== null ? be.inPoint : 0);
-          return;
-        }
         const e = playlist[activeIndex];
         const t = e.inPoint !== null ? e.inPoint : 0;
         player.seekToTime(t);
@@ -2065,11 +2041,6 @@
 
       btnToEnd.addEventListener('click', () => {
         if (activeIndex < 0) return;
-        if (compareMode && lockCompare) {
-          const be = getCompareEntry();
-          if (playerB) playerB.seekToTime(be && be.outPoint !== null ? be.outPoint : playerB.duration);
-          return;
-        }
         const e = playlist[activeIndex];
         const t = e.outPoint !== null ? e.outPoint : player.duration;
         player.seekToTime(t);
@@ -2077,9 +2048,9 @@
       });
 
       // Which playlist entry prev/next-media should navigate from, and where a
-      // pick should land — mirrors the sidebar row click logic: in frame-compare
-      // (locked) or with the right panel active, picks go to panel B.
-      function mediaNavTargetsB() { return compareMode && (lockCompare || !comparePanelLeft); }
+      // pick should land — mirrors the sidebar row click logic: with the right
+      // panel active, picks go to panel B.
+      function mediaNavTargetsB() { return compareMode && !comparePanelLeft; }
       function mediaNavCurrentIndex() { return mediaNavTargetsB() ? compareIndex : activeIndex; }
       function loadMediaNavIndex(i) { if (mediaNavTargetsB()) loadVideoB(i); else loadVideo(i); }
 
@@ -2154,7 +2125,7 @@
 
       // ===== ANNOTATION NAVIGATION =====
       btnPrevAnnotation.addEventListener('click', () => {
-        const entry = timelineEntry(); const tp = timelinePlayer(); if (!entry) return;
+        const entry = getActiveEntry(); const tp = player; if (!entry) return;
         const frames = Object.keys(entry.annotations).map(Number)
           .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
           .sort((a, b) => a - b);
@@ -2164,7 +2135,7 @@
       });
 
       btnNextAnnotation.addEventListener('click', () => {
-        const entry = timelineEntry(); const tp = timelinePlayer(); if (!entry) return;
+        const entry = getActiveEntry(); const tp = player; if (!entry) return;
         const frames = Object.keys(entry.annotations).map(Number)
           .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
           .sort((a, b) => a - b);
@@ -2178,7 +2149,7 @@
       // player.currentFrame and the frame numbers stored on annotations/arc
       // points) so every timeline chunk lines up with the playhead.
       function getTotalFrames() {
-        const tp = timelinePlayer();
+        const tp = player;
         const fps = tp.fps || getFPS();
         return Math.max(1, Math.round(tp.duration * fps));
       }
@@ -2189,7 +2160,7 @@
       // gradient stops are relative to the bar width, so this auto-scales when
       // the window resizes — only needs recomputing when the frame count changes.
       function updateScrubFrameGrid() {
-        if (!timelinePlayer().duration) { scrubBar.style.background = ''; return; }
+        if (!player.duration) { scrubBar.style.background = ''; return; }
         const fw = framePctWidth();
         scrubBar.style.background =
           'repeating-linear-gradient(to right,' +
@@ -2198,7 +2169,7 @@
       }
 
       function updateScrubBar() {
-        const tp = timelinePlayer();
+        const tp = player;
         if (!tp.duration) return;
         const pct = (tp.getCurrentTime() / tp.duration) * 100;
         scrubProgress.style.width = pct + '%';
@@ -2218,7 +2189,7 @@
       }
 
       function updateScrubTimes() {
-        const tp = timelinePlayer();
+        const tp = player;
         scrubCurrent.textContent = formatSMPTE(tp.getCurrentTime(), tp.fps);
         // Live-time frame so the label tracks the cursor during a scrub.
         const fps = tp.fps || getFPS();
@@ -2230,16 +2201,6 @@
         const rect = scrubBar.getBoundingClientRect();
         const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
         const pct = Math.max(0, Math.min(1, x / rect.width));
-        // Frame-compare mode: the timeline drives only panel B; A stays frozen.
-        if (compareMode && lockCompare) {
-          if (playerB && playerB.duration) {
-            const bFrame = Math.round(pct * playerB.duration * playerB.fps);
-            playerB.seekToTime(bFrame / playerB.fps + 1e-5);
-          }
-          updateScrubBar();
-          updateScrubTimes();
-          return;
-        }
         if (player.duration) {
           const rawTime = pct * player.duration;
           const frameNum = Math.round(rawTime * player.fps);
@@ -2412,8 +2373,8 @@
       function updateScrubTicks() {
         scrubTicks.innerHTML = '';
         updateScrubFrameGrid();
-        const entry = timelineEntry();
-        if (!entry || !timelinePlayer().duration) return;
+        const entry = getActiveEntry();
+        if (!entry || !player.duration) return;
         const tf = getTotalFrames();
         const fw = 100 / tf;
         Object.keys(entry.annotations).map(Number).forEach(frame => {
@@ -3626,12 +3587,7 @@
         const entry = playlist[index];
         if (!playerB) {
           playerB = new FramePlayer(mainCanvasB, mainCtxB);
-          // In frame-compare mode B drives the timeline, so refresh the scrub bar
-          // when its frame changes.
-          playerB.onFrameChange = () => {
-            redrawPenCanvasB();
-            if (compareMode && lockCompare) { updateScrubBar(); updateScrubTimes(); updateScrubTicks(); }
-          };
+          playerB.onFrameChange = () => redrawPenCanvasB();
           setupPanelBPointerEvents();
         }
         playerB.fps = entry.fps;
@@ -4262,21 +4218,43 @@
 
 
       // ===== COMPARE MODE =====
-      // 'side' = side-by-side (both panels scrub together), 'frame' = freeze A
-      // on its current frame and let the timeline drive only B. Remembered
-      // across toggles so re-opening Compare (or switching modes from the
-      // popover while already comparing) keeps whichever one you last picked.
+      // 'side' = both panels visible side-by-side. 'full' = only one panel
+      // visible at a time, filling the whole video area; compareFullFrameShowingB
+      // picks which. Remembered across toggles so re-opening Compare (or
+      // switching modes from the popover while already comparing) keeps
+      // whichever one you last picked.
       let compareUIMode = 'side';
 
       function updateCompareButtonUI() {
         btnCompare.classList.toggle('active', compareMode);
-        btnCompare.textContent = (compareMode && lockCompare) ? 'Frame Compare' : 'Compare';
-        btnCompareFlip.disabled = !(compareMode && compareIndex >= 0);
+        btnCompareFlip.disabled = !(compareMode && compareUIMode === 'full' && compareIndex >= 0);
+      }
+
+      // Shows/hides panelLeft & panelRight per the current display mode. Both
+      // panels' canvases have a ResizeObserver that redraws them when their
+      // container's size changes, but calling resize here too means the
+      // panel that just became visible repaints immediately rather than
+      // waiting on that observer to fire.
+      function updateComparePanelVisibility() {
+        if (compareUIMode === 'full') {
+          panelLeft.style.display = compareFullFrameShowingB ? 'none' : '';
+          panelRight.style.display = compareFullFrameShowingB ? '' : 'none';
+          // Keep the "active" panel (which drives sidebar picks and drawing
+          // target) in sync with whichever one is actually visible -- the
+          // hidden panel can't be clicked to make itself active, so without
+          // this a sidebar pick could silently load into a panel you can't see.
+          setActivePanel(!compareFullFrameShowingB);
+        } else {
+          panelLeft.style.display = '';
+          panelRight.style.display = '';
+        }
+        resizeCanvases();
+        resizeCanvasesB();
       }
 
       function exitCompareMode() {
         compareMode = false;
-        lockCompare = false;
+        panelLeft.style.display = '';
         panelRight.style.display = 'none';
         document.getElementById('content').classList.remove('compare-mode');
         panelLeft.classList.remove('active-compare-panel');
@@ -4286,69 +4264,39 @@
         if (playerB) { playerB.pause(); }
         setPlayIcon(false);
         resizeCanvases();
-        // Timeline reverts to panel A (still on its — now unlocked — frame).
         updateScrubBar(); updateScrubTimes(); updateScrubTicks();
         renderPlaylist();
         updateCompareButtonUI();
       }
 
-      // Side-by-side: both panels scrub together.
-      function enterSideCompare() {
+      function enterCompareMode() {
         compareMode = true;
-        lockCompare = false;
-        panelRight.style.display = '';
         document.getElementById('content').classList.add('compare-mode');
         setActivePanel(true);
         updatePanelLabels();
         // Prefer whatever clip was already loaded in B (e.g. switching modes
         // mid-session); otherwise default to the clip you're currently on.
         const target = compareIndex >= 0 ? compareIndex : activeIndex;
-        if (target >= 0) loadVideoB(target); else { resizeCanvases(); renderPlaylist(); }
-        updateCompareButtonUI();
-      }
-
-      // Frame-compare: freeze A on its current frame; the timeline drives B only.
-      function enterFrameCompare() {
-        if (activeIndex < 0) return;
-        compareMode = true;
-        lockCompare = true;
-        lockedFrameA = player.currentFrame;
-        panelRight.style.display = '';
-        document.getElementById('content').classList.add('compare-mode');
-        // Default the drawable panel to B (so sidebar picks load B and scrubbing
-        // draws there); click panel A to draw on the frozen frame instead.
-        setActivePanel(false);
-        updatePanelLabels();
-        const target = compareIndex >= 0 ? compareIndex : activeIndex;
-        loadVideoB(target);
-        updateScrubBar(); updateScrubTimes(); updateScrubTicks();
+        if (target >= 0) loadVideoB(target); else renderPlaylist();
+        updateComparePanelVisibility();
         updateCompareButtonUI();
       }
 
       btnCompare.addEventListener('click', () => {
         if (compareMode) { exitCompareMode(); return; }
-        if (compareUIMode === 'frame') enterFrameCompare(); else enterSideCompare();
+        enterCompareMode();
       });
 
       document.getElementById('btn-compare-close').addEventListener('click', () => exitCompareMode());
 
-      // Swap which clip occupies panel A vs. panel B (and each panel's own
-      // pan/zoom), instead of only ever being able to put a new pick in B.
-      async function flipComparePanels() {
-        if (!compareMode || activeIndex < 0 || compareIndex < 0) return;
-        const oldA = activeIndex, oldB = compareIndex;
-        const swapPanX = panX, swapPanY = panY, swapZoom = vpZoom;
-        panX = panXB; panY = panYB; vpZoom = vpZoomB;
-        panXB = swapPanX; panYB = swapPanY; vpZoomB = swapZoom;
-        await loadVideo(oldB);
-        await loadVideoB(oldA);
-        applyViewport(); applyViewportB();
-        if (lockCompare) lockedFrameA = player.currentFrame;
-        updatePanelLabels();
-        updateScrubBar(); updateScrubTimes(); updateScrubTicks();
-        renderPlaylist();
+      // Full Frame mode only: flip which clip (A or B) is the one currently
+      // filling the whole video area.
+      function flipFullFrame() {
+        if (!compareMode || compareUIMode !== 'full' || compareIndex < 0) return;
+        compareFullFrameShowingB = !compareFullFrameShowingB;
+        updateComparePanelVisibility();
       }
-      btnCompareFlip.addEventListener('click', flipComparePanels);
+      btnCompareFlip.addEventListener('click', flipFullFrame);
 
       function openComparePanel() {
         comparePanel.style.display = 'block';
@@ -4362,7 +4310,7 @@
         // opening above it would push the popover off-screen and clamp it back
         // down on top of the button itself. Open below instead.
         comparePanel.style.top = (r.bottom + 8) + 'px';
-        btnCompareFlip.disabled = !(compareMode && compareIndex >= 0);
+        updateCompareButtonUI();
       }
       function closeComparePanel() { comparePanel.style.display = 'none'; }
       btnCompareOpts.addEventListener('click', (e) => {
@@ -4380,10 +4328,11 @@
         compareUIMode = mode;
         // If we're already comparing, switching the radio takes effect right away
         // instead of waiting for the next time Compare is turned on.
-        if (compareMode) { if (mode === 'frame') enterFrameCompare(); else enterSideCompare(); }
+        if (compareMode) updateComparePanelVisibility();
+        updateCompareButtonUI();
       }
       compareModeSideRadio.addEventListener('change', () => { if (compareModeSideRadio.checked) setCompareUIMode('side'); });
-      compareModeFrameRadio.addEventListener('change', () => { if (compareModeFrameRadio.checked) setCompareUIMode('frame'); });
+      compareModeFullRadio.addEventListener('change', () => { if (compareModeFullRadio.checked) setCompareUIMode('full'); });
 
       // ===== LASER FADE =====
       // The loop only runs while there are laser strokes to draw/fade, and never
