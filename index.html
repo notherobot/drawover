@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.0</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.1</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.0 &nbsp;[Last Updated: 07/17/2026 9:09AM PST]</span>
+          <span id="status-version">DrawOver v0.7.1 &nbsp;[Last Updated: 07/21/2026 12:48PM PST]</span>
         </div>
       </div>
   </div>
@@ -322,9 +322,10 @@
     <label class="guides-row">
       <span>Guide</span>
       <select id="guides-type" title="Which composition guide to overlay">
-        <option value="thirds">Rule of Thirds</option>
+        <option value="thirds">Thirds</option>
         <option value="phi">Phi Grid (Golden Ratio)</option>
-        <option value="fifths">Rule of Fifths</option>
+        <option value="fifths">Fifths</option>
+        <option value="fifths-rabatment">Fifths (Rabatment)</option>
         <option value="rabatment">Rabatment of the Rectangle</option>
         <option value="triangle">Golden Triangle</option>
         <option value="fibonacci">Fibonacci Spiral</option>
@@ -368,7 +369,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.0</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.1</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -3177,6 +3178,24 @@
         ctx.stroke();
       }
 
+      // "Fifths (Rabatment)": the same square-off lines as the rabatment
+      // guide above, minus the diagonals -- just the two lines marking where
+      // the shorter side squares off from each end.
+      function drawRabatmentLines(ctx, r) {
+        const w = r.x1 - r.x0, h = r.y1 - r.y0;
+        ctx.beginPath();
+        if (w >= h) {
+          const s = h;
+          ctx.moveTo(r.x0 + s, r.y0); ctx.lineTo(r.x0 + s, r.y1);
+          if (r.x1 - s !== r.x0 + s) { ctx.moveTo(r.x1 - s, r.y0); ctx.lineTo(r.x1 - s, r.y1); }
+        } else {
+          const s = w;
+          ctx.moveTo(r.x0, r.y0 + s); ctx.lineTo(r.x1, r.y0 + s);
+          if (r.y1 - s !== r.y0 + s) { ctx.moveTo(r.x0, r.y1 - s); ctx.lineTo(r.x1, r.y1 - s); }
+        }
+        ctx.stroke();
+      }
+
       function projectPerp(px, py, ax, ay, bx, by) {
         const dx = bx - ax, dy = by - ay;
         const t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
@@ -3290,6 +3309,7 @@
         if (guidesType === 'thirds') drawThirds(guidesCtx, r);
         else if (guidesType === 'phi') drawPhiGrid(guidesCtx, r);
         else if (guidesType === 'fifths') drawFifths(guidesCtx, r);
+        else if (guidesType === 'fifths-rabatment') drawRabatmentLines(guidesCtx, r);
         else if (guidesType === 'rabatment') drawRabatment(guidesCtx, r);
         else if (guidesType === 'triangle') drawGoldenTriangle(guidesCtx, r);
         else if (guidesType === 'fibonacci') drawFibonacciSpiral(guidesCtx, r);
