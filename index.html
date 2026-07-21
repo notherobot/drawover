@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.6</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.7</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.6 &nbsp;[Last Updated: 07/21/2026 2:57PM PST]</span>
+          <span id="status-version">DrawOver v0.7.7 &nbsp;[Last Updated: 07/21/2026 3:30PM PST]</span>
         </div>
       </div>
   </div>
@@ -369,7 +369,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.6</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.7</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -533,6 +533,13 @@
       // ===== PAN/ZOOM STATE =====
       let panX = 0, panY = 0, vpZoom = 1;
       let vpDrag = null; // { type:'pan'|'zoom', startX, startY, startPanX, startPanY, startZoom, cx, cy }
+
+      // Middle-mouse-button pan (SyncSketch-style: hold MMB anywhere, drag,
+      // the media follows the cursor 1:1). Kept fully separate from vpDrag —
+      // which drives the left-click Pan tool and right-click Zoom — so MMB
+      // panning always works regardless of which tool is currently active.
+      let mmbPan = null; // { startX, startY, startPanX, startPanY }
+      let mmbPanB = null;
 
       // ===== COMPARE MODE STATE =====
       let arcWindow = 5;
@@ -2293,6 +2300,16 @@
           }
           applyViewportB();
         }
+        if (mmbPan) {
+          panX = mmbPan.startPanX + (e.clientX - mmbPan.startX);
+          panY = mmbPan.startPanY + (e.clientY - mmbPan.startY);
+          applyViewport();
+        }
+        if (mmbPanB) {
+          panXB = mmbPanB.startPanX + (e.clientX - mmbPanB.startX);
+          panYB = mmbPanB.startPanY + (e.clientY - mmbPanB.startY);
+          applyViewportB();
+        }
       }
 
       // Safety net: a mouseup/pointerup can be missed entirely — e.g. the button
@@ -2321,12 +2338,12 @@
       window.addEventListener('pointerdown', () => { missedReleaseStreak = 0; });
       window.addEventListener('pointermove', (e) => {
         applyVpDrag(e);
-        // vpDrag/vpDragB can be started by the left button (pan/zoom tools),
-        // the middle button (universal pan), or the right button (universal
-        // zoom) — checking only bit 1 (left) treated every right- or
-        // middle-button drag as "no button held" and cancelled pan/zoom on
-        // literally every pointermove during the drag. Any button held at all
-        // means nothing is stuck.
+        // vpDrag/vpDragB can be started by the left button (pan/zoom tools)
+        // or the right button (universal zoom); mmbPan/mmbPanB by the middle
+        // button (universal pan) — checking only bit 1 (left) treated every
+        // right- or middle-button drag as "no button held" and cancelled
+        // pan/zoom on literally every pointermove during the drag. Any
+        // button held at all means nothing is stuck.
         if (e.buttons !== 0) { missedReleaseStreak = 0; return; }
         missedReleaseStreak++;
         if (missedReleaseStreak < 2) return;
@@ -2336,6 +2353,8 @@
         if (draggingHandle) draggingHandle = null;
         if (vpDrag) { videoViewport.classList.remove('panning', 'zooming'); vpDrag = null; updateToolCursor(); }
         if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; }
+        if (mmbPan) { videoViewport.classList.remove('panning'); mmbPan = null; updateToolCursor(); }
+        if (mmbPanB) { videoViewportB.classList.remove('panning'); mmbPanB = null; }
       });
 
       function updateInOutUI() {
@@ -2406,7 +2425,12 @@
         // you are placing new points, not dragging old ones, so keep the tool's
         // own cursor.
         const arcMoveActive = (arcHoverFrame !== null || arcDragFrame !== null) && currentTool !== 'arc-tracer';
+        // MMB pan is universal -- it overrides whatever cursor the current
+        // tool would normally show, same as it overrides the tool's normal
+        // pointerdown behavior.
+        const mmbPanActive = !!(mmbPan || mmbPanB);
         const key = arcMoveActive ? 'arc-move'
+          : mmbPanActive ? 'mmb-pan'
           : currentTool === 'pan' ? ('pan:' + (vpDrag ? 1 : 0))
           : currentTool === 'zoom' ? 'zoom'
           : currentTool === 'arc-tracer' ? 'arc-tracer'
@@ -2416,6 +2440,7 @@
         _lastCursorKey = key;
 
         if (arcMoveActive) { penCanvas.style.cursor = penCanvasB.style.cursor = 'move'; return; }
+        if (mmbPanActive) { penCanvas.style.cursor = penCanvasB.style.cursor = 'grabbing'; return; }
         if (currentTool === 'pan') {
           penCanvas.style.cursor = penCanvasB.style.cursor = vpDrag ? 'grabbing' : 'grab';
           return;
@@ -3464,8 +3489,10 @@
           e.preventDefault();
           if (e.button === 1) {
             penCanvasB.setPointerCapture(e.pointerId);
-            vpDragB = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
-            videoViewportB.classList.add('panning'); return;
+            mmbPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
+            videoViewportB.classList.add('panning');
+            updateToolCursor();
+            return;
           }
           if (e.button === 2) {
             penCanvasB.setPointerCapture(e.pointerId);
@@ -3513,7 +3540,7 @@
         penCanvasB.addEventListener('pointermove', (e) => {
           // See the matching comment in penCanvas's pointermove -- vpDragB
           // math runs at the window level now so it survives lost capture.
-          if (vpDragB) return;
+          if (vpDragB || mmbPanB) return;
           if (!drawingsVisible) return;
           const pos = getCanvasPosB(e);
           if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
@@ -3540,10 +3567,12 @@
 
         penCanvasB.addEventListener('pointerup', (e) => {
           if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
+          if (mmbPanB) { videoViewportB.classList.remove('panning'); mmbPanB = null; updateToolCursor(); return; }
           finishStrokeB();
         });
         penCanvasB.addEventListener('pointercancel', (e) => {
           if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
+          if (mmbPanB) { videoViewportB.classList.remove('panning'); mmbPanB = null; updateToolCursor(); return; }
           finishStrokeB();
         });
         penCanvasB.addEventListener('pointerleave', () => {
@@ -3595,11 +3624,12 @@
       penCanvas.addEventListener('pointerdown', (e) => {
         if (compareMode) setActivePanel(true);
         e.preventDefault();
-        // MMB = pan
+        // MMB = pan, always available regardless of the active tool.
         if (e.button === 1) {
           penCanvas.setPointerCapture(e.pointerId);
-          vpDrag = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
+          mmbPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
           videoViewport.classList.add('panning');
+          updateToolCursor();
           return;
         }
         // Right-click = zoom at click point
@@ -3692,7 +3722,7 @@
         // Pan/zoom drag math runs at the window level (see applyVpDrag above)
         // so it keeps working even if this element loses pointer capture
         // mid-drag; just skip the rest of this handler while one is active.
-        if (vpDrag) return;
+        if (vpDrag || mmbPan) return;
 
         if (!drawingsVisible) return;
         const pos = getCanvasPos(e);
@@ -3810,12 +3840,24 @@
           updateToolCursor();
           return;
         }
+        if (mmbPan) {
+          videoViewport.classList.remove('panning');
+          mmbPan = null;
+          updateToolCursor();
+          return;
+        }
         finishStroke(e);
       });
       penCanvas.addEventListener('pointercancel', (e) => {
         if (vpDrag) {
           videoViewport.classList.remove('panning', 'zooming');
           vpDrag = null;
+          updateToolCursor();
+          return;
+        }
+        if (mmbPan) {
+          videoViewport.classList.remove('panning');
+          mmbPan = null;
           updateToolCursor();
           return;
         }
