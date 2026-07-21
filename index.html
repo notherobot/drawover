@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.5</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.6</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.5 &nbsp;[Last Updated: 07/21/2026 2:49PM PST]</span>
+          <span id="status-version">DrawOver v0.7.6 &nbsp;[Last Updated: 07/21/2026 2:57PM PST]</span>
         </div>
       </div>
   </div>
@@ -369,7 +369,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.5</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.6</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2782,20 +2782,6 @@
       }
 
       videoContainer.addEventListener('contextmenu', e => e.preventDefault());
-      // Chrome/Firefox's native middle-click autoscroll checks whether the
-      // *mousedown* event (not pointerdown) had its default prevented. The
-      // pointerdown handlers below deliberately skip preventDefault() for the
-      // middle button so this compatibility mousedown still fires -- calling
-      // preventDefault() on pointerdown instead (as they do for every other
-      // button) suppresses mousedown from firing at all, which left autoscroll
-      // with nothing telling it to back off. Left unblocked, autoscroll steals
-      // the button state mid-drag and the safety-net pointermove listener above
-      // reads e.buttons as 0, so our own MMB pan looks like it "disengages"
-      // partway through. Canceling it here, on the event autoscroll actually
-      // checks, stops it at the source instead of trying to detect it after
-      // the fact.
-      videoContainer.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
-      videoContainer.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 
       videoContainer.addEventListener('wheel', (e) => {
         e.preventDefault();
@@ -3475,7 +3461,7 @@
       function setupPanelBPointerEvents() {
         penCanvasB.addEventListener('pointerdown', (e) => {
           setActivePanel(false);
-          if (e.button !== 1) e.preventDefault();
+          e.preventDefault();
           if (e.button === 1) {
             penCanvasB.setPointerCapture(e.pointerId);
             vpDragB = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
@@ -3565,8 +3551,6 @@
         });
 
         videoContainerB.addEventListener('contextmenu', e => e.preventDefault());
-        videoContainerB.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
-        videoContainerB.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
         videoContainerB.addEventListener('wheel', (e) => {
           e.preventDefault();
           const rect = videoContainerB.getBoundingClientRect();
@@ -3610,15 +3594,7 @@
 
       penCanvas.addEventListener('pointerdown', (e) => {
         if (compareMode) setActivePanel(true);
-        // Skip preventDefault() here for the middle button specifically: once
-        // called on pointerdown it suppresses the compatibility mousedown event
-        // entirely (verified — Chrome never dispatches it afterward), but that's
-        // the event Firefox's (and Chrome's) native middle-click autoscroll
-        // actually checks for cancellation. Suppressing mousedown before it can
-        // ever fire left autoscroll un-blocked, which is what silently stole the
-        // drag. Letting mousedown fire and canceling it there (see the
-        // mousedown/auxclick listeners below) is what actually stops autoscroll.
-        if (e.button !== 1) e.preventDefault();
+        e.preventDefault();
         // MMB = pan
         if (e.button === 1) {
           penCanvas.setPointerCapture(e.pointerId);
