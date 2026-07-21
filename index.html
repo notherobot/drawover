@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.3</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.4</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.3 &nbsp;[Last Updated: 07/21/2026 1:29PM PST]</span>
+          <span id="status-version">DrawOver v0.7.4 &nbsp;[Last Updated: 07/21/2026 2:35PM PST]</span>
         </div>
       </div>
   </div>
@@ -369,7 +369,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.3</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.4</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2269,8 +2269,11 @@
       function applyVpDrag(e) {
         if (vpDrag) {
           if (vpDrag.type === 'pan') {
-            panX = vpDrag.startPanX + (e.clientX - vpDrag.startX);
-            panY = vpDrag.startPanY + (e.clientY - vpDrag.startY);
+            // Locked (MMB) drags accumulate raw Pointer Lock deltas -- clientX/Y
+            // are frozen at the lock position and no longer meaningful. Regular
+            // (Pan tool) drags still use absolute deltas from the drag's start.
+            if (vpDrag.locked) { panX += e.movementX; panY += e.movementY; }
+            else { panX = vpDrag.startPanX + (e.clientX - vpDrag.startX); panY = vpDrag.startPanY + (e.clientY - vpDrag.startY); }
           } else {
             const dy = e.clientY - vpDrag.startY;
             const newZoom = Math.max(0.1, Math.min(20, vpDrag.startZoom * Math.pow(1.005, dy)));
@@ -2282,8 +2285,8 @@
         }
         if (vpDragB) {
           if (vpDragB.type === 'pan') {
-            panXB = vpDragB.startPanX + (e.clientX - vpDragB.startX);
-            panYB = vpDragB.startPanY + (e.clientY - vpDragB.startY);
+            if (vpDragB.locked) { panXB += e.movementX; panYB += e.movementY; }
+            else { panXB = vpDragB.startPanX + (e.clientX - vpDragB.startX); panYB = vpDragB.startPanY + (e.clientY - vpDragB.startY); }
           } else {
             const dy = e.clientY - vpDragB.startY;
             const newZoom = Math.max(0.1, Math.min(20, vpDragB.startZoom * Math.pow(1.005, dy)));
@@ -2294,6 +2297,21 @@
           applyViewportB();
         }
       }
+
+      // Releases Pointer Lock when a locked drag (MMB pan) ends; harmless
+      // no-op for a regular (unlocked) drag or if the lock was already lost.
+      function endLockedDrag(drag) {
+        if (drag && drag.locked && document.pointerLockElement) document.exitPointerLock();
+      }
+      // The browser can drop Pointer Lock on its own (Esc, tab/window losing
+      // focus, etc.) without ever firing our pointerup/pointercancel handlers
+      // -- without this, that would leave a locked drag stuck "on" forever
+      // since movementX/Y stop arriving once the lock is gone.
+      document.addEventListener('pointerlockchange', () => {
+        if (document.pointerLockElement) return;
+        if (vpDrag && vpDrag.locked) { videoViewport.classList.remove('panning'); vpDrag = null; updateToolCursor(); }
+        if (vpDragB && vpDragB.locked) { videoViewportB.classList.remove('panning'); vpDragB = null; }
+      });
 
       // Safety net: a mouseup/pointerup can be missed entirely — e.g. the button
       // is released outside the browser window, or a native context menu swallows
@@ -2334,8 +2352,8 @@
         if (isDrawingB || isErasingB || currentStrokeB) finishStrokeB();
         if (isScrubbing) { player.endScrub(); isScrubbing = false; }
         if (draggingHandle) draggingHandle = null;
-        if (vpDrag) { videoViewport.classList.remove('panning', 'zooming'); vpDrag = null; updateToolCursor(); }
-        if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; }
+        if (vpDrag) { endLockedDrag(vpDrag); videoViewport.classList.remove('panning', 'zooming'); vpDrag = null; updateToolCursor(); }
+        if (vpDragB) { endLockedDrag(vpDragB); videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; }
       });
 
       function updateInOutUI() {
@@ -3477,8 +3495,10 @@
           setActivePanel(false);
           if (e.button !== 1) e.preventDefault();
           if (e.button === 1) {
-            penCanvasB.setPointerCapture(e.pointerId);
-            vpDragB = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
+            // See the matching comment in penCanvas's pointerdown -- MMB pan
+            // uses Pointer Lock's raw movementX/Y instead of absolute deltas.
+            penCanvasB.requestPointerLock();
+            vpDragB = { type: 'pan', locked: true };
             videoViewportB.classList.add('panning'); return;
           }
           if (e.button === 2) {
@@ -3553,11 +3573,11 @@
         });
 
         penCanvasB.addEventListener('pointerup', (e) => {
-          if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
+          if (vpDragB) { endLockedDrag(vpDragB); videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
           finishStrokeB();
         });
         penCanvasB.addEventListener('pointercancel', (e) => {
-          if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
+          if (vpDragB) { endLockedDrag(vpDragB); videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
           finishStrokeB();
         });
         penCanvasB.addEventListener('pointerleave', () => {
@@ -3619,10 +3639,19 @@
         // drag. Letting mousedown fire and canceling it there (see the
         // mousedown/auxclick listeners below) is what actually stops autoscroll.
         if (e.button !== 1) e.preventDefault();
-        // MMB = pan
+        // MMB = pan. Uses Pointer Lock rather than absolute clientX/clientY:
+        // the browser's own middle-click autoscroll can still intercept and
+        // dampen reported cursor movement even with mousedown's default
+        // prevented, which is what made the pan track at a fraction of the
+        // real mouse movement. Pointer Lock's movementX/Y are raw hardware
+        // deltas the browser guarantees are unclamped by any of its own
+        // gesture handling, so accumulating from those instead sidesteps the
+        // interference entirely. (Pan tool / right-click zoom are unaffected
+        // by this and keep using absolute deltas -- they aren't triggered by
+        // the middle button, so autoscroll never engages for them.)
         if (e.button === 1) {
-          penCanvas.setPointerCapture(e.pointerId);
-          vpDrag = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
+          penCanvas.requestPointerLock();
+          vpDrag = { type: 'pan', locked: true };
           videoViewport.classList.add('panning');
           return;
         }
@@ -3829,6 +3858,7 @@
 
       penCanvas.addEventListener('pointerup', (e) => {
         if (vpDrag) {
+          endLockedDrag(vpDrag);
           videoViewport.classList.remove('panning', 'zooming');
           vpDrag = null;
           updateToolCursor();
@@ -3838,6 +3868,7 @@
       });
       penCanvas.addEventListener('pointercancel', (e) => {
         if (vpDrag) {
+          endLockedDrag(vpDrag);
           videoViewport.classList.remove('panning', 'zooming');
           vpDrag = null;
           updateToolCursor();
