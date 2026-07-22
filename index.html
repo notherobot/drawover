@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.7</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.8</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.7 &nbsp;[Last Updated: 07/21/2026 3:30PM PST]</span>
+          <span id="status-version">DrawOver v0.7.8 &nbsp;[Last Updated: 07/22/2026 12:15AM PST]</span>
         </div>
       </div>
   </div>
@@ -369,7 +369,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.7</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.8</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2807,6 +2807,22 @@
       }
 
       videoContainer.addEventListener('contextmenu', e => e.preventDefault());
+      // Firefox (and Chrome) arm native middle-click autoscroll by checking
+      // whether the *mousedown* DOM event was canceled -- not pointerdown.
+      // Canceling pointerdown suppresses the browser from ever dispatching
+      // the compatibility mousedown event afterward, which means autoscroll
+      // still arms with nothing telling it to back off (verified: an
+      // instrumented Chromium test showed the mousedown listener registered
+      // below never firing once pointerdown.preventDefault() ran for every
+      // button). The pointerdown handler below deliberately skips
+      // preventDefault() for the middle button so this compatibility
+      // mousedown still fires and can be canceled here, at the exact event
+      // both browsers' autoscroll implementations check. Without this,
+      // autoscroll engages mid-drag, steals the mouse, and our own MMB pan
+      // looks like it "disengages" a moment after the button goes down --
+      // this is the mechanism behind that exact symptom on Firefox.
+      videoContainer.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+      videoContainer.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 
       videoContainer.addEventListener('wheel', (e) => {
         e.preventDefault();
@@ -3486,7 +3502,11 @@
       function setupPanelBPointerEvents() {
         penCanvasB.addEventListener('pointerdown', (e) => {
           setActivePanel(false);
-          e.preventDefault();
+          // Skip preventDefault() here for the middle button specifically --
+          // see the mousedown/auxclick listeners on videoContainerB below for
+          // why: canceling pointerdown suppresses the compatibility mousedown
+          // event that Firefox/Chrome's native autoscroll actually checks.
+          if (e.button !== 1) e.preventDefault();
           if (e.button === 1) {
             penCanvasB.setPointerCapture(e.pointerId);
             mmbPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
@@ -3580,6 +3600,10 @@
         });
 
         videoContainerB.addEventListener('contextmenu', e => e.preventDefault());
+        // See the matching comment on videoContainer's mousedown/auxclick
+        // listeners -- same autoscroll-arming mechanism, same fix, panel B.
+        videoContainerB.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+        videoContainerB.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
         videoContainerB.addEventListener('wheel', (e) => {
           e.preventDefault();
           const rect = videoContainerB.getBoundingClientRect();
@@ -3623,7 +3647,13 @@
 
       penCanvas.addEventListener('pointerdown', (e) => {
         if (compareMode) setActivePanel(true);
-        e.preventDefault();
+        // Skip preventDefault() here for the middle button specifically --
+        // see the mousedown/auxclick listeners on videoContainer below for
+        // why: canceling pointerdown suppresses the compatibility mousedown
+        // event that Firefox/Chrome's native autoscroll actually checks, so
+        // autoscroll stays armed and steals the drag a moment after MMB goes
+        // down -- the exact "hand pops up then panning stops" symptom.
+        if (e.button !== 1) e.preventDefault();
         // MMB = pan, always available regardless of the active tool.
         if (e.button === 1) {
           penCanvas.setPointerCapture(e.pointerId);
