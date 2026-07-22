@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.9</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.10</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -32,7 +32,7 @@
           </div>
           <div class="tool-sep"></div>
           <div class="tool-group">
-            <button class="tool-btn" data-tool="pan" title="Pan — click and drag (H)">✋</button>
+            <button class="tool-btn" data-tool="pan" title="Pan — click and drag (H). Or hold Ctrl and drag with any tool, or the middle mouse button.">✋</button>
             <button class="tool-btn" data-tool="zoom" title="Zoom — drag up/down, or +/− (Z)">🔍</button>
             <button class="tool-btn active" data-tool="pen" title="Pen (B)">🖌️</button>
             <button class="tool-btn" data-tool="laser" title="Laser (L)">💫</button>
@@ -179,7 +179,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.9 &nbsp;[Last Updated: 07/22/2026 12:45AM PST]</span>
+          <span id="status-version">DrawOver v0.7.10 &nbsp;[Last Updated: 07/22/2026 1:10AM PST]</span>
         </div>
       </div>
   </div>
@@ -371,7 +371,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.9</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.10</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -536,12 +536,19 @@
       let panX = 0, panY = 0, vpZoom = 1;
       let vpDrag = null; // { type:'pan'|'zoom', startX, startY, startPanX, startPanY, startZoom, cx, cy }
 
-      // Middle-mouse-button pan (SyncSketch-style: hold MMB anywhere, drag,
-      // the media follows the cursor 1:1). Kept fully separate from vpDrag —
-      // which drives the left-click Pan tool and right-click Zoom — so MMB
-      // panning always works regardless of which tool is currently active.
-      let mmbPan = null; // { startX, startY, startPanX, startPanY }
-      let mmbPanB = null;
+      // Universal hold-and-drag pan (SyncSketch-style: hold a button anywhere,
+      // drag, the media follows the cursor 1:1). Triggered by the middle
+      // mouse button OR Ctrl+left-click-drag. Ctrl+drag exists because MMB
+      // alone is unreliable: the middle button is the same button browsers
+      // reserve for their own native autoscroll/paste gestures, and fighting
+      // that from web content has proven fragile in practice. Ctrl+left-drag
+      // uses only the primary button plus a modifier key, neither of which
+      // any browser treats specially, so there's no default action to fight.
+      // Kept fully separate from vpDrag -- which drives the left-click Pan
+      // tool and right-click Zoom -- so this always works regardless of
+      // which tool is currently active.
+      let holdPan = null; // { startX, startY, startPanX, startPanY }
+      let holdPanB = null;
 
       // Firefox and Chrome arm their native middle-click autoscroll the
       // instant the middle button goes down, independent of whether it's
@@ -2319,14 +2326,14 @@
           }
           applyViewportB();
         }
-        if (mmbPan) {
-          panX = mmbPan.startPanX + (e.clientX - mmbPan.startX);
-          panY = mmbPan.startPanY + (e.clientY - mmbPan.startY);
+        if (holdPan) {
+          panX = holdPan.startPanX + (e.clientX - holdPan.startX);
+          panY = holdPan.startPanY + (e.clientY - holdPan.startY);
           applyViewport();
         }
-        if (mmbPanB) {
-          panXB = mmbPanB.startPanX + (e.clientX - mmbPanB.startX);
-          panYB = mmbPanB.startPanY + (e.clientY - mmbPanB.startY);
+        if (holdPanB) {
+          panXB = holdPanB.startPanX + (e.clientX - holdPanB.startX);
+          panYB = holdPanB.startPanY + (e.clientY - holdPanB.startY);
           applyViewportB();
         }
       }
@@ -2358,11 +2365,11 @@
       window.addEventListener('pointermove', (e) => {
         applyVpDrag(e);
         // vpDrag/vpDragB can be started by the left button (pan/zoom tools)
-        // or the right button (universal zoom); mmbPan/mmbPanB by the middle
-        // button (universal pan) — checking only bit 1 (left) treated every
-        // right- or middle-button drag as "no button held" and cancelled
-        // pan/zoom on literally every pointermove during the drag. Any
-        // button held at all means nothing is stuck.
+        // or the right button (universal zoom); holdPan/holdPanB by the
+        // middle button or Ctrl+left (universal pan) — checking only bit 1
+        // (left) treated every right- or middle-button drag as "no button
+        // held" and cancelled pan/zoom on literally every pointermove during
+        // the drag. Any button held at all means nothing is stuck.
         if (e.buttons !== 0) { missedReleaseStreak = 0; return; }
         missedReleaseStreak++;
         if (missedReleaseStreak < 2) return;
@@ -2372,8 +2379,8 @@
         if (draggingHandle) draggingHandle = null;
         if (vpDrag) { videoViewport.classList.remove('panning', 'zooming'); vpDrag = null; updateToolCursor(); }
         if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; }
-        if (mmbPan) { videoViewport.classList.remove('panning'); mmbPan = null; updateToolCursor(); }
-        if (mmbPanB) { videoViewportB.classList.remove('panning'); mmbPanB = null; }
+        if (holdPan) { videoViewport.classList.remove('panning'); holdPan = null; updateToolCursor(); }
+        if (holdPanB) { videoViewportB.classList.remove('panning'); holdPanB = null; }
       });
 
       function updateInOutUI() {
@@ -2444,12 +2451,12 @@
         // you are placing new points, not dragging old ones, so keep the tool's
         // own cursor.
         const arcMoveActive = (arcHoverFrame !== null || arcDragFrame !== null) && currentTool !== 'arc-tracer';
-        // MMB pan is universal -- it overrides whatever cursor the current
-        // tool would normally show, same as it overrides the tool's normal
-        // pointerdown behavior.
-        const mmbPanActive = !!(mmbPan || mmbPanB);
+        // Universal hold-and-drag pan (MMB or Ctrl+left-click) overrides
+        // whatever cursor the current tool would normally show, same as it
+        // overrides the tool's normal pointerdown behavior.
+        const holdPanActive = !!(holdPan || holdPanB);
         const key = arcMoveActive ? 'arc-move'
-          : mmbPanActive ? 'mmb-pan'
+          : holdPanActive ? 'hold-pan'
           : currentTool === 'pan' ? ('pan:' + (vpDrag ? 1 : 0))
           : currentTool === 'zoom' ? 'zoom'
           : currentTool === 'arc-tracer' ? 'arc-tracer'
@@ -2459,7 +2466,7 @@
         _lastCursorKey = key;
 
         if (arcMoveActive) { penCanvas.style.cursor = penCanvasB.style.cursor = 'move'; return; }
-        if (mmbPanActive) { penCanvas.style.cursor = penCanvasB.style.cursor = 'grabbing'; return; }
+        if (holdPanActive) { penCanvas.style.cursor = penCanvasB.style.cursor = 'grabbing'; return; }
         if (currentTool === 'pan') {
           penCanvas.style.cursor = penCanvasB.style.cursor = vpDrag ? 'grabbing' : 'grab';
           return;
@@ -3530,7 +3537,16 @@
             // pointermove listener already tracks movement regardless of
             // capture, and claiming capture on this pointer can conflict
             // with the browser's own attempt to claim it for autoscroll.
-            mmbPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
+            holdPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
+            videoViewportB.classList.add('panning');
+            updateToolCursor();
+            return;
+          }
+          // Ctrl+left-click = pan, same as MMB but immune to any browser
+          // default action. See the matching comment in penCanvas's
+          // pointerdown.
+          if (e.button === 0 && e.ctrlKey) {
+            holdPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
             videoViewportB.classList.add('panning');
             updateToolCursor();
             return;
@@ -3581,7 +3597,7 @@
         penCanvasB.addEventListener('pointermove', (e) => {
           // See the matching comment in penCanvas's pointermove -- vpDragB
           // math runs at the window level now so it survives lost capture.
-          if (vpDragB || mmbPanB) return;
+          if (vpDragB || holdPanB) return;
           if (!drawingsVisible) return;
           const pos = getCanvasPosB(e);
           if (currentTool === 'eyedrop') { showEyedropPreview(e, pos); return; }
@@ -3608,12 +3624,12 @@
 
         penCanvasB.addEventListener('pointerup', (e) => {
           if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
-          if (mmbPanB) { videoViewportB.classList.remove('panning'); mmbPanB = null; updateToolCursor(); return; }
+          if (holdPanB) { videoViewportB.classList.remove('panning'); holdPanB = null; updateToolCursor(); return; }
           finishStrokeB();
         });
         penCanvasB.addEventListener('pointercancel', (e) => {
           if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; return; }
-          if (mmbPanB) { videoViewportB.classList.remove('panning'); mmbPanB = null; updateToolCursor(); return; }
+          if (holdPanB) { videoViewportB.classList.remove('panning'); holdPanB = null; updateToolCursor(); return; }
           finishStrokeB();
         });
         penCanvasB.addEventListener('pointerleave', () => {
@@ -3682,7 +3698,17 @@
           // pointermove listener already tracks movement regardless of
           // capture, and claiming capture on this pointer can conflict
           // with the browser's own attempt to claim it for autoscroll.
-          mmbPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
+          holdPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
+          videoViewport.classList.add('panning');
+          updateToolCursor();
+          return;
+        }
+        // Ctrl+left-click = pan, same as MMB but immune to any browser
+        // default action (only the primary button plus a modifier key).
+        // Also available regardless of the active tool, and takes priority
+        // over the tool's own left-click behavior (drawing, arc points, etc).
+        if (e.button === 0 && e.ctrlKey) {
+          holdPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
           videoViewport.classList.add('panning');
           updateToolCursor();
           return;
@@ -3777,7 +3803,7 @@
         // Pan/zoom drag math runs at the window level (see applyVpDrag above)
         // so it keeps working even if this element loses pointer capture
         // mid-drag; just skip the rest of this handler while one is active.
-        if (vpDrag || mmbPan) return;
+        if (vpDrag || holdPan) return;
 
         if (!drawingsVisible) return;
         const pos = getCanvasPos(e);
@@ -3895,9 +3921,9 @@
           updateToolCursor();
           return;
         }
-        if (mmbPan) {
+        if (holdPan) {
           videoViewport.classList.remove('panning');
-          mmbPan = null;
+          holdPan = null;
           updateToolCursor();
           return;
         }
@@ -3910,9 +3936,9 @@
           updateToolCursor();
           return;
         }
-        if (mmbPan) {
+        if (holdPan) {
           videoViewport.classList.remove('panning');
-          mmbPan = null;
+          holdPan = null;
           updateToolCursor();
           return;
         }
