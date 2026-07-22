@@ -72,17 +72,17 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #main-body { display: flex; flex: 1; overflow: hidden; }
 
 /* ===== SIDEBAR TOGGLE BUTTON ===== */
-/* #topbar-left and #tool-hint share flex:1 1 0 (equal, forced width) so
-   #app-title — sized to its own content in between — sits on the bar's true
-   midpoint regardless of how long the toggle label or the hover-hint text
-   currently is (same trick used for the playback row's transport zone). The
-   button itself stays content-sized inside its flex:1 wrapper — growing the
-   button's own box instead just stretched its visible border across half
-   the bar. */
+/* #topbar-left is now an empty spacer: it and #tool-hint still share
+   flex:1 1 0 (equal, forced width) so #app-title — sized to its own content
+   in between — sits on the bar's true midpoint (same trick used for the
+   playback row's transport zone). The toggle button itself lives in
+   #tool-row now (see below) rather than #topbar-left, because #topbar is a
+   sibling of #content, not a descendant of it, and only #content is passed
+   to requestFullscreen() -- a button there is unreachable in fullscreen. */
 #topbar-left { flex: 1 1 0; display: flex; justify-content: flex-start; min-width: 0; }
-#btn-sidebar-toggle {
-  background: none; border: 1px solid #2e2e2e; color: #aaa; font-size: 11px;
-  padding: 3px 10px; border-radius: 4px; white-space: nowrap; cursor: pointer; flex-shrink: 0;
+#tool-row #btn-sidebar-toggle {
+  background: none; border: 1px solid #333; color: #bbb; font-size: 11px;
+  padding: 4px 9px; border-radius: 4px; white-space: nowrap; cursor: pointer; flex-shrink: 0; height: 30px;
 }
 #btn-sidebar-toggle:hover { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
 #btn-sidebar-toggle.active { color: var(--accent-hi); border-color: #2a4a6e; }

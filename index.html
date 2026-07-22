@@ -10,13 +10,15 @@
 <body>
   <div id="app">
     <div id="topbar">
-      <div id="topbar-left"><button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.8</span></div>
+      <div id="topbar-left"></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.9</span></div>
       <div id="tool-hint"></div>
     </div>
 
     <div id="content">
         <div id="tool-row">
+          <button id="btn-sidebar-toggle" title="Toggle playlist">‹ Hide Playlist</button>
+          <div class="tool-sep"></div>
           <div id="tool-row-tools">
           <div class="tool-group" id="view-group">
             <div class="split-btn">
@@ -177,7 +179,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.8 &nbsp;[Last Updated: 07/22/2026 12:15AM PST]</span>
+          <span id="status-version">DrawOver v0.7.9 &nbsp;[Last Updated: 07/22/2026 12:45AM PST]</span>
         </div>
       </div>
   </div>
@@ -369,7 +371,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.8</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.9</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -540,6 +542,23 @@
       // panning always works regardless of which tool is currently active.
       let mmbPan = null; // { startX, startY, startPanX, startPanY }
       let mmbPanB = null;
+
+      // Firefox and Chrome arm their native middle-click autoscroll the
+      // instant the middle button goes down, independent of whether it's
+      // held -- it's a toggle, not a drag. The only way to stop it is to
+      // cancel the *real* mousedown event before the browser's own arm-check
+      // runs. A bubble-phase listener further down the tree (e.g. on
+      // video-container) was too late: by the time it ran, the browser had
+      // already claimed the pointer for its own autoscroll and yanked it
+      // away from our code (spec-mandated: the browser fires pointercancel
+      // once it takes an input over for its own default action), which is
+      // why MMB panning looked like a quick click instead of a held drag --
+      // our own pan state was being torn down by that pointercancel almost
+      // immediately after starting. Listening at window level with
+      // capture:true runs this before the event reaches ANY other handler,
+      // as early as web content can possibly intervene.
+      window.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); }, { capture: true });
+      window.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); }, { capture: true });
 
       // ===== COMPARE MODE STATE =====
       let arcWindow = 5;
@@ -3502,13 +3521,15 @@
       function setupPanelBPointerEvents() {
         penCanvasB.addEventListener('pointerdown', (e) => {
           setActivePanel(false);
-          // Skip preventDefault() here for the middle button specifically --
-          // see the mousedown/auxclick listeners on videoContainerB below for
-          // why: canceling pointerdown suppresses the compatibility mousedown
-          // event that Firefox/Chrome's native autoscroll actually checks.
+          // See the matching comment in penCanvas's pointerdown -- the real
+          // autoscroll cancellation happens in the window-level capture-
+          // phase mousedown listener near the top of the script.
           if (e.button !== 1) e.preventDefault();
           if (e.button === 1) {
-            penCanvasB.setPointerCapture(e.pointerId);
+            // Deliberately no setPointerCapture() here -- the window-level
+            // pointermove listener already tracks movement regardless of
+            // capture, and claiming capture on this pointer can conflict
+            // with the browser's own attempt to claim it for autoscroll.
             mmbPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB };
             videoViewportB.classList.add('panning');
             updateToolCursor();
@@ -3648,15 +3669,19 @@
       penCanvas.addEventListener('pointerdown', (e) => {
         if (compareMode) setActivePanel(true);
         // Skip preventDefault() here for the middle button specifically --
-        // see the mousedown/auxclick listeners on videoContainer below for
-        // why: canceling pointerdown suppresses the compatibility mousedown
-        // event that Firefox/Chrome's native autoscroll actually checks, so
-        // autoscroll stays armed and steals the drag a moment after MMB goes
-        // down -- the exact "hand pops up then panning stops" symptom.
+        // canceling pointerdown suppresses the compatibility mousedown event
+        // that Firefox/Chrome's autoscroll arm-check reads, so autoscroll
+        // would still engage with nothing telling it not to. The real
+        // cancellation happens in the window-level capture-phase mousedown
+        // listener near the top of the script, which runs before this
+        // handler even fires.
         if (e.button !== 1) e.preventDefault();
         // MMB = pan, always available regardless of the active tool.
         if (e.button === 1) {
-          penCanvas.setPointerCapture(e.pointerId);
+          // Deliberately no setPointerCapture() here -- the window-level
+          // pointermove listener already tracks movement regardless of
+          // capture, and claiming capture on this pointer can conflict
+          // with the browser's own attempt to claim it for autoscroll.
           mmbPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY };
           videoViewport.classList.add('panning');
           updateToolCursor();
