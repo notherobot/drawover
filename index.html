@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.10</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.11</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -179,7 +179,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.10 &nbsp;[Last Updated: 07/22/2026 1:10AM PST]</span>
+          <span id="status-version">DrawOver v0.7.11 &nbsp;[Last Updated: 07/22/2026 1:35AM PST]</span>
         </div>
       </div>
   </div>
@@ -333,6 +333,7 @@
         <option value="fibonacci">Fibonacci Spiral</option>
         <option value="cross">Center Cross</option>
         <option value="diagonals">Diagonals</option>
+        <option value="frame">Frame Only (Outer Edge)</option>
       </select>
     </label>
     <label class="guides-row">
@@ -349,6 +350,11 @@
         <option value="4:5">4:5</option>
         <option value="9:16">9:16</option>
       </select>
+    </label>
+    <label class="guides-row">
+      <span>Scale</span>
+      <input type="range" id="guides-scale" min="10" max="100" step="5" value="100" title="Shrink the guide overlay down within the frame, keeping it centered">
+      <span id="guides-scale-val">100</span>%
     </label>
     <label class="guides-row">
       <span>Line color</span>
@@ -371,7 +377,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.10</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.11</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -476,6 +482,8 @@
       const guidesPanel = document.getElementById('guides-panel');
       const guidesTypeSelect = document.getElementById('guides-type');
       const guidesAspectSelect = document.getElementById('guides-aspect');
+      const guidesScaleSlider = document.getElementById('guides-scale');
+      const guidesScaleVal = document.getElementById('guides-scale-val');
       const guidesColorInput = document.getElementById('guides-color');
       const guidesOpacitySlider = document.getElementById('guides-opacity');
       const guidesOpacityVal = document.getElementById('guides-opacity-val');
@@ -523,6 +531,7 @@
       let guidesEnabled = false;  // composition-guide overlay toggle
       let guidesType = 'thirds';
       let guidesAspect = 'video'; // 'video' = match the footage's own displayed bounds
+      let guidesScale = 1; // 0.1-1, shrinks the guide rect toward its own center
       let guidesColor = '#ffcc00';
       let guidesOpacity = 0.9;
       let guidesLineWidth = 1; // CSS pixels; scaled by DPR when actually drawn
@@ -3114,18 +3123,25 @@
 
       // The guide rect in guidesCanvas pixel space: the video's own displayed
       // bounds, further matted (letterboxed/pillarboxed) to the chosen aspect
-      // ratio if one other than "match footage" is selected.
+      // ratio if one other than "match footage" is selected, then shrunk
+      // toward its own center by guidesScale if less than 100%.
       function getGuideRect(canvasW, canvasH) {
         const b = getVideoBounds();
         const vx0 = b.x0 * canvasW, vy0 = b.y0 * canvasH, vx1 = b.x1 * canvasW, vy1 = b.y1 * canvasH;
         const vw = vx1 - vx0, vh = vy1 - vy0;
         const targetRatio = GUIDE_ASPECTS[guidesAspect];
-        if (!targetRatio || !vw || !vh) return { x0: vx0, y0: vy0, x1: vx1, y1: vy1 };
-        const videoRatio = vw / vh;
-        let gw, gh;
-        if (targetRatio > videoRatio) { gw = vw; gh = vw / targetRatio; }
-        else { gh = vh; gw = vh * targetRatio; }
-        const gx0 = vx0 + (vw - gw) / 2, gy0 = vy0 + (vh - gh) / 2;
+        let gx0 = vx0, gy0 = vy0, gw = vw, gh = vh;
+        if (targetRatio && vw && vh) {
+          const videoRatio = vw / vh;
+          if (targetRatio > videoRatio) { gw = vw; gh = vw / targetRatio; }
+          else { gh = vh; gw = vh * targetRatio; }
+          gx0 = vx0 + (vw - gw) / 2; gy0 = vy0 + (vh - gh) / 2;
+        }
+        if (guidesScale < 1) {
+          const cx = gx0 + gw / 2, cy = gy0 + gh / 2;
+          gw *= guidesScale; gh *= guidesScale;
+          gx0 = cx - gw / 2; gy0 = cy - gh / 2;
+        }
         return { x0: gx0, y0: gy0, x1: gx0 + gw, y1: gy0 + gh };
       }
 
@@ -3342,6 +3358,7 @@
         else if (guidesType === 'fibonacci') drawFibonacciSpiral(guidesCtx, r);
         else if (guidesType === 'cross') drawCenterCross(guidesCtx, r);
         else if (guidesType === 'diagonals') drawDiagonals(guidesCtx, r);
+        // 'frame': no extra lines -- the outer edge drawn above is the whole guide.
         guidesCtx.restore();
       }
 
@@ -4271,6 +4288,11 @@
       });
       guidesAspectSelect.addEventListener('change', () => {
         guidesAspect = guidesAspectSelect.value;
+        if (guidesEnabled) redrawGuidesCanvas();
+      });
+      guidesScaleSlider.addEventListener('input', () => {
+        guidesScale = parseInt(guidesScaleSlider.value, 10) / 100;
+        guidesScaleVal.textContent = guidesScaleSlider.value;
         if (guidesEnabled) redrawGuidesCanvas();
       });
       guidesColorInput.addEventListener('input', () => {
