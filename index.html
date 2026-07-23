@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.11</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.12</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -67,9 +67,6 @@
             <button id="btn-add-video">+ Media</button>
             <button id="btn-paste-image" title="Paste image from clipboard">📋</button>
             <button id="btn-add-folder" title="New folder">📁 Folder</button>
-            <label id="trim-import-label" title="Show a trim preview before opening in the session">
-              <input type="checkbox" id="trim-import-cb"> Trim on import
-            </label>
           </div>
           <input type="file" id="file-input" accept="video/mp4,video/webm,video/quicktime,video/*,image/*" multiple hidden>
           <div id="playlist"></div>
@@ -179,7 +176,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.11 &nbsp;[Last Updated: 07/22/2026 1:35AM PST]</span>
+          <span id="status-version">DrawOver v0.7.12 &nbsp;[Last Updated: 07/22/2026 1:55AM PST]</span>
         </div>
       </div>
   </div>
@@ -233,47 +230,6 @@
     </label>
     <button id="btn-compare-flip" title="Flip between full-frame A and full-frame B">⇄ Flip A / B</button>
     <button id="compare-done">Done</button>
-  </div>
-
-  <!-- Trim modal -->
-  <div id="trim-modal" class="hidden">
-    <div id="trim-box">
-      <div id="trim-header">
-        <span id="trim-header-title">Trim Before Opening</span>
-        <span id="trim-filename"></span>
-      </div>
-      <div id="trim-preview-wrap">
-        <video id="trim-video" playsinline webkit-playsinline muted></video>
-      </div>
-      <div id="trim-track-wrap">
-        <div id="trim-track">
-          <div id="trim-range-highlight"></div>
-          <div id="trim-playhead-el"></div>
-          <div class="trim-handle" id="trim-in-handle" title="Drag to set In point"></div>
-          <div class="trim-handle" id="trim-out-handle" title="Drag to set Out point"></div>
-        </div>
-        <div id="trim-time-row">
-          <span id="trim-current-time">00:00:00:00</span>
-          <span id="trim-total-time">00:00:00:00</span>
-        </div>
-      </div>
-      <div id="trim-ctrl-row">
-        <button id="trim-play-btn">▶︎</button>
-        <div class="trim-io-group">
-          <button id="trim-set-in-btn">[ Set In</button>
-          <span id="trim-in-display">In: —</span>
-        </div>
-        <div class="trim-io-group">
-          <button id="trim-set-out-btn">Set Out ]</button>
-          <span id="trim-out-display">Out: —</span>
-        </div>
-        <button id="trim-clear-btn" title="Clear in/out points">✕ Clear</button>
-      </div>
-      <div id="trim-action-row">
-        <button id="trim-skip-btn">Open Without Trim</button>
-        <button id="trim-confirm-btn">Open in Session ▶︎</button>
-      </div>
-    </div>
   </div>
 
   <!-- Arc tracer magnifier -->
@@ -377,7 +333,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.11</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.12</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -385,9 +341,6 @@
       <div id="welcome-drop-sub">MP4, MOV, WebM &nbsp;·&nbsp; PNG, JPG, GIF, WebP &nbsp;·&nbsp; or paste an image</div>
     </div>
     <button id="btn-welcome-browse">Browse files…</button>
-    <label id="welcome-trim-label" title="Show a trim preview before opening in the session">
-      <input type="checkbox" id="welcome-trim-cb"> Trim video before opening in Session view
-    </label>
   </div>
 
   <script>
@@ -1335,130 +1288,6 @@
         });
       }
 
-      // ===== TRIM MODAL =====
-      let trimOnImport = localStorage.getItem('drawover_trim_on_import') === '1';
-      const trimImportCb = document.getElementById('trim-import-cb');
-      const welcomeTrimCb = document.getElementById('welcome-trim-cb');
-
-      function setTrimOnImport(val) {
-        trimOnImport = val;
-        trimImportCb.checked = val;
-        welcomeTrimCb.checked = val;
-        localStorage.setItem('drawover_trim_on_import', val ? '1' : '');
-      }
-      setTrimOnImport(trimOnImport);
-      trimImportCb.addEventListener('change', () => setTrimOnImport(trimImportCb.checked));
-      welcomeTrimCb.addEventListener('change', () => setTrimOnImport(welcomeTrimCb.checked));
-
-      function showTrimModal(entry) {
-        return new Promise(resolve => {
-          const modal = document.getElementById('trim-modal');
-          const vid = document.getElementById('trim-video');
-          const track = document.getElementById('trim-track');
-          const highlight = document.getElementById('trim-range-highlight');
-          const playheadEl = document.getElementById('trim-playhead-el');
-          const inHandle = document.getElementById('trim-in-handle');
-          const outHandle = document.getElementById('trim-out-handle');
-          const currentTimeEl = document.getElementById('trim-current-time');
-          const totalTimeEl = document.getElementById('trim-total-time');
-          const playBtn = document.getElementById('trim-play-btn');
-          const inDisplay = document.getElementById('trim-in-display');
-          const outDisplay = document.getElementById('trim-out-display');
-          document.getElementById('trim-filename').textContent = entry.displayName || entry.name || '';
-
-          let trimIn = null, trimOut = null;
-          let dragging = null; // 'in' | 'out' | 'scrub'
-          const fps = entry.fps || 24;
-          const dur = entry.duration || 0;
-
-          function pctOf(t) { return dur ? Math.max(0, Math.min(1, t / dur)) : 0; }
-          function snapFrame(t) { return Math.round(t * fps) / fps; }
-
-          function updateUI() {
-            const ct = vid.currentTime || 0;
-            const pct = pctOf(ct) * 100;
-            playheadEl.style.left = pct + '%';
-            currentTimeEl.textContent = formatSMPTE(ct, fps);
-            totalTimeEl.textContent = formatSMPTE(dur, fps);
-
-            const inPct = trimIn !== null ? pctOf(trimIn) * 100 : 0;
-            const outPct = trimOut !== null ? pctOf(trimOut) * 100 : 100;
-            inHandle.style.left = inPct + '%';
-            outHandle.style.left = outPct + '%';
-            highlight.style.left = inPct + '%';
-            highlight.style.width = (outPct - inPct) + '%';
-
-            inDisplay.textContent = trimIn !== null ? 'In: ' + formatSMPTE(trimIn, fps) : 'In: —';
-            outDisplay.textContent = trimOut !== null ? 'Out: ' + formatSMPTE(trimOut, fps) : 'Out: —';
-          }
-
-          function seekTo(t) { vid.currentTime = Math.max(0, Math.min(dur, snapFrame(t))); }
-
-          function pctFromEvent(e) {
-            const rect = track.getBoundingClientRect();
-            return Math.max(0, Math.min(1, ((e.clientX ?? (e.touches?.[0]?.clientX ?? 0)) - rect.left) / rect.width));
-          }
-
-          track.addEventListener('pointerdown', e => {
-            e.preventDefault();
-            const pct = pctFromEvent(e);
-            const inP = trimIn !== null ? pctOf(trimIn) : 0;
-            const outP = trimOut !== null ? pctOf(trimOut) : 1;
-            const distIn = Math.abs(pct - inP);
-            const distOut = Math.abs(pct - outP);
-            if (trimIn !== null && distIn < 0.04) { dragging = 'in'; }
-            else if (trimOut !== null && distOut < 0.04) { dragging = 'out'; }
-            else { dragging = 'scrub'; seekTo(pct * dur); }
-            track.setPointerCapture(e.pointerId);
-          });
-
-          track.addEventListener('pointermove', e => {
-            if (!dragging) return;
-            const pct = pctFromEvent(e);
-            const t = snapFrame(pct * dur);
-            if (dragging === 'scrub') { seekTo(t); }
-            else if (dragging === 'in') { trimIn = Math.min(t, trimOut !== null ? trimOut - 1 / fps : dur - 1 / fps); updateUI(); }
-            else if (dragging === 'out') { trimOut = Math.max(t, trimIn !== null ? trimIn + 1 / fps : 1 / fps); updateUI(); }
-          });
-
-          track.addEventListener('pointerup', () => { dragging = null; });
-
-          document.getElementById('trim-set-in-btn').onclick = () => { trimIn = snapFrame(vid.currentTime); if (trimOut !== null && trimIn >= trimOut) trimOut = null; updateUI(); };
-          document.getElementById('trim-set-out-btn').onclick = () => { trimOut = snapFrame(vid.currentTime); if (trimIn !== null && trimOut <= trimIn) trimIn = null; updateUI(); };
-          document.getElementById('trim-clear-btn').onclick = () => { trimIn = null; trimOut = null; updateUI(); };
-
-          playBtn.addEventListener('click', () => {
-            if (vid.paused) { vid.play(); playBtn.textContent = '⏸︎'; }
-            else { vid.pause(); playBtn.textContent = '▶︎'; }
-          });
-
-          vid.addEventListener('timeupdate', updateUI);
-          vid.addEventListener('ended', () => { playBtn.textContent = '▶︎'; });
-
-          function finish(apply) {
-            vid.pause();
-            vid.removeEventListener('timeupdate', updateUI);
-            vid.src = '';
-            modal.classList.add('hidden');
-            if (apply) { entry.inPoint = trimIn; entry.outPoint = trimOut; }
-            resolve();
-          }
-
-          document.getElementById('trim-confirm-btn').onclick = () => finish(true);
-          document.getElementById('trim-skip-btn').onclick = () => finish(false);
-
-          // Load video
-          trimIn = null; trimOut = null;
-          playBtn.textContent = '▶︎';
-          vid.src = entry.objectUrl;
-          vid.load();
-          vid.addEventListener('loadedmetadata', () => { updateUI(); }, { once: true });
-          vid.addEventListener('seeked', updateUI, { once: false });
-
-          modal.classList.remove('hidden');
-        });
-      }
-
       async function addFiles(files) {
         const valid = Array.from(files).filter(f => isVideoFile(f) || isImageFile(f));
         if (!valid.length) return;
@@ -1485,7 +1314,6 @@
         }
         fileInput.value = '';
         if (firstNewIdx < playlist.length) {
-          if (trimOnImport && !playlist[firstNewIdx].isImage) await showTrimModal(playlist[firstNewIdx]);
           await loadVideo(firstNewIdx);
           savePlaylistState();
         }
