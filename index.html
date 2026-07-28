@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.12</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.13</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -176,7 +176,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.12 &nbsp;[Last Updated: 07/22/2026 1:55AM PST]</span>
+          <span id="status-version">DrawOver v0.7.13 &nbsp;[Last Updated: 07/28/2026 9:30AM PST]</span>
         </div>
       </div>
   </div>
@@ -333,7 +333,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.12</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.13</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -492,7 +492,8 @@
       btnLoop.classList.add('active');
       let laserHoldMs = 1000;
 
-      let laserStrokes = []; // each stroke tracks its own lastActivity so strokes fade independently
+      let laserStrokes = []; // each stroke references a shared .group so a whole burst fades together
+      let currentLaserGroup = null; // the group new strokes join if still within laserHoldMs
 
       // ===== PAN/ZOOM STATE =====
       let panX = 0, panY = 0, vpZoom = 1;
@@ -2914,11 +2915,32 @@
         ctx.restore();
       }
 
-      // Each stroke fades on its own timeline: full opacity until laserHoldMs
-      // after its own last point was drawn, then linearly out over
-      // LASER_FADE_DURATION -- independent of whatever other strokes are doing.
-      function laserStrokeAlpha(stroke, now) {
-        const age = now - stroke.lastActivity - laserHoldMs;
+      // Returns the group a new laser stroke starting "now" should join: the
+      // current group if it's still fresh (something was added within the
+      // last laserHoldMs), otherwise a brand-new group. Joining bumps the
+      // group's lastActivity so the whole burst's hold window keeps sliding
+      // forward as long as strokes keep coming; a stale group is left alone
+      // so it keeps fading on its own schedule.
+      function joinLaserGroup(now) {
+        if (!currentLaserGroup || (now - currentLaserGroup.lastActivity) >= laserHoldMs) {
+          currentLaserGroup = { lastActivity: now };
+        } else {
+          currentLaserGroup.lastActivity = now;
+        }
+        return currentLaserGroup;
+      }
+
+      // A laser "group" is a burst of strokes drawn in quick succession (each
+      // new stroke joins the current group as long as it starts within
+      // laserHoldMs of the group's last activity) so the whole burst fades
+      // out together rather than each stroke fading on its own. Once a group
+      // has gone stale (nothing added for laserHoldMs) it starts fading on
+      // its own timeline and is left alone -- a new stroke at that point
+      // starts a fresh group instead of reviving the old one back to full
+      // opacity. Full opacity until laserHoldMs after the group's last
+      // activity, then linearly out over LASER_FADE_DURATION.
+      function laserGroupAlpha(group, now) {
+        const age = now - group.lastActivity - laserHoldMs;
         if (age <= 0) return 1;
         return Math.max(0, 1 - age / LASER_FADE_DURATION);
       }
@@ -2931,7 +2953,7 @@
         const now = Date.now();
         laserCtx.save();
         laserStrokes.forEach(s => {
-          const alpha = laserStrokeAlpha(s, now);
+          const alpha = laserGroupAlpha(s.group, now);
           if (alpha <= 0) return;
           laserCtx.globalAlpha = alpha;
           drawLaserStroke(laserCtx, s, w, h);
@@ -3209,7 +3231,7 @@
         const now = Date.now();
         laserCtxB.save();
         laserStrokes.forEach(s => {
-          const alpha = laserStrokeAlpha(s, now);
+          const alpha = laserGroupAlpha(s.group, now);
           if (alpha <= 0) return;
           laserCtxB.globalAlpha = alpha;
           drawLaserStroke(laserCtxB, s, w, h);
@@ -3432,7 +3454,7 @@
             penCtxB.restore();
           } else if (currentTool === 'laser') {
             isDrawingB = true;
-            laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }], lastActivity: Date.now() });
+            laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }], group: joinLaserGroup(Date.now()) });
             kickLaserLoop();
           } else if (currentTool === 'eraser') {
             isErasingB = true; eraseAtB(pos);
@@ -3461,7 +3483,7 @@
             for (const ce of (eventsLB.length ? eventsLB : [e])) {
               laserB.points.push({ ...getCanvasPosB(ce) });
             }
-            laserB.lastActivity = Date.now();
+            laserB.group.lastActivity = Date.now();
           } else if (currentTool === 'eraser' && isErasingB) {
             eraseAtB(pos);
           }
@@ -3636,7 +3658,7 @@
           penCtx.restore();
         } else if (currentTool === 'laser') {
           isDrawing = true;
-          laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }], lastActivity: Date.now() });
+          laserStrokes.push({ color: drawColor, size: brushSize, opacity: brushOpacity, points: [{ ...pos }], group: joinLaserGroup(Date.now()) });
           kickLaserLoop();
           redrawLaserCanvas();
         } else if (currentTool === 'eraser') {
@@ -3703,7 +3725,7 @@
           for (const ce of (events.length ? events : [e])) {
             laserStroke.points.push({ ...getCanvasPos(ce) });
           }
-          laserStroke.lastActivity = Date.now();
+          laserStroke.group.lastActivity = Date.now();
           redrawLaserCanvas();
         } else if (currentTool === 'eraser' && isErasing) {
           eraseAt(pos);
@@ -4294,8 +4316,8 @@
         laserRafId = null;
         try {
           const now = Date.now();
-          // Drop strokes that have fully faded out (each on its own timeline).
-          laserStrokes = laserStrokes.filter(s => laserStrokeAlpha(s, now) > 0);
+          // Drop strokes whose group has fully faded out (each group on its own timeline).
+          laserStrokes = laserStrokes.filter(s => laserGroupAlpha(s.group, now) > 0);
           redrawLaserCanvas();
           if (compareMode) redrawLaserCanvasB();
         } catch (err) {
