@@ -17,6 +17,14 @@
   --radius: 6px;
 }
 
+@font-face {
+  font-family: 'VVDS Fifties';
+  src: url('VVDSFiftiesExpSBold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
 body {
@@ -88,7 +96,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #btn-sidebar-toggle.active { color: var(--accent-hi); border-color: #2a4a6e; }
 #app-title {
   flex: 0 0 auto; text-align: center; font-size: 17px; font-weight: 700; letter-spacing: 0.5px;
-  font-family: 'Trebuchet MS', Tahoma, Verdana, sans-serif; /* the quintessential early-2000s logo/UI face */
+  font-family: 'VVDS Fifties', 'Trebuchet MS', Tahoma, Verdana, sans-serif;
   color: var(--accent-hi); white-space: nowrap;
   text-shadow: 0 0 10px var(--accent-glow), 0 1px 0 rgba(0,0,0,0.6);
 }
@@ -778,7 +786,7 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 #welcome-overlay.hidden { display: none !important; }
 #welcome-icon { font-size: 80px; line-height: 1; margin-bottom: 20px; }
 #welcome-title {
-  font-size: 28px; font-weight: 700; font-family: 'Trebuchet MS', Tahoma, Verdana, sans-serif;
+  font-size: 28px; font-weight: 700; font-family: 'VVDS Fifties', 'Trebuchet MS', Tahoma, Verdana, sans-serif;
   color: var(--accent-hi); text-shadow: 0 0 18px var(--accent-glow); margin-bottom: 8px;
 }
 #welcome-sub {
