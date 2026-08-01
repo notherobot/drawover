@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.16</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.17</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -176,7 +176,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.16 &nbsp;[Last Updated: 07/31/2026 6:05PM PST]</span>
+          <span id="status-version">DrawOver v0.7.17 &nbsp;[Last Updated: 07/31/2026 6:15PM PST]</span>
         </div>
       </div>
   </div>
@@ -333,7 +333,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.16</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.17</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2182,12 +2182,17 @@
           }
           applyViewportB();
         }
-        if (holdPan) {
+        // Only move the pan using events from the same pointerType that
+        // armed it. Windows Ink was found (via panDebug) to inject an
+        // unrelated phantom pointer -- pointerType 'pen', buttons always 0
+        // -- moments after a real mouse middle-button pointerdown; without
+        // this check its bogus clientX/clientY would also jerk the pan.
+        if (holdPan && e.pointerType === holdPan.pointerType) {
           panX = holdPan.startPanX + (e.clientX - holdPan.startX);
           panY = holdPan.startPanY + (e.clientY - holdPan.startY);
           applyViewport();
         }
-        if (holdPanB) {
+        if (holdPanB && e.pointerType === holdPanB.pointerType) {
           panXB = holdPanB.startPanX + (e.clientX - holdPanB.startX);
           panYB = holdPanB.startPanY + (e.clientY - holdPanB.startY);
           applyViewportB();
@@ -2213,11 +2218,19 @@
       // so requiring a short streak still catches genuinely-missed releases
       // promptly while ignoring one-frame glitches.
       let missedReleaseStreak = 0;
+      // holdPan/holdPanB get their own streaks, counted only from events
+      // whose pointerType matches the one that armed them (see the matching
+      // comment on the panDebug findings below) -- kept separate from
+      // missedReleaseStreak so an unrelated phantom pointer's buttons=0
+      // readings can never contribute to clearing them.
+      let holdPanMissedReleaseStreak = 0, holdPanBMissedReleaseStreak = 0;
       // Also reset on every genuine pointerdown -- otherwise idle hover
       // movement (which reports buttons=0 just like a real release) can leave
       // the streak sitting at 1 from before a drag even starts, so a single
       // glitch during the drag itself would immediately hit the threshold.
-      window.addEventListener('pointerdown', () => { missedReleaseStreak = 0; });
+      window.addEventListener('pointerdown', () => {
+        missedReleaseStreak = 0; holdPanMissedReleaseStreak = 0; holdPanBMissedReleaseStreak = 0;
+      });
       let panDebugLastButtons = null, panDebugLastPointerId = null;
       window.addEventListener('pointermove', (e) => {
         if (holdPan || holdPanB) {
@@ -2230,24 +2243,58 @@
           panDebugLastButtons = null; panDebugLastPointerId = null;
         }
         applyVpDrag(e);
+
+        // Diagnosed via panDebug: with Windows Ink enabled, a genuine mouse
+        // middle-button pointerdown is followed within milliseconds by an
+        // unrelated *phantom* pointermove -- pointerType 'pen', buttons
+        // always 0 -- that has nothing to do with the physical button still
+        // held down. That phantom event used to feed straight into the
+        // shared missedReleaseStreak below and force-cleared holdPan within
+        // ~10ms of arming, which is why MMB pan looked completely dead under
+        // Windows Ink specifically. Give holdPan/holdPanB their own streaks
+        // fed only by events whose pointerType matches the one that armed
+        // them, so a different-typed phantom pointer can never be mistaken
+        // for the real button releasing.
+        if (holdPan) {
+          if (e.pointerType !== holdPan.pointerType) {
+            // ignore -- unrelated pointer, doesn't count either way
+          } else if (e.buttons !== 0) {
+            holdPanMissedReleaseStreak = 0;
+          } else if (++holdPanMissedReleaseStreak >= 2) {
+            panDebug('holdPan force-cleared by matched-pointerType missed release');
+            videoViewport.classList.remove('panning'); holdPan = null; updateToolCursor();
+          }
+        } else {
+          holdPanMissedReleaseStreak = 0;
+        }
+        if (holdPanB) {
+          if (e.pointerType !== holdPanB.pointerType) {
+            // ignore -- unrelated pointer, doesn't count either way
+          } else if (e.buttons !== 0) {
+            holdPanBMissedReleaseStreak = 0;
+          } else if (++holdPanBMissedReleaseStreak >= 2) {
+            panDebug('holdPanB force-cleared by matched-pointerType missed release');
+            videoViewportB.classList.remove('panning'); holdPanB = null;
+          }
+        } else {
+          holdPanBMissedReleaseStreak = 0;
+        }
+
         // vpDrag/vpDragB can be started by the left button (pan/zoom tools)
-        // or the right button (universal zoom); holdPan/holdPanB by the
-        // middle button or Ctrl+left (universal pan) — checking only bit 1
-        // (left) treated every right- or middle-button drag as "no button
-        // held" and cancelled pan/zoom on literally every pointermove during
-        // the drag. Any button held at all means nothing is stuck.
+        // or the right button (universal zoom); checking only bit 1 (left)
+        // treated every right-button drag as "no button held" and cancelled
+        // zoom on literally every pointermove during the drag. Any button
+        // held at all means nothing is stuck. holdPan/holdPanB are handled
+        // above via their own pointerType-matched streaks.
         if (e.buttons !== 0) { missedReleaseStreak = 0; return; }
         missedReleaseStreak++;
         if (missedReleaseStreak < 2) return;
-        if (holdPan || holdPanB) panDebug('window pointermove safety net force-clearing hold-pan (missed release)');
         if (isDrawing || isErasing || arcDragFrame !== null) finishStroke();
         if (isDrawingB || isErasingB || currentStrokeB) finishStrokeB();
         if (isScrubbing) { player.endScrub(); isScrubbing = false; }
         if (draggingHandle) draggingHandle = null;
         if (vpDrag) { videoViewport.classList.remove('panning', 'zooming'); vpDrag = null; updateToolCursor(); }
         if (vpDragB) { videoViewportB.classList.remove('panning', 'zooming'); vpDragB = null; }
-        if (holdPan) { videoViewport.classList.remove('panning'); holdPan = null; updateToolCursor(); }
-        if (holdPanB) { videoViewportB.classList.remove('panning'); holdPanB = null; }
       });
 
       function updateInOutUI() {
@@ -3435,7 +3482,7 @@
             // pointermove listener already tracks movement regardless of
             // capture, and claiming capture on this pointer can conflict
             // with the browser's own attempt to claim it for autoscroll.
-            holdPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB, pointerId: e.pointerId };
+            holdPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB, pointerId: e.pointerId, pointerType: e.pointerType };
             videoViewportB.classList.add('panning');
             updateToolCursor();
             return;
@@ -3444,7 +3491,7 @@
           // default action. See the matching comment in penCanvas's
           // pointerdown.
           if (e.button === 0 && e.ctrlKey) {
-            holdPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB, pointerId: e.pointerId };
+            holdPanB = { startX: e.clientX, startY: e.clientY, startPanX: panXB, startPanY: panYB, pointerId: e.pointerId, pointerType: e.pointerType };
             videoViewportB.classList.add('panning');
             updateToolCursor();
             return;
@@ -3604,7 +3651,7 @@
           // pointermove listener already tracks movement regardless of
           // capture, and claiming capture on this pointer can conflict
           // with the browser's own attempt to claim it for autoscroll.
-          holdPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY, pointerId: e.pointerId };
+          holdPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY, pointerId: e.pointerId, pointerType: e.pointerType };
           videoViewport.classList.add('panning');
           updateToolCursor();
           return;
@@ -3614,7 +3661,7 @@
         // Also available regardless of the active tool, and takes priority
         // over the tool's own left-click behavior (drawing, arc points, etc).
         if (e.button === 0 && e.ctrlKey) {
-          holdPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY, pointerId: e.pointerId };
+          holdPan = { startX: e.clientX, startY: e.clientY, startPanX: panX, startPanY: panY, pointerId: e.pointerId, pointerType: e.pointerType };
           videoViewport.classList.add('panning');
           updateToolCursor();
           return;
