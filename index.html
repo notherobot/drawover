@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.17</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.18</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -176,7 +176,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.17 &nbsp;[Last Updated: 07/31/2026 6:15PM PST]</span>
+          <span id="status-version">DrawOver v0.7.18 &nbsp;[Last Updated: 07/31/2026 6:25PM PST]</span>
         </div>
       </div>
   </div>
@@ -333,7 +333,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.17</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.18</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2182,17 +2182,24 @@
           }
           applyViewportB();
         }
-        // Only move the pan using events from the same pointerType that
-        // armed it. Windows Ink was found (via panDebug) to inject an
-        // unrelated phantom pointer -- pointerType 'pen', buttons always 0
-        // -- moments after a real mouse middle-button pointerdown; without
-        // this check its bogus clientX/clientY would also jerk the pan.
-        if (holdPan && e.pointerType === holdPan.pointerType) {
+        // Apply pan movement from ANY pointer while a hold-pan is active --
+        // not just the pointerType that armed it. Under Windows Ink, the
+        // digitizer's continuous position stream arrives as pointerType
+        // 'pen' hover events (buttons always 0, since pen pointerType never
+        // carries the mouse button bit), while the *mouse*-type pointer only
+        // fires for the button down/up moments -- restricting movement to
+        // pointerType 'mouse' (an earlier version of this fix) starved the
+        // pan of essentially all its position data, leaving it frozen until
+        // one stray mouse-type event finally arrived. Position data is
+        // trustworthy from either stream; only the *release* decision below
+        // needs to stay pointerType-gated, since only the mouse-type stream
+        // can actually tell us the middle button's state.
+        if (holdPan) {
           panX = holdPan.startPanX + (e.clientX - holdPan.startX);
           panY = holdPan.startPanY + (e.clientY - holdPan.startY);
           applyViewport();
         }
-        if (holdPanB && e.pointerType === holdPanB.pointerType) {
+        if (holdPanB) {
           panXB = holdPanB.startPanX + (e.clientX - holdPanB.startX);
           panYB = holdPanB.startPanY + (e.clientY - holdPanB.startY);
           applyViewportB();
@@ -2244,20 +2251,25 @@
         }
         applyVpDrag(e);
 
-        // Diagnosed via panDebug: with Windows Ink enabled, a genuine mouse
-        // middle-button pointerdown is followed within milliseconds by an
-        // unrelated *phantom* pointermove -- pointerType 'pen', buttons
-        // always 0 -- that has nothing to do with the physical button still
-        // held down. That phantom event used to feed straight into the
-        // shared missedReleaseStreak below and force-cleared holdPan within
+        // Diagnosed via panDebug: with Windows Ink enabled, the middle
+        // button's down/up state only ever appears on pointerType 'mouse'
+        // events -- the digitizer's actual continuous position stream comes
+        // through separately as pointerType 'pen' hover events that always
+        // report buttons=0, since pen pointerType structurally can't carry
+        // the mouse button bit. That buttons=0 reading isn't evidence of a
+        // release; it's just how that stream always looks. Feeding it into
+        // the shared missedReleaseStreak below force-cleared holdPan within
         // ~10ms of arming, which is why MMB pan looked completely dead under
-        // Windows Ink specifically. Give holdPan/holdPanB their own streaks
-        // fed only by events whose pointerType matches the one that armed
-        // them, so a different-typed phantom pointer can never be mistaken
-        // for the real button releasing.
+        // Windows Ink. Give holdPan/holdPanB their own streaks fed only by
+        // events whose pointerType matches the one that armed them (always
+        // 'mouse' for MMB), so the pen stream's permanent buttons=0 can
+        // never be mistaken for the real button releasing -- while position
+        // updates above still use every pointer's coordinates regardless of
+        // type, since that's where the actual continuous motion data is.
         if (holdPan) {
           if (e.pointerType !== holdPan.pointerType) {
-            // ignore -- unrelated pointer, doesn't count either way
+            // different-typed pointer (e.g. the pen hover stream) -- not
+            // evidence either way about whether the real button is held
           } else if (e.buttons !== 0) {
             holdPanMissedReleaseStreak = 0;
           } else if (++holdPanMissedReleaseStreak >= 2) {
