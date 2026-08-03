@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.18</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.19</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -56,6 +56,7 @@
             <label title="How long a laser stroke stays on screen before fading">Laser hold <input type="range" id="laser-hold" min="0" max="5" step="0.5" value="1"><span id="laser-hold-val">1</span>s</label>
           </div>
           </div>
+          <button id="btn-light-mode" title="Toggle Light Mode">☀️ Light</button>
           <button id="btn-devtools" title="Developer Tools">Dev</button>
         </div>
         <input type="number" id="fps-input" min="1" max="120" value="24" hidden>
@@ -176,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.18 &nbsp;[Last Updated: 07/31/2026 6:25PM PST]</span>
+          <span id="status-version">DrawOver v0.7.19 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
         </div>
       </div>
   </div>
@@ -333,7 +334,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.18</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.19</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -4570,6 +4571,16 @@
         devtoolsPanel.dataset.copyText =
           `OBS Crop/Pad Filter\nLeft: ${left}\nTop: ${top}\nRight: ${right}\nBottom: ${bottom}`;
       }
+      // ===== LIGHT MODE =====
+      const btnLightMode = document.getElementById('btn-light-mode');
+      function setLightMode(on) {
+        document.body.classList.toggle('light-mode', on);
+        btnLightMode.classList.toggle('active', on);
+        localStorage.setItem('drawover_light_mode', on ? '1' : '0');
+      }
+      setLightMode(localStorage.getItem('drawover_light_mode') === '1');
+      btnLightMode.addEventListener('click', () => setLightMode(!document.body.classList.contains('light-mode')));
+
       btnDevtools.addEventListener('click', () => {
         const open = devtoolsPanel.classList.toggle('open');
         btnDevtools.classList.toggle('active', open);
