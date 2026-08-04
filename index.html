@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.20</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.21</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -177,7 +177,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.20 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
+          <span id="status-version">DrawOver v0.7.21 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
         </div>
       </div>
   </div>
@@ -334,7 +334,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.20</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.21</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -2052,10 +2052,13 @@
       function updateScrubFrameGrid() {
         if (!player.duration) { scrubBar.style.background = ''; return; }
         const fw = framePctWidth();
+        const isLightMode = document.body.classList.contains('light-mode');
+        const color1 = isLightMode ? '#e8ecf0' : '#242424';
+        const color2 = isLightMode ? '#f5f7fa' : '#2c2c2c';
         scrubBar.style.background =
           'repeating-linear-gradient(to right,' +
-          ' #242424 0, #242424 ' + fw + '%,' +
-          ' #2c2c2c ' + fw + '%, #2c2c2c ' + (2 * fw) + '%)';
+          ' ' + color1 + ' 0, ' + color1 + ' ' + fw + '%,' +
+          ' ' + color2 + ' ' + fw + '%, ' + color2 + ' ' + (2 * fw) + '%)';
       }
 
       function updateScrubBar() {
@@ -4577,6 +4580,7 @@
         document.body.classList.toggle('light-mode', on);
         btnLightMode.classList.toggle('active', on);
         localStorage.setItem('drawover_light_mode', on ? '1' : '0');
+        updateScrubFrameGrid();
       }
       setLightMode(localStorage.getItem('drawover_light_mode') === '1');
       btnLightMode.addEventListener('click', () => setLightMode(!document.body.classList.contains('light-mode')));
