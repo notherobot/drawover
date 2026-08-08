@@ -737,9 +737,9 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #devtools-panel .dt-section td { color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; padding-top: 8px; }
 #dt-copy-btn { margin-top: 10px; width: 100%; padding: 5px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; color: #ccc; cursor: pointer; font-size: 11px; }
 #dt-copy-btn:hover { background: #333; color: #fff; }
-#btn-devtools { font-size: 10px; padding: 2px 6px; }
+#btn-devtools { font-size: 11px; padding: 4px 9px; }
 #btn-devtools.active { background: #1e3520; color: #7ddb8e; border-color: #7ddb8e; }
-#btn-light-mode { font-size: 10px; padding: 2px 6px; }
+#btn-light-mode { font-size: 11px; padding: 4px 9px; }
 #btn-light-mode.active { background: #5c4a00; color: #ffd966; border-color: #ffd966; }
 
 /* ===== DISABLED CONTROLS ===== */
@@ -822,6 +822,11 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
   text-shadow: 0 1px 0 rgba(255,255,255,0.35);
 }
 #btn-welcome-browse:hover { background: linear-gradient(to bottom, #97d4ff, #4facff 45%, var(--accent-lo)); }
+#btn-welcome-light-mode {
+  background: none; border: 1px solid #333; color: #bbb; font-size: 13px;
+  padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500;
+}
+#btn-welcome-light-mode:hover { background: #2a2a2a; color: #e0e0e0; }
 
 /* =========================================================================
    LIGHT MODE — toggled via the Light button next to Dev (body.light-mode).
@@ -854,6 +859,7 @@ body.light-mode #topbar {
   border-bottom: 1px solid #d4d8dd; box-shadow: 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(0,0,0,0.06);
 }
 body.light-mode #version { color: #888; }
+body.light-mode #app-title { color: var(--accent-lo); text-shadow: none; }
 body.light-mode #tool-hint { color: #5a6b7a; }
 body.light-mode #btn-sidebar-toggle,
 body.light-mode #btn-reset-view, body.light-mode #btn-compare, body.light-mode #btn-compare-frame {
@@ -1026,6 +1032,8 @@ body.light-mode #welcome-drop-zone:hover, body.light-mode #welcome-drop-zone.dra
 body.light-mode #welcome-drop-icon { color: #99a; }
 body.light-mode #welcome-drop-label { color: #556; }
 body.light-mode #welcome-drop-sub { color: #889; }
+body.light-mode #btn-welcome-light-mode { background: #e4e8ec; border-color: #ccd2d9; color: #445; }
+body.light-mode #btn-welcome-light-mode:hover { background: #d8dde3; color: #222; }
 
 /* ===== MOBILE RESPONSIVE ===== */
 @media (max-width: 639px) {
