@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.23</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.24</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -167,6 +167,7 @@
             <button id="btn-set-out" title="Set Out Point (O)">Out ]</button>
             <button id="btn-clear-inout" title="Clear In/Out">✕ Range</button>
             <button id="btn-loop" title="Loop In/Out">↺ Loop</button>
+            <button id="btn-save-clip" title="Save the In/Out range as a new clip in the playlist">✂ Save Clip</button>
             <div class="pb-sep"></div>
             <button id="btn-mute" title="Mute">🔊</button>
             <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1" title="Volume">
@@ -177,7 +178,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.23 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
+          <span id="status-version">DrawOver v0.7.24 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
         </div>
       </div>
   </div>
@@ -334,7 +335,7 @@
   <div id="welcome-overlay">
     <div id="welcome-icon">🖌️</div>
     <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.23</div>
+    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.24</div>
     <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
     <div id="welcome-drop-zone">
       <div id="welcome-drop-icon">🎬</div>
@@ -421,6 +422,7 @@
       const btnSetOut = document.getElementById('btn-set-out');
       const btnClearInOut = document.getElementById('btn-clear-inout');
       const btnLoop = document.getElementById('btn-loop');
+      const btnSaveClip = document.getElementById('btn-save-clip');
       const btnPrevAnnotation = document.getElementById('btn-prev-annotation');
       const btnNextAnnotation = document.getElementById('btn-next-annotation');
       const fpsInput = document.getElementById('fps-input');
@@ -1975,7 +1977,7 @@
         playlist[activeIndex].inPoint = player.getCurrentTime();
         player.inPoint = playlist[activeIndex].inPoint;
         setAutoLoop();
-        updateInOutUI(); updateScrubTicks(); scheduleAnnotationSave();
+        updateInOutUI(); updateScrubTicks(); updateControlAvailability(); scheduleAnnotationSave();
       });
 
       btnSetOut.addEventListener('click', () => {
@@ -1983,7 +1985,7 @@
         playlist[activeIndex].outPoint = player.getCurrentTime();
         player.outPoint = playlist[activeIndex].outPoint;
         setAutoLoop();
-        updateInOutUI(); updateScrubTicks(); scheduleAnnotationSave();
+        updateInOutUI(); updateScrubTicks(); updateControlAvailability(); scheduleAnnotationSave();
       });
 
       btnClearInOut.addEventListener('click', () => {
@@ -1992,7 +1994,7 @@
         playlist[activeIndex].outPoint = null;
         player.inPoint = null; player.outPoint = null;
         loopEnabled = false; btnLoop.classList.remove('active'); player.loop = false;
-        updateInOutUI(); updateScrubTicks(); scheduleAnnotationSave();
+        updateInOutUI(); updateScrubTicks(); updateControlAvailability(); scheduleAnnotationSave();
       });
 
       btnLoop.addEventListener('click', () => {
@@ -2000,6 +2002,156 @@
         btnLoop.classList.toggle('active', loopEnabled);
         if (activeIndex >= 0) player.loop = loopEnabled;
       });
+
+      // ===== SAVE IN/OUT RANGE AS A NEW CLIP =====
+      // There's no backend here, and GitHub Pages can't serve the
+      // cross-origin-isolation headers ffmpeg.wasm's fast trim path needs, so
+      // the only dependency-free way to produce a real trimmed video file is
+      // to re-record the in/out range in real time: play it into an offscreen
+      // canvas + capture its audio track, and pipe both into a MediaRecorder.
+      function pickClipMimeType() {
+        if (!window.MediaRecorder) return '';
+        const candidates = [
+          'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+          'video/mp4',
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm',
+        ];
+        return candidates.find(c => MediaRecorder.isTypeSupported(c)) || '';
+      }
+
+      function showClipProgress() {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10000;display:flex;align-items:center;justify-content:center;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #3a3a3a;border-radius:10px;padding:24px 28px;min-width:260px;color:#e0e0e0;font-size:14px;box-shadow:0 8px 32px rgba(0,0,0,0.7);text-align:center;';
+        box.innerHTML = `
+          <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Saving clip…</div>
+          <div style="background:#111;border-radius:5px;height:8px;overflow:hidden;margin-bottom:10px;">
+            <div id="_clip_bar" style="background:#3aa0ff;height:100%;width:0%;"></div>
+          </div>
+          <div id="_clip_pct" style="color:#999;font-size:12px;">0%</div>`;
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        const bar = box.querySelector('#_clip_bar');
+        const pct = box.querySelector('#_clip_pct');
+        return {
+          update(p) { bar.style.width = p + '%'; pct.textContent = p + '%'; },
+          close() { overlay.remove(); }
+        };
+      }
+
+      async function saveInOutAsClip() {
+        const entry = getActiveEntry();
+        if (!entry || entry.isImage) return;
+        const inTime = entry.inPoint !== null ? entry.inPoint : 0;
+        const outTime = entry.outPoint !== null ? entry.outPoint : player.duration;
+        if (!(outTime > inTime)) return;
+
+        const mimeType = pickClipMimeType();
+        if (!mimeType) {
+          alert("This browser can't record video (MediaRecorder unsupported), so clips can't be saved here.");
+          return;
+        }
+
+        player.pause();
+        setPlayIcon(false);
+        const progress = showClipProgress();
+        let clipVideo = null;
+
+        try {
+          clipVideo = document.createElement('video');
+          clipVideo.src = entry.objectUrl;
+          clipVideo.playsInline = true;
+          clipVideo.preload = 'auto';
+          await new Promise((resolve, reject) => {
+            clipVideo.addEventListener('loadedmetadata', resolve, { once: true });
+            clipVideo.addEventListener('error', () => reject(new Error('Failed to load video for clipping.')), { once: true });
+          });
+          await new Promise(resolve => {
+            clipVideo.addEventListener('seeked', resolve, { once: true });
+            clipVideo.currentTime = inTime;
+          });
+
+          const canvas = document.createElement('canvas');
+          canvas.width = clipVideo.videoWidth || 1280;
+          canvas.height = clipVideo.videoHeight || 720;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(clipVideo, 0, 0, canvas.width, canvas.height);
+
+          let tracks = canvas.captureStream(entry.fps || 30).getVideoTracks();
+          try {
+            const srcStream = clipVideo.captureStream ? clipVideo.captureStream()
+              : (clipVideo.mozCaptureStream ? clipVideo.mozCaptureStream() : null);
+            const audioTracks = srcStream ? srcStream.getAudioTracks() : [];
+            if (audioTracks.length) tracks = tracks.concat(audioTracks);
+          } catch (_) {}
+
+          const recorder = new MediaRecorder(new MediaStream(tracks), { mimeType });
+          const chunks = [];
+          recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+          const stopped = new Promise(resolve => { recorder.onstop = resolve; });
+
+          let rafId = null;
+          const stopCapture = () => {
+            if (rafId !== null) cancelAnimationFrame(rafId);
+            rafId = null;
+            try { clipVideo.pause(); } catch (_) {}
+            if (recorder.state !== 'inactive') recorder.stop();
+          };
+          const drawLoop = () => {
+            ctx.drawImage(clipVideo, 0, 0, canvas.width, canvas.height);
+            const pct = Math.max(0, Math.min(100, Math.round(((clipVideo.currentTime - inTime) / (outTime - inTime)) * 100)));
+            progress.update(pct);
+            if (clipVideo.ended || clipVideo.currentTime >= outTime) stopCapture();
+            else rafId = requestAnimationFrame(drawLoop);
+          };
+
+          recorder.start();
+          await clipVideo.play();
+          rafId = requestAnimationFrame(drawLoop);
+          // Safety net in case the stop condition above never gets satisfied
+          // (e.g. a stalled decoder never advancing currentTime).
+          const safetyTimer = setTimeout(stopCapture, (outTime - inTime) * 1000 + 4000);
+          await stopped;
+          clearTimeout(safetyTimer);
+          progress.update(100);
+          clipVideo.src = '';
+
+          const blob = new Blob(chunks, { type: mimeType });
+          const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+          const baseName = (entry.displayName || entry.name || 'clip').replace(/\.[^.]+$/, '');
+          const clipFile = new File([blob], `${baseName} (clip).${ext}`, { type: mimeType });
+          const clipObjectUrl = URL.createObjectURL(clipFile);
+          const { thumbnail, fps, duration } = await analyzeVideo(clipObjectUrl);
+
+          const clipEntry = {
+            id: uuid(), name: clipFile.name, blob: clipFile, objectUrl: clipObjectUrl,
+            isImage: false, annotations: {}, arcPoints: {},
+            inPoint: null, outPoint: null,
+            fps: fps || entry.fps, duration,
+            undoStack: [], redoStack: [],
+            thumbnail,
+            displayName: `${entry.displayName || baseName} (clip)`,
+            color: entry.color || null,
+            folderId: entry.folderId || null,
+          };
+          playlist.push(clipEntry);
+          if (!playlistOrder.includes(clipEntry.id)) playlistOrder.push(clipEntry.id);
+          persistEntry(clipEntry).catch(() => {});
+          renderPlaylist();
+          savePlaylistState();
+        } catch (err) {
+          console.warn('DrawOver: save clip failed', err);
+          alert('Could not save clip: ' + (err && err.message ? err.message : err));
+        } finally {
+          progress.close();
+          if (clipVideo) clipVideo.src = '';
+        }
+      }
+
+      btnSaveClip.addEventListener('click', saveInOutAsClip);
 
       fpsInput.addEventListener('change', () => {
         if (activeIndex >= 0) { playlist[activeIndex].fps = getFPS(); player.fps = getFPS(); scheduleAnnotationSave(); }
@@ -4052,6 +4204,9 @@
          btnSetIn, btnSetOut, btnClearInOut, btnLoop,
          btnMute, volumeSlider, document.getElementById('speed-select')
         ].forEach(el => { if (el) el.disabled = noVideo || isImage; });
+        // Save Clip additionally needs a real in/out range to cut.
+        const hasRange = !!(entry && entry.inPoint !== null && entry.outPoint !== null && entry.outPoint > entry.inPoint);
+        btnSaveClip.disabled = noVideo || isImage || !hasRange;
         // Undo/redo
         btnUndo.disabled = !entry || !entry.undoStack.length;
         btnRedo.disabled = !entry || !entry.redoStack.length;
