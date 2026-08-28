@@ -776,9 +776,12 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 #content:fullscreen #sidebar,
 #content:fullscreen #sidebar-resizer { display: none; }
 
-/* ===== WELCOME OVERLAY ===== */
+/* ===== WELCOME OVERLAY =====
+   Lives inside #video-container (which is position:relative) rather than as
+   a full-viewport overlay, so it reads as "the canvas area, before you've
+   loaded anything" instead of a modal blocking the whole app. */
 #welcome-overlay {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999;
+  position: absolute; inset: 0; z-index: 10;
   background: #0d0d0d; opacity: 1;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -797,11 +800,11 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
   text-align: center; max-width: 380px; line-height: 1.6;
 }
 #welcome-drop-zone {
-  width: 420px; max-width: 90vw;
+  width: 420px; max-width: 90%;
   border: 2px dashed #444; border-radius: 14px;
   padding: 40px 32px; text-align: center;
   cursor: pointer; transition: border-color 0.2s, background 0.2s;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 #welcome-drop-zone:hover, #welcome-drop-zone.drag-over {
   border-color: #3aa0ff; background: rgba(58,160,255,0.06);
@@ -822,11 +825,26 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
   text-shadow: 0 1px 0 rgba(255,255,255,0.35);
 }
 #btn-welcome-browse:hover { background: linear-gradient(to bottom, #97d4ff, #4facff 45%, var(--accent-lo)); }
+/* Always-reachable theme toggle, pinned to the welcome panel's own corner
+   since the real toolbar (with its own Light/Dark button) is dimmed out. */
 #btn-welcome-light-mode {
+  position: absolute; top: 16px; right: 16px;
   background: none; border: 1px solid #333; color: #bbb; font-size: 13px;
-  padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500;
+  padding: 6px 14px; border-radius: 6px; cursor: pointer; font-weight: 500;
 }
 #btn-welcome-light-mode:hover { background: #2a2a2a; color: #e0e0e0; }
+
+/* ===== WELCOME STATE: dim + disable the rest of the chrome ===== */
+body.welcome-active #topbar,
+body.welcome-active #sidebar,
+body.welcome-active #sidebar-resizer,
+body.welcome-active #tool-row,
+body.welcome-active #scrub-bar-container,
+body.welcome-active #playback-row,
+body.welcome-active #status-bar {
+  opacity: 0.35; pointer-events: none;
+  transition: opacity 0.4s ease;
+}
 
 /* =========================================================================
    LIGHT MODE — toggled via the Light button next to Dev (body.light-mode).

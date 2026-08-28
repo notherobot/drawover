@@ -7,11 +7,11 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖌️</text></svg>">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="welcome-active">
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.24</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.25</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -86,6 +86,21 @@
                 <canvas id="pen-canvas"></canvas>
                 <canvas id="laser-canvas"></canvas>
                 <canvas id="arc-canvas"></canvas>
+              </div>
+
+              <!-- Welcome / onboarding overlay -->
+              <div id="welcome-overlay">
+                <button id="btn-welcome-light-mode" title="Toggle light/dark mode">☀️ Light</button>
+                <div id="welcome-icon">🖌️</div>
+                <div id="welcome-title">DrawOver</div>
+                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.25</div>
+                <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
+                <div id="welcome-drop-zone">
+                  <div id="welcome-drop-icon">🎬</div>
+                  <div id="welcome-drop-label">Drop a video or image here</div>
+                  <div id="welcome-drop-sub">MP4, MOV, WebM &nbsp;·&nbsp; PNG, JPG, GIF, WebP &nbsp;·&nbsp; or paste an image</div>
+                </div>
+                <button id="btn-welcome-browse">Browse files…</button>
               </div>
             </div>
           </div>
@@ -178,7 +193,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.24 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
+          <span id="status-version">DrawOver v0.7.25 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
         </div>
       </div>
   </div>
@@ -329,23 +344,6 @@
       <span id="guides-thickness-val">1</span>px
     </label>
     <button id="guides-done">Done</button>
-  </div>
-
-  <!-- Welcome / onboarding overlay — before script so getElementById finds it -->
-  <div id="welcome-overlay">
-    <div id="welcome-icon">🖌️</div>
-    <div id="welcome-title">DrawOver</div>
-    <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.24</div>
-    <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
-    <div id="welcome-drop-zone">
-      <div id="welcome-drop-icon">🎬</div>
-      <div id="welcome-drop-label">Drop a video or image here</div>
-      <div id="welcome-drop-sub">MP4, MOV, WebM &nbsp;·&nbsp; PNG, JPG, GIF, WebP &nbsp;·&nbsp; or paste an image</div>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;">
-      <button id="btn-welcome-light-mode" title="Toggle light/dark mode" style="flex:1;max-width:120px;">☀️ Light</button>
-      <button id="btn-welcome-browse" style="flex:1;max-width:120px;">Browse files…</button>
-    </div>
   </div>
 
   <script>
@@ -4794,6 +4792,7 @@
       const welcomeOverlay = document.getElementById('welcome-overlay');
 
       function dismissWelcome() {
+        document.body.classList.remove('welcome-active');
         if (!welcomeOverlay || welcomeOverlay.classList.contains('hidden')) return;
         welcomeOverlay.classList.add('dismissing');
         welcomeOverlay.addEventListener('transitionend', () => {
