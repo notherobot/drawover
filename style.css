@@ -790,7 +790,7 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 }
 #welcome-overlay.dismissing { opacity: 0; pointer-events: none; }
 #welcome-overlay.hidden { display: none !important; }
-#welcome-icon { font-size: 80px; line-height: 1; margin-bottom: 20px; }
+#welcome-icon { width: 220px; height: auto; display: block; margin-bottom: 20px; }
 #welcome-title {
   font-size: 28px; font-weight: 700; font-family: 'VVDS Fifties', 'Trebuchet MS', Tahoma, Verdana, sans-serif;
   color: var(--accent-hi); text-shadow: 0 0 18px var(--accent-glow); margin-bottom: 8px;
