@@ -76,7 +76,6 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   border-bottom: 1px solid #000; box-shadow: 0 1px 0 rgba(255,255,255,0.05), 0 2px 6px rgba(0,0,0,0.4);
   flex-shrink: 0; position: relative; z-index: 1;
 }
-#version { font-size: 10px; font-weight: 400; color: #999; margin-left: 4px; }
 #main-body { display: flex; flex: 1; overflow: hidden; }
 
 /* ===== SIDEBAR TOGGLE BUTTON ===== */
@@ -95,11 +94,13 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #btn-sidebar-toggle:hover { background: #2a2a2a; color: #e0e0e0; border-color: #444; }
 #btn-sidebar-toggle.active { color: var(--accent-hi); border-color: #2a4a6e; }
 #app-title {
-  flex: 0 0 auto; text-align: center; font-size: 17px; font-weight: 700; letter-spacing: 0.5px;
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  font-size: 17px; font-weight: 700; letter-spacing: 0.5px;
   font-family: 'VVDS Fifties', 'Trebuchet MS', Tahoma, Verdana, sans-serif;
   color: var(--accent-hi); white-space: nowrap;
   text-shadow: 0 0 10px var(--accent-glow), 0 1px 0 rgba(0,0,0,0.6);
 }
+#app-logo { height: 26px; width: auto; display: block; flex-shrink: 0; }
 /* Maya-style tool hint: hovering any control updates this instead of (well,
    in addition to) the browser's native title tooltip near the cursor. */
 #tool-hint {
@@ -871,7 +872,6 @@ body.light-mode #topbar {
   background: linear-gradient(to bottom, #ffffff 0%, #eef1f4 100%);
   border-bottom: 1px solid #d4d8dd; box-shadow: 0 1px 0 rgba(255,255,255,0.6), 0 2px 6px rgba(0,0,0,0.06);
 }
-body.light-mode #version { color: #888; }
 body.light-mode #app-title { color: var(--accent-lo); text-shadow: none; }
 body.light-mode #tool-hint { color: #5a6b7a; }
 body.light-mode #btn-sidebar-toggle,
