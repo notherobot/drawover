@@ -11,7 +11,7 @@
   <div id="app">
     <div id="topbar">
       <div id="topbar-left"></div>
-      <div id="app-title">DrawOver <span id="version">v0.7.28</span></div>
+      <div id="app-title">DrawOver <span id="version">v0.7.29</span></div>
       <div id="tool-hint"></div>
     </div>
 
@@ -92,7 +92,7 @@
               <div id="welcome-overlay">
                 <img id="welcome-icon" src="DrawOver_logo.svg" alt="DrawOver logo">
                 <div id="welcome-title">DrawOver</div>
-                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.28</div>
+                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.29</div>
                 <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
                 <div id="welcome-drop-zone">
                   <div id="welcome-drop-icon">🎬</div>
@@ -192,7 +192,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.28 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
+          <span id="status-version">DrawOver v0.7.29 &nbsp;[Last Updated: 08/03/2026 4:30PM PST]</span>
         </div>
       </div>
   </div>
@@ -783,6 +783,13 @@
 
       function getActiveEntry() {
         return (activeIndex >= 0 && activeIndex < playlist.length) ? playlist[activeIndex] : null;
+      }
+
+      // Browser tab title: the active media's name, or plain "DrawOver" when
+      // nothing is loaded (welcome screen).
+      function updateDocumentTitle() {
+        const entry = getActiveEntry();
+        document.title = entry ? (entry.displayName || entry.name || 'DrawOver') : 'DrawOver';
       }
 
       function getCompareEntry() {
@@ -1440,7 +1447,7 @@
           scrubCurrent.textContent = '00:00:00:00'; scrubFrame.textContent = 'F: 0'; scrubTotal.textContent = '00:00:00:00';
           updateInOutUI(); updateScrubTicks(); updateControlAvailability();
         } else if (activeIndex > i) activeIndex--;
-        savePlaylistState(); renderPlaylist();
+        savePlaylistState(); renderPlaylist(); updateDocumentTitle();
       }
 
       // ===== PLAYLIST ORDER HELPERS =====
@@ -1651,7 +1658,7 @@
           nameSpan.addEventListener('dblclick', e => {
             e.stopPropagation();
             startInlineRename(nameSpan, entry.displayName || entry.name || '', val => {
-              entry.displayName = val.trim() || null; persistEntry(entry).catch(() => {}); renderPlaylist();
+              entry.displayName = val.trim() || null; persistEntry(entry).catch(() => {}); renderPlaylist(); updateDocumentTitle();
             });
           });
           const durSpan = document.createElement('span');
@@ -1665,7 +1672,7 @@
           menuBtn.addEventListener('click', e => {
             e.stopPropagation();
             const items = [
-              { label: 'Rename', action: () => startInlineRename(nameSpan, entry.displayName || entry.name || '', val => { entry.displayName = val.trim() || null; persistEntry(entry).catch(() => {}); renderPlaylist(); }) },
+              { label: 'Rename', action: () => startInlineRename(nameSpan, entry.displayName || entry.name || '', val => { entry.displayName = val.trim() || null; persistEntry(entry).catch(() => {}); renderPlaylist(); updateDocumentTitle(); }) },
               { label: 'Color…', action: () => showColorPalette(menuBtn, entry.color, c => { entry.color = c; persistEntry(entry).catch(() => {}); renderPlaylist(); }) },
             ];
             if (folders.length) {
@@ -1870,6 +1877,7 @@
         updateScrubTicks();
         resizeCanvases();
         savePlaylistState();
+        updateDocumentTitle();
         if (compareMode) updatePanelLabels();
         updateControlAvailability();
       }
