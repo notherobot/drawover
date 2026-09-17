@@ -12,7 +12,7 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
       background: #000; color: #e0e0e0; font-size: 14px;
-      height: 100dvh; height: 100vh; /* dvh for modern iOS, vh fallback */
+      height: 100vh; height: 100dvh; /* vh fallback first so dvh (where supported) wins the cascade */
       overflow: hidden;
       overscroll-behavior: none;
       -webkit-tap-highlight-color: transparent;
@@ -78,7 +78,7 @@
     /* ===== MAIN LAYOUT ===== */
     #app {
       display: flex; flex-direction: column;
-      height: 100dvh; height: 100vh;
+      height: 100vh; height: 100dvh;
     }
 
     /* ===== TOP BAR ===== */
