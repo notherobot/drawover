@@ -69,7 +69,14 @@ input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 3
 input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 
 /* ===== LAYOUT ===== */
-#app { display: flex; flex-direction: column; height: 100vh; }
+/* height:100vh is a fallback for browsers without dvh support; 100dvh
+   (dynamic viewport height) comes second so it wins where supported --
+   vh is defined as the *largest* possible viewport on browsers with
+   collapsible/dynamic chrome (mobile browser toolbars, some desktop
+   browsers with auto-hiding UI), so a plain 100vh can size #app taller
+   than what's actually visible, clipping the bottom bar off-screen
+   under overflow:hidden with no way to scroll to it. */
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
 #topbar {
   display: flex; align-items: center; padding: 6px 12px;
   background: linear-gradient(to bottom, #262626 0%, #161616 100%);
@@ -274,7 +281,15 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 .pl-drag-handle:active { cursor: grabbing; }
 
 /* ===== CONTENT ===== */
-#content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+/* overflow-y:auto (rather than hidden) is a deliberate safety net: the
+   dvh fix above should mean everything always fits, but if some
+   combination of window size/zoom/OS scaling ever leaves less room than
+   the toolbar rows need, this lets the page scroll to reach them instead
+   of clipping the scrub bar/playback row/status bar off-screen with no
+   way to get to them. Only vertical scroll is allowed -- horizontal
+   overflow (e.g. a very narrow window) is still handled by #tool-row's
+   own horizontal scroll, not by the page. */
+#content { flex: 1; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; min-width: 0; }
 
 /* ===== TOOL ROW ===== */
 #tool-row {
@@ -769,7 +784,7 @@ select:disabled { opacity: 0.35; cursor: not-allowed; }
 /* ===== FULLSCREEN ===== */
 #content:fullscreen {
   display: flex; flex-direction: column; background: #1a1a1a;
-  width: 100vw; height: 100vh; padding: 0;
+  width: 100vw; height: 100vh; height: 100dvh; padding: 0;
   overflow: visible; /* fixed-position overlay panels must not be clipped in fullscreen */
 }
 #content:fullscreen #video-area { flex: 1; min-height: 0; }
