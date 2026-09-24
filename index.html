@@ -82,6 +82,7 @@
             <div id="video-container">
               <div id="video-viewport">
                 <canvas id="main-canvas"></canvas>
+                <canvas id="wash-canvas"></canvas>
                 <canvas id="guides-canvas"></canvas>
                 <canvas id="pen-canvas"></canvas>
                 <canvas id="laser-canvas"></canvas>
@@ -92,7 +93,7 @@
               <div id="welcome-overlay">
                 <img id="welcome-icon" src="DrawOver_logo.svg" alt="DrawOver logo">
                 <div id="welcome-title">DrawOver</div>
-                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.31</div>
+                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.32</div>
                 <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
                 <div id="welcome-drop-zone">
                   <div id="welcome-drop-icon">🎬</div>
@@ -150,6 +151,9 @@
               <button id="btn-guides" title="Composition guides: overlay framing/grid lines for composition">Guides</button><button id="btn-guides-opts" title="Composition guide settings">▾</button>
             </div>
             <div class="split-btn">
+              <button id="btn-wash" title="Wash: fade the footage behind a white sheet so drawovers read clearly">Wash</button><button id="btn-wash-opts" title="Wash strength">▾</button>
+            </div>
+            <div class="split-btn">
               <button class="tool-btn" id="btn-arc-tracer" data-tool="arc-tracer" title="Arc Tracer (T)" style="width:auto;padding:4px 9px;font-size:11px;height:26px">Arc Tracer</button><button class="tool-btn active" id="btn-arc-toggle" title="Show / hide arc points" style="width:28px;height:26px">&#128065;</button>
             </div>
             <div class="pb-sep"></div>
@@ -192,7 +196,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.31 &nbsp;[Last Updated: 09/17/2026 7:29AM PDT]</span>
+          <span id="status-version">DrawOver v0.7.32 &nbsp;[Last Updated: 09/24/2026 12:04AM PDT]</span>
         </div>
       </div>
   </div>
@@ -287,6 +291,19 @@
       <button id="btn-clear-arc-point">Clear point</button>
       <button id="btn-clear-arc">Clear all</button>
     </div>
+  </div>
+
+  <!-- Wash settings popover -->
+  <div id="wash-panel">
+    <div class="wash-title">Wash</div>
+    <div class="wash-sub">Fades the footage so drawovers read clearly</div>
+    <div class="wash-levels">
+      <button class="wash-level" data-wash="10">10%</button>
+      <button class="wash-level" data-wash="25">25%</button>
+      <button class="wash-level" data-wash="50">50%</button>
+      <button class="wash-level" data-wash="75">75%</button>
+    </div>
+    <button id="wash-done">Done</button>
   </div>
 
   <!-- Composition Guides settings popover -->
@@ -433,6 +450,9 @@
       const ghostPanel = document.getElementById('ghost-panel');
       const ghostRangeSlider = document.getElementById('ghost-range');
       const ghostRangeVal = document.getElementById('ghost-range-val');
+      const btnWash = document.getElementById('btn-wash');
+      const btnWashOpts = document.getElementById('btn-wash-opts');
+      const washPanel = document.getElementById('wash-panel');
       const btnGuides = document.getElementById('btn-guides');
       const btnGuidesOpts = document.getElementById('btn-guides-opts');
       const guidesPanel = document.getElementById('guides-panel');
@@ -447,6 +467,8 @@
       const guidesThicknessVal = document.getElementById('guides-thickness-val');
       const guidesCanvas = document.getElementById('guides-canvas');
       const guidesCtx = guidesCanvas.getContext('2d');
+      const washCanvas = document.getElementById('wash-canvas');
+      const washCtx = washCanvas.getContext('2d');
       const btnCompare = document.getElementById('btn-compare');
       const btnCompareOpts = document.getElementById('btn-compare-opts');
       const comparePanel = document.getElementById('compare-panel');
@@ -484,6 +506,8 @@
       let drawingsVisible = true;
       let ghostEnabled = false;   // onion-skin toggle
       let ghostRange = 2;         // frames before & after (1..10)
+      let washEnabled = false;    // white-wash overlay toggle
+      let washOpacity = 0.25;     // one of 0.10 / 0.25 / 0.50 / 0.75
       let guidesEnabled = false;  // composition-guide overlay toggle
       let guidesType = 'thirds';
       let guidesAspect = 'video'; // 'video' = match the footage's own displayed bounds
@@ -1442,6 +1466,7 @@
           player.inPoint = null; player.outPoint = null;
           mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
           penCtx.clearRect(0, 0, penCanvas.width, penCanvas.height);
+          redrawWashCanvas(); // no active entry now -> clears the wash too
           setPlayIcon(false);
           scrubProgress.style.width = '0%'; scrubPlayhead.style.left = '0%';
           scrubCurrent.textContent = '00:00:00:00'; scrubFrame.textContent = 'F: 0'; scrubTotal.textContent = '00:00:00:00';
@@ -1891,7 +1916,8 @@
         laserCanvas.width = rect.width * dpr; laserCanvas.height = rect.height * dpr;
         arcCanvas.width   = rect.width * dpr; arcCanvas.height   = rect.height * dpr;
         guidesCanvas.width = rect.width * dpr; guidesCanvas.height = rect.height * dpr;
-        redrawPenCanvas(); redrawLaserCanvas(); redrawArcCanvas(); redrawGuidesCanvas(); updateScrubTicks();
+        washCanvas.width = rect.width * dpr; washCanvas.height = rect.height * dpr;
+        redrawPenCanvas(); redrawLaserCanvas(); redrawArcCanvas(); redrawGuidesCanvas(); redrawWashCanvas(); updateScrubTicks();
         updateToolCursor();
       }
       new ResizeObserver(resizeCanvases).observe(videoContainer);
@@ -3438,6 +3464,22 @@
         ctx.stroke();
       }
 
+      // White wash: a flat white fill over the footage only (not the letterbox
+      // bars), so drawovers read clearly against busy or dark frames. It lives
+      // inside #video-viewport, so it pans and zooms glued to the frame.
+      function redrawWashCanvas() {
+        washCtx.clearRect(0, 0, washCanvas.width, washCanvas.height);
+        if (!washEnabled || !getActiveEntry()) return;
+        const w = washCanvas.width, h = washCanvas.height;
+        if (!w || !h || !mainCanvas.width || !mainCanvas.height) return;
+        const b = getVideoBoundsFor(mainCanvas, washCanvas);
+        washCtx.save();
+        washCtx.globalAlpha = washOpacity;
+        washCtx.fillStyle = '#ffffff';
+        washCtx.fillRect(b.x0 * w, b.y0 * h, (b.x1 - b.x0) * w, (b.y1 - b.y0) * h);
+        washCtx.restore();
+      }
+
       function redrawGuidesCanvas() {
         guidesCtx.clearRect(0, 0, guidesCanvas.width, guidesCanvas.height);
         if (!guidesEnabled) return;
@@ -4202,7 +4244,8 @@
         const isImage = !!(entry && entry.isImage);
         // No-video group — always needs a loaded item
         [btnToggleDrawings, btnPrevAnnotation, btnNextAnnotation,
-         btnClearFrame, btnExportFrame, btnGhost, btnGhostOpts, btnGuides, btnGuidesOpts
+         btnClearFrame, btnExportFrame, btnGhost, btnGhostOpts, btnGuides, btnGuidesOpts,
+         btnWash, btnWashOpts
         ].forEach(el => { if (el) el.disabled = noVideo; });
         // Playback transport — meaningless for a still image
         [btnPlay, btnFrameBack, btnFrameFwd, btnToStart, btnToEnd,
@@ -4373,6 +4416,55 @@
       });
 
       // ===== COMPOSITION GUIDES =====
+      function openWashPanel() {
+        washPanel.style.display = 'block';
+        const r = btnWash.getBoundingClientRect();
+        const pw = washPanel.offsetWidth, ph = washPanel.offsetHeight;
+        let left = r.left;
+        if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+        washPanel.style.left = Math.max(8, left) + 'px';
+        washPanel.style.top = Math.max(8, r.top - ph - 8) + 'px';
+      }
+      function closeWashPanel() { washPanel.style.display = 'none'; }
+      function updateWashLevelButtons() {
+        washPanel.querySelectorAll('.wash-level').forEach(b => {
+          b.classList.toggle('active', Math.round(washOpacity * 100) === parseInt(b.dataset.wash, 10));
+        });
+      }
+      function setWashEnabled(on) {
+        washEnabled = on;
+        btnWash.classList.toggle('active', on);
+        btnWash.textContent = on ? `Wash ${Math.round(washOpacity * 100)}%` : 'Wash';
+        redrawWashCanvas();
+      }
+      function setWashOpacity(pct) {
+        washOpacity = pct / 100;
+        updateWashLevelButtons();
+        // Picking a strength also turns the wash on -- otherwise the choice
+        // would silently do nothing until you toggled the button too.
+        setWashEnabled(true);
+      }
+      btnWash.addEventListener('click', () => {
+        if (washEnabled) { setWashEnabled(false); closeWashPanel(); }
+        else { setWashEnabled(true); openWashPanel(); } // show strengths on turn-on
+      });
+      btnWashOpts.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Settings caret only opens/closes the popover — it never toggles the wash.
+        if (washPanel.style.display === 'block') { closeWashPanel(); return; }
+        openWashPanel();
+      });
+      washPanel.querySelectorAll('.wash-level').forEach(b => {
+        b.addEventListener('click', () => setWashOpacity(parseInt(b.dataset.wash, 10)));
+      });
+      document.getElementById('wash-done').addEventListener('click', closeWashPanel);
+      document.addEventListener('mousedown', (e) => {
+        if (washPanel.style.display !== 'block') return;
+        if (washPanel.contains(e.target) || e.target === btnWash || e.target === btnWashOpts) return;
+        closeWashPanel();
+      });
+      updateWashLevelButtons();
+
       function openGuidesPanel() {
         guidesPanel.style.display = 'block';
         const r = btnGuides.getBoundingClientRect();
@@ -4443,7 +4535,7 @@
         setTimeout(resizeCanvases, 100);
         // Panels use position:fixed; they must be descendants of the fullscreen
         // element to appear in fullscreen. Move them in/out of #content as needed.
-        [devtoolsPanel, arcPanel, ghostPanel, guidesPanel, comparePanel].forEach(p => {
+        [devtoolsPanel, arcPanel, ghostPanel, guidesPanel, comparePanel, washPanel].forEach(p => {
           if (fsEl) fsEl.appendChild(p);
           else document.body.appendChild(p);
         });
