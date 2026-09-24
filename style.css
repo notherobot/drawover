@@ -421,6 +421,10 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #laser-canvas, #laser-canvas-b { pointer-events: none; z-index: 2; }
 #arc-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
 #guides-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+/* Wash sits directly on the footage, under every other overlay: it shares
+   z-index 0 with the guides but comes first in the DOM, so guides, drawovers,
+   laser and arc all paint on top of it rather than being faded by it. */
+#wash-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
 #video-viewport.panning #pen-canvas, #video-viewport-b.panning #pen-canvas-b { cursor: grabbing; }
 #video-viewport.zooming #pen-canvas, #video-viewport-b.zooming #pen-canvas-b { cursor: ns-resize; }
 
@@ -635,6 +639,25 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
   border-radius: 5px; font-weight: 600; cursor: pointer;
 }
 #guides-done:hover { background: #2b8de0; }
+
+/* Wash settings popover */
+#wash-panel {
+  position: fixed; display: none; z-index: 9500;
+  background: linear-gradient(to bottom, #2a2a2a 0%, #1c1c1c 100%);
+  border: 1px solid #050505; border-top-color: #444; border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 30px rgba(0,0,0,0.7);
+  min-width: 240px; color: #ddd; font-size: 12px;
+}
+#wash-panel .wash-title { font-size: 13px; font-weight: 700; color: var(--accent-hi); text-shadow: 0 0 6px var(--accent-glow); }
+#wash-panel .wash-sub { font-size: 11px; color: #888; margin: 2px 0 12px; }
+#wash-panel .wash-levels { display: flex; gap: 6px; margin-bottom: 12px; }
+#wash-panel .wash-level { flex: 1; padding: 7px 0; font-size: 12px; }
+#wash-done {
+  width: 100%; padding: 6px; background: #3aa0ff; color: #fff; border: none;
+  border-radius: 5px; font-weight: 600; cursor: pointer;
+}
+#wash-done:hover { background: #2b8de0; }
 
 /* Compare settings popover */
 #compare-panel {
@@ -1016,14 +1039,16 @@ body.light-mode #devtools-panel .dt-section td { color: #99a; }
 body.light-mode #dt-copy-btn { background: #e4e8ec; border: 1px solid #ccd2d9; color: #445; }
 body.light-mode #dt-copy-btn:hover { background: #d8dde3; color: #222; }
 
-body.light-mode #ghost-panel, body.light-mode #arc-panel, body.light-mode #guides-panel, body.light-mode #compare-panel {
+body.light-mode #ghost-panel, body.light-mode #arc-panel, body.light-mode #guides-panel, body.light-mode #compare-panel,
+body.light-mode #wash-panel {
   background: linear-gradient(to bottom, #ffffff 0%, #eef1f4 100%);
   border: 1px solid #ccd2d9; border-top-color: #fff;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 10px 30px rgba(0,0,0,0.15);
   color: #334;
 }
 body.light-mode #ghost-panel .ghost-sub, body.light-mode #arc-panel .arc-sub,
-body.light-mode #guides-panel .guides-sub, body.light-mode #compare-panel .compare-sub { color: #889; }
+body.light-mode #guides-panel .guides-sub, body.light-mode #compare-panel .compare-sub,
+body.light-mode #wash-panel .wash-sub { color: #889; }
 body.light-mode #ghost-panel .ghost-row > span:first-child, body.light-mode #arc-panel .arc-row > span,
 body.light-mode #guides-panel .guides-row > span, body.light-mode #compare-panel .compare-row { color: #445; }
 body.light-mode #ghost-range-val { color: #222; }
