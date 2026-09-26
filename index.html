@@ -93,7 +93,7 @@
               <div id="welcome-overlay">
                 <img id="welcome-icon" src="DrawOver_logo.svg" alt="DrawOver logo">
                 <div id="welcome-title">DrawOver</div>
-                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.33</div>
+                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.34</div>
                 <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
                 <div id="welcome-drop-zone">
                   <div id="welcome-drop-icon">🎬</div>
@@ -141,7 +141,9 @@
           <div class="pb-zone pb-zone-left">
             <button id="btn-reset-view" title="Reset pan &amp; zoom (A)">⊡ Reset View</button>
             <div class="pb-sep"></div>
-            <button id="btn-export-frame" title="Export current frame with drawovers as PNG">⤓ PNG</button>
+            <div class="split-btn">
+              <button id="btn-export-frame" title="Export the current frame with its drawovers as a PNG">⤓ PNG</button><button id="btn-export-opts" title="Export options">▾</button>
+            </div>
             <button id="btn-clear-frame" title="Delete all drawings on this frame">🗑</button>
             <div class="pb-sep"></div>
             <div class="split-btn">
@@ -196,7 +198,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.33 &nbsp;[Last Updated: 09/24/2026 12:06AM PDT]</span>
+          <span id="status-version">DrawOver v0.7.34 &nbsp;[Last Updated: 09/26/2026 7:56AM PDT]</span>
         </div>
       </div>
   </div>
@@ -291,6 +293,14 @@
       <button id="btn-clear-arc-point">Clear point</button>
       <button id="btn-clear-arc">Clear all</button>
     </div>
+  </div>
+
+  <!-- PNG export options popover -->
+  <div id="export-panel">
+    <div class="export-title">Export PNG</div>
+    <div class="export-sub">Saved at the footage's native resolution</div>
+    <button class="export-opt" id="btn-export-current">Current frame</button>
+    <button class="export-opt" id="btn-export-all">All frames with drawovers<span id="export-all-count"></span></button>
   </div>
 
   <!-- Wash settings popover -->
@@ -477,6 +487,8 @@
       const btnCompareFlip = document.getElementById('btn-compare-flip');
       const btnClearFrame = document.getElementById('btn-clear-frame');
       const btnExportFrame = document.getElementById('btn-export-frame');
+      const btnExportOpts = document.getElementById('btn-export-opts');
+      const exportPanel = document.getElementById('export-panel');
       const btnFullscreen = document.getElementById('btn-fullscreen');
       const brushSizeSlider = document.getElementById('brush-size');
       const brushSizeVal = document.getElementById('brush-size-val');
@@ -2052,23 +2064,25 @@
         return candidates.find(c => MediaRecorder.isTypeSupported(c)) || '';
       }
 
-      function showClipProgress() {
+      function showProgressOverlay(title) {
         const overlay = document.createElement('div');
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:10000;display:flex;align-items:center;justify-content:center;';
         const box = document.createElement('div');
         box.style.cssText = 'background:#1e1e1e;border:1px solid #3a3a3a;border-radius:10px;padding:24px 28px;min-width:260px;color:#e0e0e0;font-size:14px;box-shadow:0 8px 32px rgba(0,0,0,0.7);text-align:center;';
         box.innerHTML = `
-          <div style="font-size:15px;font-weight:600;margin-bottom:14px;">Saving clip…</div>
+          <div id="_prog_title" style="font-size:15px;font-weight:600;margin-bottom:14px;"></div>
           <div style="background:#111;border-radius:5px;height:8px;overflow:hidden;margin-bottom:10px;">
             <div id="_clip_bar" style="background:#3aa0ff;height:100%;width:0%;"></div>
           </div>
           <div id="_clip_pct" style="color:#999;font-size:12px;">0%</div>`;
         overlay.appendChild(box);
         document.body.appendChild(overlay);
+        box.querySelector('#_prog_title').textContent = title;
         const bar = box.querySelector('#_clip_bar');
         const pct = box.querySelector('#_clip_pct');
         return {
-          update(p) { bar.style.width = p + '%'; pct.textContent = p + '%'; },
+          // `label` overrides the percent readout, e.g. "Frame 3 of 12".
+          update(p, label) { bar.style.width = p + '%'; pct.textContent = label || (p + '%'); },
           close() { overlay.remove(); }
         };
       }
@@ -2088,7 +2102,7 @@
 
         player.pause();
         setPlayIcon(false);
-        const progress = showClipProgress();
+        const progress = showProgressOverlay('Saving clip…');
         let clipVideo = null;
 
         try {
@@ -2200,11 +2214,17 @@
       });
 
       // ===== ANNOTATION NAVIGATION =====
-      btnPrevAnnotation.addEventListener('click', () => {
-        const entry = getActiveEntry(); const tp = player; if (!entry) return;
-        const frames = Object.keys(entry.annotations).map(Number)
+      // Frame numbers that actually carry drawovers, ascending.
+      function annotatedFrames(entry) {
+        if (!entry || !entry.annotations) return [];
+        return Object.keys(entry.annotations).map(Number)
           .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
           .sort((a, b) => a - b);
+      }
+
+      btnPrevAnnotation.addEventListener('click', () => {
+        const entry = getActiveEntry(); const tp = player; if (!entry) return;
+        const frames = annotatedFrames(entry);
         const prev = frames.filter(f => f < tp.currentFrame).pop();
         if (prev !== undefined) tp.stepFrame(prev - tp.currentFrame);
         else tp.seekToTime(entry.inPoint !== null ? entry.inPoint : 0);
@@ -2212,9 +2232,7 @@
 
       btnNextAnnotation.addEventListener('click', () => {
         const entry = getActiveEntry(); const tp = player; if (!entry) return;
-        const frames = Object.keys(entry.annotations).map(Number)
-          .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
-          .sort((a, b) => a - b);
+        const frames = annotatedFrames(entry);
         const next = frames.find(f => f > tp.currentFrame);
         if (next !== undefined) tp.stepFrame(next - tp.currentFrame);
         else tp.seekToTime(entry.outPoint !== null ? entry.outPoint : tp.duration);
@@ -4244,7 +4262,7 @@
         const isImage = !!(entry && entry.isImage);
         // No-video group — always needs a loaded item
         [btnToggleDrawings, btnPrevAnnotation, btnNextAnnotation,
-         btnClearFrame, btnExportFrame, btnGhost, btnGhostOpts, btnGuides, btnGuidesOpts,
+         btnClearFrame, btnExportFrame, btnExportOpts, btnGhost, btnGhostOpts, btnGuides, btnGuidesOpts,
          btnWash, btnWashOpts
         ].forEach(el => { if (el) el.disabled = noVideo; });
         // Playback transport — meaningless for a still image
@@ -4260,9 +4278,7 @@
         btnRedo.disabled = !entry || !entry.redoStack.length;
         // Prev/next annotation — check if frames exist before/after
         if (entry) {
-          const frames = Object.keys(entry.annotations).map(Number)
-            .filter(f => entry.annotations[f] && entry.annotations[f].length > 0)
-            .sort((a, b) => a - b);
+          const frames = annotatedFrames(entry);
           btnPrevAnnotation.disabled = frames.length === 0;
           btnNextAnnotation.disabled = frames.length === 0;
         }
@@ -4278,23 +4294,33 @@
       btnUndo.addEventListener('click', undo);
       btnRedo.addEventListener('click', redo);
 
-      // Export the current frame + its drawovers as a PNG at the video's native
-      // resolution. Renders the frame's strokes into an offscreen canvas the same
-      // size as the on-screen pen canvas (so they look identical), then composites
-      // the video sub-region onto a full-resolution copy of the video frame.
-      function exportFramePNG() {
+      // Which panel/entry an export should read from.
+      function exportSource() {
         const rightActive = compareMode && !comparePanelLeft;
-        const mc = rightActive ? mainCanvasB : mainCanvas;
-        const pc = rightActive ? penCanvasB : penCanvas;
-        const pl = rightActive ? playerB : player;
-        const entry = rightActive ? getCompareEntry() : getActiveEntry();
-        if (!entry || !pl || !mc.width || !mc.height) return;
+        return {
+          mc: rightActive ? mainCanvasB : mainCanvas,
+          pc: rightActive ? penCanvasB : penCanvas,
+          pl: rightActive ? playerB : player,
+          entry: rightActive ? getCompareEntry() : getActiveEntry(),
+        };
+      }
+
+      function exportBaseName(entry) {
+        const raw = (entry.displayName || entry.name || 'frame').replace(/\.[^.]+$/, '');
+        return (raw.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 60)) || 'frame';
+      }
+
+      // Composite whatever frame is currently rendered on `mc`, plus the drawovers
+      // stored for `frameNum`, onto a canvas at the footage's native resolution.
+      // Strokes are drawn into an offscreen canvas the same size as the on-screen
+      // pen canvas first, so they scale exactly the way they look on screen.
+      function composeFrameCanvas(mc, pc, entry, frameNum) {
         const vw = mc.width, vh = mc.height;
         const out = document.createElement('canvas');
         out.width = vw; out.height = vh;
         const octx = out.getContext('2d');
         octx.drawImage(mc, 0, 0, vw, vh);
-        const strokes = (entry.annotations && entry.annotations[pl.currentFrame]) || [];
+        const strokes = (entry.annotations && entry.annotations[frameNum]) || [];
         if (strokes.length) {
           const tmp = document.createElement('canvas');
           tmp.width = pc.width || vw; tmp.height = pc.height || vh;
@@ -4307,19 +4333,188 @@
           octx.drawImage(tmp, b.x0 * tmp.width, b.y0 * tmp.height,
             (b.x1 - b.x0) * tmp.width, (b.y1 - b.y0) * tmp.height, 0, 0, vw, vh);
         }
-        const rawName = (entry.displayName || entry.name || 'frame').replace(/\.[^.]+$/, '');
-        const safe = (rawName.replace(/[^a-z0-9_\-]+/gi, '_').slice(0, 60)) || 'frame';
+        return out;
+      }
+
+      function canvasToPngBlob(canvas) {
+        return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      }
+
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }
+
+      // Export the current frame + its drawovers as a PNG at native resolution.
+      function exportFramePNG() {
+        const { mc, pc, pl, entry } = exportSource();
+        if (!entry || !pl || !mc.width || !mc.height) return;
+        const out = composeFrameCanvas(mc, pc, entry, pl.currentFrame);
         out.toBlob(blob => {
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${safe}_F${pl.currentFrame}.png`;
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 2000);
+          if (blob) downloadBlob(blob, `${exportBaseName(entry)}_F${pl.currentFrame}.png`);
         }, 'image/png');
       }
+
+      // Seek to an exact frame and resolve once it has actually been decoded and
+      // painted onto the main canvas. FramePlayer's own 'seeked' handler renders
+      // the frame, and it was registered first, so by the time ours runs the
+      // canvas already holds the new frame.
+      function seekToFrameAndRender(pl, frame) {
+        return new Promise(resolve => {
+          if (pl.isImage) { resolve(); return; }
+          const target = frame / pl.fps + 1e-5;
+          const done = () => { pl.video.removeEventListener('seeked', onSeeked); clearTimeout(timer); requestAnimationFrame(() => resolve()); };
+          const onSeeked = () => { if (Math.round(pl.video.currentTime * pl.fps) === frame) done(); };
+          // Don't hang the whole export if a decoder never reports 'seeked'.
+          const timer = setTimeout(done, 3000);
+          pl.video.addEventListener('seeked', onSeeked);
+          pl.seekToTime(target);
+        });
+      }
+
+      // Export every frame that carries drawovers, bundled into one ZIP. Browsers
+      // throttle or block a burst of individual downloads, so a single archive is
+      // both more reliable and easier to hand off than N loose files.
+      async function exportAllFramesPNG() {
+        const { mc, pc, pl, entry } = exportSource();
+        if (!entry || !pl || !mc.width || !mc.height) return;
+        const frames = annotatedFrames(entry);
+        if (!frames.length) {
+          alert('No drawovers to export yet — draw on a frame first.');
+          return;
+        }
+        const wasPlaying = pl.playing;
+        pl.pause(); setPlayIcon(false);
+        const startFrame = pl.currentFrame;
+        const progress = showProgressOverlay('Exporting frames…');
+        const base = exportBaseName(entry);
+        try {
+          const files = [];
+          for (let i = 0; i < frames.length; i++) {
+            const f = frames[i];
+            progress.update(Math.round((i / frames.length) * 100), `Frame ${i + 1} of ${frames.length}`);
+            await seekToFrameAndRender(pl, f);
+            const blob = await canvasToPngBlob(composeFrameCanvas(mc, pc, entry, f));
+            if (blob) files.push({ name: `${base}_F${f}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
+          }
+          progress.update(100, 'Packaging…');
+          downloadBlob(buildZip(files), `${base}_drawovers.zip`);
+        } catch (err) {
+          console.warn('DrawOver: export all frames failed', err);
+          alert('Could not export frames: ' + (err && err.message ? err.message : err));
+        } finally {
+          progress.close();
+          await seekToFrameAndRender(pl, startFrame); // put the playhead back
+          if (wasPlaying) { pl.play(); setPlayIcon(true); }
+        }
+      }
+
+      // Minimal ZIP writer (STORE, no compression). PNGs are already compressed,
+      // so deflating them again would buy ~nothing and cost a dependency.
+      const _crcTable = (() => {
+        const t = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+          let c = n;
+          for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+          t[n] = c >>> 0;
+        }
+        return t;
+      })();
+      function crc32(bytes) {
+        let c = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) c = _crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+        return (c ^ 0xFFFFFFFF) >>> 0;
+      }
+      function buildZip(files) {
+        const enc = new TextEncoder();
+        const chunks = [];
+        let offset = 0;
+        const central = [];
+        for (const f of files) {
+          const nameBytes = enc.encode(f.name);
+          const crc = crc32(f.data);
+          const local = new DataView(new ArrayBuffer(30));
+          local.setUint32(0, 0x04034b50, true);   // local file header signature
+          local.setUint16(4, 20, true);           // version needed
+          local.setUint16(6, 0, true);            // flags
+          local.setUint16(8, 0, true);            // method: stored
+          local.setUint16(10, 0, true);           // mod time
+          local.setUint16(12, 0, true);           // mod date
+          local.setUint32(14, crc, true);
+          local.setUint32(18, f.data.length, true); // compressed size
+          local.setUint32(22, f.data.length, true); // uncompressed size
+          local.setUint16(26, nameBytes.length, true);
+          local.setUint16(28, 0, true);           // extra field length
+          chunks.push(new Uint8Array(local.buffer), nameBytes, f.data);
+          const cd = new DataView(new ArrayBuffer(46));
+          cd.setUint32(0, 0x02014b50, true);      // central directory signature
+          cd.setUint16(4, 20, true);              // version made by
+          cd.setUint16(6, 20, true);              // version needed
+          cd.setUint16(8, 0, true);
+          cd.setUint16(10, 0, true);
+          cd.setUint16(12, 0, true);
+          cd.setUint16(14, 0, true);
+          cd.setUint32(16, crc, true);
+          cd.setUint32(20, f.data.length, true);
+          cd.setUint32(24, f.data.length, true);
+          cd.setUint16(28, nameBytes.length, true);
+          cd.setUint16(30, 0, true);              // extra
+          cd.setUint16(32, 0, true);              // comment
+          cd.setUint16(34, 0, true);              // disk number
+          cd.setUint16(36, 0, true);              // internal attrs
+          cd.setUint32(38, 0, true);              // external attrs
+          cd.setUint32(42, offset, true);         // offset of local header
+          central.push(new Uint8Array(cd.buffer), nameBytes);
+          offset += 30 + nameBytes.length + f.data.length;
+        }
+        const centralSize = central.reduce((n, c) => n + c.length, 0);
+        const end = new DataView(new ArrayBuffer(22));
+        end.setUint32(0, 0x06054b50, true);       // end of central directory
+        end.setUint16(4, 0, true);
+        end.setUint16(6, 0, true);
+        end.setUint16(8, files.length, true);
+        end.setUint16(10, files.length, true);
+        end.setUint32(12, centralSize, true);
+        end.setUint32(16, offset, true);
+        end.setUint16(20, 0, true);               // comment length
+        return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
+      }
+
+      function openExportPanel() {
+        // Show how many frames "all" actually means, so it's clear before clicking.
+        const { entry } = exportSource();
+        const n = annotatedFrames(entry).length;
+        document.getElementById('export-all-count').textContent = n ? ` (${n})` : ' (none yet)';
+        document.getElementById('btn-export-all').disabled = n === 0;
+        exportPanel.style.display = 'block';
+        const r = btnExportFrame.getBoundingClientRect();
+        const pw = exportPanel.offsetWidth, ph = exportPanel.offsetHeight;
+        let left = r.left;
+        if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+        exportPanel.style.left = Math.max(8, left) + 'px';
+        exportPanel.style.top = Math.max(8, r.top - ph - 8) + 'px';
+      }
+      function closeExportPanel() { exportPanel.style.display = 'none'; }
+
+      // Main button keeps the one-click behaviour it always had; the caret opens
+      // the menu with both options.
       btnExportFrame.addEventListener('click', exportFramePNG);
+      btnExportOpts.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (exportPanel.style.display === 'block') { closeExportPanel(); return; }
+        openExportPanel();
+      });
+      document.getElementById('btn-export-current').addEventListener('click', () => { closeExportPanel(); exportFramePNG(); });
+      document.getElementById('btn-export-all').addEventListener('click', () => { closeExportPanel(); exportAllFramesPNG(); });
+      document.addEventListener('mousedown', (e) => {
+        if (exportPanel.style.display !== 'block') return;
+        if (exportPanel.contains(e.target) || e.target === btnExportFrame || e.target === btnExportOpts) return;
+        closeExportPanel();
+      });
 
       document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT') return;
@@ -4535,7 +4730,7 @@
         setTimeout(resizeCanvases, 100);
         // Panels use position:fixed; they must be descendants of the fullscreen
         // element to appear in fullscreen. Move them in/out of #content as needed.
-        [devtoolsPanel, arcPanel, ghostPanel, guidesPanel, comparePanel, washPanel].forEach(p => {
+        [devtoolsPanel, arcPanel, ghostPanel, guidesPanel, comparePanel, washPanel, exportPanel].forEach(p => {
           if (fsEl) fsEl.appendChild(p);
           else document.body.appendChild(p);
         });
