@@ -93,7 +93,7 @@
               <div id="welcome-overlay">
                 <img id="welcome-icon" src="DrawOver_logo.svg" alt="DrawOver logo">
                 <div id="welcome-title">DrawOver</div>
-                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.34</div>
+                <div style="font-size:13px;font-weight:400;color:#555;margin-bottom:16px;">v0.7.35</div>
                 <div id="welcome-sub">Frame-accurate video annotation for coaches and instructors.<br>Open a video to get started.</div>
                 <div id="welcome-drop-zone">
                   <div id="welcome-drop-icon">🎬</div>
@@ -198,7 +198,7 @@
         <div id="status-bar">
           <span id="storage-info">Storage: —</span>
           <span id="status-note">Videos stored in your browser. Large files may hit quota limits.</span>
-          <span id="status-version">DrawOver v0.7.34 &nbsp;[Last Updated: 09/26/2026 7:56AM PDT]</span>
+          <span id="status-version">DrawOver v0.7.35 &nbsp;[Last Updated: 10/28/2026 5:11PM PDT]</span>
         </div>
       </div>
   </div>
@@ -278,7 +278,15 @@
   <!-- Arc Tracer settings popover -->
   <div id="arc-panel">
     <div class="arc-title">Arc Tracer</div>
-    <div class="arc-sub">Click each frame to drop an arc point</div>
+    <div class="arc-sub" id="arc-sub">Click each frame to drop an arc point</div>
+    <div class="arc-row arc-group-row">
+      <span>Group</span>
+      <div class="arc-groups">
+        <button class="arc-group-btn" data-arc-group="1" title="Group 1 — red">1</button>
+        <button class="arc-group-btn" data-arc-group="2" title="Group 2 — green">2</button>
+        <button class="arc-group-btn" data-arc-group="3" title="Group 3 — blue">3</button>
+      </div>
+    </div>
     <label class="arc-row">
       <span>Window (frames)</span>
       <input type="number" id="arc-window" min="1" max="50" value="5" title="Frames before/after current to show">
@@ -291,7 +299,7 @@
     <button id="btn-arc-start">▶ Start Placing Points</button>
     <div class="arc-actions">
       <button id="btn-clear-arc-point">Clear point</button>
-      <button id="btn-clear-arc">Clear all</button>
+      <button id="btn-clear-arc">Clear group</button>
     </div>
   </div>
 
@@ -399,6 +407,7 @@
       const arcWindowInput = document.getElementById('arc-window');
       const arcPointSizeInput = document.getElementById('arc-point-size');
       const arcPointSizeVal = document.getElementById('arc-point-size-val');
+      const arcSubEl = document.getElementById('arc-sub');
       const btnArcStart = document.getElementById('btn-arc-start');
       const btnClearArc = document.getElementById('btn-clear-arc');
       const btnClearArcPoint = document.getElementById('btn-clear-arc-point');
@@ -594,8 +603,42 @@
       let arcCrosshairPos = null;
       let arcLastEvent = null;
       let arcHoverFrame = null;
+      let arcHoverGroup = null;
       let arcDragFrame = null;
+      let arcDragGroup = null;
       let arcDragStart = null; // arc point position at the start of a drag (for undo)
+
+      // Three independent arc groups, so two or three things (a ball and a hand,
+      // say) can be traced through the same frames without colliding. Each group
+      // owns one hue: the timeline tick, the connecting curve and the before/after
+      // dots are all shades of it, so a dot on the canvas reads back to a tick.
+      const ARC_GROUPS = [1, 2, 3];
+      const ARC_GROUP_STYLE = {
+        1: { name: 'Red',   tick: '#ff4444', before: '#ff9e8a', after: '#a81d1d', curve: 'rgba(255,90,70,0.5)' },
+        2: { name: 'Green', tick: '#3ad162', before: '#9af0b0', after: '#14803a', curve: 'rgba(58,209,98,0.5)' },
+        3: { name: 'Blue',  tick: '#3aa0ff', before: '#a6d6ff', after: '#15599f', curve: 'rgba(58,160,255,0.5)' },
+      };
+      let arcGroup = 1; // group new points get placed into
+
+      // entry.arcGroups = { 1: {frame:{x,y}}, 2: {...}, 3: {...} }. Older entries
+      // stored a single flat {frame:{x,y}} map in entry.arcPoints; fold that into
+      // group 1 the first time we touch them.
+      function arcGroupsOf(entry) {
+        if (!entry) return { 1: {}, 2: {}, 3: {} };
+        if (!entry.arcGroups) {
+          entry.arcGroups = {};
+          const legacy = entry.arcPoints;
+          entry.arcGroups[1] = (legacy && typeof legacy === 'object') ? legacy : {};
+        }
+        for (const g of ARC_GROUPS) if (!entry.arcGroups[g]) entry.arcGroups[g] = {};
+        return entry.arcGroups;
+      }
+      function arcPointsOf(entry, group) { return arcGroupsOf(entry)[group]; }
+      function arcHasAnyPoints(entry) {
+        if (!entry) return false;
+        const groups = arcGroupsOf(entry);
+        return ARC_GROUPS.some(g => Object.keys(groups[g]).length > 0);
+      }
 
       let compareMode = false;
       let comparePanelLeft = true; // true = left panel is active for drawing/undo
@@ -664,7 +707,7 @@
           id: entry.id, name: entry.name, blob: entry.blob,
           isImage: !!entry.isImage,
           annotations: entry.annotations,
-          arcPoints: entry.arcPoints || {},
+          arcGroups: arcGroupsOf(entry),
           inPoint: entry.inPoint, outPoint: entry.outPoint,
           fps: entry.fps, duration: entry.duration,
           thumbnail: entry.thumbnail,
@@ -732,6 +775,7 @@
               id: rec.id, name: rec.name, blob: rec.blob, objectUrl,
               isImage: !!rec.isImage,
               annotations: rec.annotations || {},
+              arcGroups: rec.arcGroups || null,
               arcPoints: rec.arcPoints || {},
               inPoint: rec.inPoint ?? null, outPoint: rec.outPoint ?? null,
               fps: rec.fps || 24, duration: rec.duration || 0,
@@ -1361,7 +1405,7 @@
         for (const file of valid) {
           const objectUrl = URL.createObjectURL(file);
           const isImage = !isVideoFile(file) && isImageFile(file);
-          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, isImage, annotations: {}, arcPoints: {}, inPoint: null, outPoint: null, fps: 24, undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
+          const entry = { id: uuid(), name: file.name, blob: file, file, objectUrl, isImage, annotations: {}, arcGroups: { 1: {}, 2: {}, 3: {} }, inPoint: null, outPoint: null, fps: 24, undoStack: [], redoStack: [], duration: 0, thumbnail: null, displayName: null, color: null, folderId: null };
           playlist.push(entry);
           if (!playlistOrder.includes(entry.id)) playlistOrder.push(entry.id);
           if (isImage) {
@@ -2173,7 +2217,7 @@
 
           const clipEntry = {
             id: uuid(), name: clipFile.name, blob: clipFile, objectUrl: clipObjectUrl,
-            isImage: false, annotations: {}, arcPoints: {},
+            isImage: false, annotations: {}, arcGroups: { 1: {}, 2: {}, 3: {} },
             inPoint: null, outPoint: null,
             fps: fps || entry.fps, duration,
             undoStack: [], redoStack: [],
@@ -2651,19 +2695,25 @@
         penCanvasB.style.cursor = cur;
       }
 
-      // Only the current frame's own arc point can ever be grabbed/dragged —
-      // nearby frames' points are just reference guides.
-      function getArcHitFrame(pos) {
+      // Only the current frame's own arc points can ever be grabbed/dragged —
+      // nearby frames' points are just reference guides. Searches every group and
+      // returns which one was hit; the active group wins a tie so the points you
+      // are currently placing stay the easiest to grab.
+      function getArcHit(pos) {
         const entry = getActiveEntry();
-        if (!entry || !entry.arcPoints) return null;
+        if (!entry) return null;
         const cf = player.currentFrame;
-        const pt = entry.arcPoints[cf];
-        if (!pt) return null;
         const rect = penCanvas.getBoundingClientRect();
         const HIT = 12 * arcPointSize;
-        const dx = (pt.x - pos.x) * rect.width;
-        const dy = (pt.y - pos.y) * rect.height;
-        if (Math.sqrt(dx * dx + dy * dy) <= HIT) return cf;
+        const groups = arcGroupsOf(entry);
+        const order = [arcGroup, ...ARC_GROUPS.filter(g => g !== arcGroup)];
+        for (const g of order) {
+          const pt = groups[g][cf];
+          if (!pt) continue;
+          const dx = (pt.x - pos.x) * rect.width;
+          const dy = (pt.y - pos.y) * rect.height;
+          if (Math.sqrt(dx * dx + dy * dy) <= HIT) return { frame: cf, group: g };
+        }
         return null;
       }
 
@@ -2707,6 +2757,23 @@
         btn.addEventListener('click', () => activateTool(btn.dataset.tool));
       });
 
+      function updateArcGroupBtns() {
+        document.querySelectorAll('.arc-group-btn').forEach(b => {
+          b.classList.toggle('active', parseInt(b.dataset.arcGroup, 10) === arcGroup);
+        });
+        const style = ARC_GROUP_STYLE[arcGroup];
+        arcSubEl.textContent = `Click each frame to drop a Group ${arcGroup} (${style.name.toLowerCase()}) point`;
+      }
+      function setArcGroup(g) {
+        arcGroup = g;
+        updateArcGroupBtns();
+        redrawArcCanvas();
+        updateControlAvailability();
+      }
+      document.querySelectorAll('.arc-group-btn').forEach(b => {
+        b.addEventListener('click', () => setArcGroup(parseInt(b.dataset.arcGroup, 10)));
+      });
+
       function updateArcStartBtn() {
         const active = currentTool === 'arc-tracer';
         btnArcStart.textContent = active ? '■ Stop Placing Points' : '▶ Start Placing Points';
@@ -2745,19 +2812,20 @@
 
       btnClearArc.addEventListener('click', () => {
         const entry = getActiveEntry(); if (!entry) return;
-        entry.arcPoints = {};
+        arcGroupsOf(entry)[arcGroup] = {};
         scheduleAnnotationSave();
         redrawArcCanvas();
         updateArcTicks();
       });
 
       btnClearArcPoint.addEventListener('click', () => {
-        const entry = getActiveEntry(); if (!entry || !entry.arcPoints) return;
+        const entry = getActiveEntry(); if (!entry) return;
+        const pts = arcPointsOf(entry, arcGroup);
         const cf = player.currentFrame;
-        const prev = entry.arcPoints[cf];
+        const prev = pts[cf];
         if (!prev) return; // nothing on this frame to clear
-        delete entry.arcPoints[cf];
-        entry.undoStack.push({ type: 'removeArc', frame: cf, prev: { ...prev } });
+        delete pts[cf];
+        entry.undoStack.push({ type: 'removeArc', frame: cf, group: arcGroup, prev: { ...prev } });
         entry.redoStack = [];
         scheduleAnnotationSave();
         redrawArcCanvas();
@@ -2789,6 +2857,9 @@
       document.addEventListener('mousedown', (e) => {
         if (arcPanel.style.display !== 'block') return;
         if (arcPanel.contains(e.target) || e.target === btnArcTracer) return;
+        // Dropping a point must not dismiss the panel: the group picker lives
+        // there, and you switch groups between runs of points.
+        if (currentTool === 'arc-tracer' && (e.target === penCanvas || e.target === arcCanvas)) return;
         closeArcPanel();
       });
 
@@ -3095,16 +3166,24 @@
       function updateArcTicks() {
         scrubArcTicks.innerHTML = '';
         const entry = getActiveEntry();
-        if (!entry || !entry.arcPoints || !player.duration) return;
+        if (!entry || !player.duration) return;
         const tf = getTotalFrames();
         const fw = 100 / tf;
-        Object.keys(entry.arcPoints).map(Number).forEach(f => {
-          if (f < 0 || f >= tf) return;
-          const tick = document.createElement('div');
-          tick.className = 'scrub-arc-tick';
-          tick.style.left = (f * fw) + '%';
-          tick.style.width = fw + '%';
-          scrubArcTicks.appendChild(tick);
+        const groups = arcGroupsOf(entry);
+        // Each group gets its own 2px lane in the strip above the drawover ticks,
+        // so a frame carrying points in several groups still shows all of them.
+        ARC_GROUPS.forEach((g, i) => {
+          const style = ARC_GROUP_STYLE[g];
+          Object.keys(groups[g]).map(Number).forEach(f => {
+            if (f < 0 || f >= tf) return;
+            const tick = document.createElement('div');
+            tick.className = 'scrub-arc-tick';
+            tick.style.left = (f * fw) + '%';
+            tick.style.width = fw + '%';
+            tick.style.top = (i * 2.5) + 'px';
+            tick.style.background = style.tick;
+            scrubArcTicks.appendChild(tick);
+          });
         });
       }
 
@@ -3569,72 +3648,86 @@
           arcCtx.restore();
         }
 
-        // Arc path and dots
+        // Arc path and dots, one pass per group so each keeps its own hue.
         const entry = getActiveEntry();
-        if (!entry || !entry.arcPoints) return;
-        const allPts = entry.arcPoints;
-        const allFrames = Object.keys(allPts).map(Number).sort((a, b) => a - b);
-        if (!allFrames.length) return;
-
+        if (!entry) return;
+        const groups = arcGroupsOf(entry);
         const currentFrame = player.currentFrame;
-        const visible = allFrames.filter(f => Math.abs(f - currentFrame) <= arcWindow);
-        if (!visible.length) return;
-
-        // Smooth connecting curve through visible points
-        if (visible.length >= 2) {
-          const coords = visible.map(f => ({ x: allPts[f].x * w, y: allPts[f].y * h, f }));
-          arcCtx.save();
-          arcCtx.strokeStyle = 'rgba(255, 200, 50, 0.55)';
-          arcCtx.lineWidth = 1.5 * dpr;
-          arcCtx.lineCap = 'round';
-          arcCtx.lineJoin = 'round';
-          arcCtx.setLineDash([]);
-          arcCtx.beginPath();
-          arcCtx.moveTo(coords[0].x, coords[0].y);
-          if (coords.length === 2) {
-            arcCtx.lineTo(coords[1].x, coords[1].y);
-          } else {
-            arcCtx.lineTo((coords[0].x + coords[1].x) / 2, (coords[0].y + coords[1].y) / 2);
-            for (let i = 1; i < coords.length - 1; i++) {
-              const mx = (coords[i].x + coords[i+1].x) / 2;
-              const my = (coords[i].y + coords[i+1].y) / 2;
-              arcCtx.quadraticCurveTo(coords[i].x, coords[i].y, mx, my);
-            }
-            arcCtx.lineTo(coords[coords.length-1].x, coords[coords.length-1].y);
-          }
-          arcCtx.stroke();
-          arcCtx.restore();
-        }
-
         // While placing new points, existing points are shrunk and faded so
         // they don't obscure where you're clicking. They return to full size
         // and opacity once the Arc Tracer is deactivated.
         const arcActive = currentTool === 'arc-tracer';
-        // Dots at each visible point. Drawn in two passes — other frames first,
-        // then the current frame's point last — so the current point always
-        // sits on top even when another point overlaps it.
-        const drawDot = (f) => {
-          const dist = Math.abs(f - currentFrame);
-          const isCurrent = dist === 0;
-          let opacity = isCurrent ? 1 : Math.max(0.25, 1 - dist / (arcWindow + 1));
-          let radius = (isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35)) * arcPointSize * dpr;
-          if (arcActive) { radius *= 0.35; opacity *= 0.35; }
-          const px = allPts[f].x * w, py = allPts[f].y * h;
-          const color = isCurrent ? '#ffcc00' : (f < currentFrame ? '#ff7733' : '#44aaff');
-          arcCtx.save();
-          arcCtx.globalAlpha = opacity;
-          arcCtx.beginPath();
-          arcCtx.arc(px, py, radius + (arcActive ? 0.5 : 1.5) * dpr, 0, Math.PI * 2);
-          arcCtx.fillStyle = 'rgba(0,0,0,0.5)';
-          arcCtx.fill();
-          arcCtx.beginPath();
-          arcCtx.arc(px, py, radius, 0, Math.PI * 2);
-          arcCtx.fillStyle = color;
-          arcCtx.fill();
-          arcCtx.restore();
-        };
-        for (const f of visible) if (f !== currentFrame) drawDot(f);
-        if (visible.includes(currentFrame)) drawDot(currentFrame);
+
+        for (const g of ARC_GROUPS) {
+          const allPts = groups[g];
+          const style = ARC_GROUP_STYLE[g];
+          const allFrames = Object.keys(allPts).map(Number).sort((a, b) => a - b);
+          if (!allFrames.length) continue;
+          const visible = allFrames.filter(f => Math.abs(f - currentFrame) <= arcWindow);
+          if (!visible.length) continue;
+
+          // Smooth connecting curve through visible points
+          if (visible.length >= 2) {
+            const coords = visible.map(f => ({ x: allPts[f].x * w, y: allPts[f].y * h, f }));
+            arcCtx.save();
+            arcCtx.strokeStyle = style.curve;
+            arcCtx.lineWidth = 1.5 * dpr;
+            arcCtx.lineCap = 'round';
+            arcCtx.lineJoin = 'round';
+            arcCtx.setLineDash([]);
+            arcCtx.beginPath();
+            arcCtx.moveTo(coords[0].x, coords[0].y);
+            if (coords.length === 2) {
+              arcCtx.lineTo(coords[1].x, coords[1].y);
+            } else {
+              arcCtx.lineTo((coords[0].x + coords[1].x) / 2, (coords[0].y + coords[1].y) / 2);
+              for (let i = 1; i < coords.length - 1; i++) {
+                const mx = (coords[i].x + coords[i+1].x) / 2;
+                const my = (coords[i].y + coords[i+1].y) / 2;
+                arcCtx.quadraticCurveTo(coords[i].x, coords[i].y, mx, my);
+              }
+              arcCtx.lineTo(coords[coords.length-1].x, coords[coords.length-1].y);
+            }
+            arcCtx.stroke();
+            arcCtx.restore();
+          }
+
+          // Dots at each visible point. Drawn in two passes — other frames first,
+          // then the current frame's point last — so the current point always
+          // sits on top even when another point overlaps it.
+          const drawDot = (f) => {
+            const dist = Math.abs(f - currentFrame);
+            const isCurrent = dist === 0;
+            let opacity = isCurrent ? 1 : Math.max(0.25, 1 - dist / (arcWindow + 1));
+            let radius = (isCurrent ? 6 : Math.max(2.5, 5 - dist * 0.35)) * arcPointSize * dpr;
+            if (arcActive) { radius *= 0.35; opacity *= 0.35; }
+            const px = allPts[f].x * w, py = allPts[f].y * h;
+            // Before the current frame = the group's light shade, after it = the
+            // dark shade; the point on the current frame gets the pure hue plus a
+            // white ring, which reads as "current" without losing the group.
+            const color = isCurrent ? style.tick : (f < currentFrame ? style.before : style.after);
+            arcCtx.save();
+            arcCtx.globalAlpha = opacity;
+            arcCtx.beginPath();
+            arcCtx.arc(px, py, radius + (arcActive ? 0.5 : 1.5) * dpr, 0, Math.PI * 2);
+            arcCtx.fillStyle = 'rgba(0,0,0,0.5)';
+            arcCtx.fill();
+            arcCtx.beginPath();
+            arcCtx.arc(px, py, radius, 0, Math.PI * 2);
+            arcCtx.fillStyle = color;
+            arcCtx.fill();
+            if (isCurrent && !arcActive) {
+              arcCtx.beginPath();
+              arcCtx.arc(px, py, radius, 0, Math.PI * 2);
+              arcCtx.strokeStyle = 'rgba(255,255,255,0.95)';
+              arcCtx.lineWidth = 1.5 * dpr;
+              arcCtx.stroke();
+            }
+            arcCtx.restore();
+          };
+          for (const f of visible) if (f !== currentFrame) drawDot(f);
+          if (visible.includes(currentFrame)) drawDot(currentFrame);
+        }
       }
 
       function resizeCanvasesB() {
@@ -3931,12 +4024,13 @@
         // Arc point drag — available with any tool except arc-tracer and pan/zoom
         if (currentTool !== 'arc-tracer' && currentTool !== 'pan' && currentTool !== 'zoom' && activeIndex >= 0 && e.button === 0) {
           const hitPos = getCanvasPos(e);
-          const hit = getArcHitFrame(hitPos);
+          const hit = getArcHit(hitPos);
           if (hit !== null) {
-            arcDragFrame = hit;
+            arcDragFrame = hit.frame;
+            arcDragGroup = hit.group;
             const dEntry = getActiveEntry();
-            arcDragStart = (dEntry && dEntry.arcPoints && dEntry.arcPoints[hit])
-              ? { ...dEntry.arcPoints[hit] } : null;
+            const dPts = dEntry ? arcPointsOf(dEntry, hit.group) : null;
+            arcDragStart = (dPts && dPts[hit.frame]) ? { ...dPts[hit.frame] } : null;
             penCanvas.setPointerCapture(e.pointerId);
             updateToolCursor();
             showArcMagnifier(e, hitPos);
@@ -3946,11 +4040,11 @@
         if (currentTool === 'arc-tracer' && activeIndex >= 0 && e.button === 0) {
           const pos = getCanvasPos(e);
           const entry = getActiveEntry(); if (!entry) return;
-          if (!entry.arcPoints) entry.arcPoints = {};
+          const pts = arcPointsOf(entry, arcGroup);
           const af = player.currentFrame;
-          const prev = entry.arcPoints[af] ? { ...entry.arcPoints[af] } : null;
-          entry.arcPoints[af] = { x: pos.x, y: pos.y };
-          entry.undoStack.push({ type: 'addArc', frame: af, point: { x: pos.x, y: pos.y }, prev });
+          const prev = pts[af] ? { ...pts[af] } : null;
+          pts[af] = { x: pos.x, y: pos.y };
+          entry.undoStack.push({ type: 'addArc', frame: af, group: arcGroup, point: { x: pos.x, y: pos.y }, prev });
           entry.redoStack = [];
           redrawArcCanvas();
           updateArcTicks();
@@ -4000,8 +4094,8 @@
         // Arc point drag — runs regardless of current tool
         if (arcDragFrame !== null) {
           const entry = getActiveEntry();
-          if (entry && entry.arcPoints) {
-            entry.arcPoints[arcDragFrame] = { x: pos.x, y: pos.y };
+          if (entry) {
+            arcPointsOf(entry, arcDragGroup)[arcDragFrame] = { x: pos.x, y: pos.y };
             redrawArcCanvas();
             showArcMagnifier(e, pos);
           }
@@ -4018,7 +4112,9 @@
           arcCrosshairPos = pos;
           arcLastEvent = e;
           const prevHover = arcHoverFrame;
-          arcHoverFrame = getArcHitFrame(pos);
+          const hov = getArcHit(pos);
+          arcHoverFrame = hov ? hov.frame : null;
+          arcHoverGroup = hov ? hov.group : null;
           if (arcHoverFrame !== prevHover) updateToolCursor();
           redrawArcCanvas();
           showArcMagnifier(e, arcCrosshairPos);
@@ -4028,7 +4124,9 @@
         // Arc point hover detection for non-arc-tracer tools
         if (!isDrawing && !isErasing) {
           const prevHover = arcHoverFrame;
-          arcHoverFrame = getArcHitFrame(pos);
+          const hov = getArcHit(pos);
+          arcHoverFrame = hov ? hov.frame : null;
+          arcHoverGroup = hov ? hov.group : null;
           if (arcHoverFrame !== prevHover) updateToolCursor();
         }
 
@@ -4057,15 +4155,16 @@
       const finishStroke = () => {
         if (arcDragFrame !== null) {
           const entry = getActiveEntry();
-          if (entry && entry.arcPoints && arcDragStart) {
-            const to = entry.arcPoints[arcDragFrame];
+          if (entry && arcDragStart) {
+            const to = arcPointsOf(entry, arcDragGroup)[arcDragFrame];
             if (to && (to.x !== arcDragStart.x || to.y !== arcDragStart.y)) {
-              entry.undoStack.push({ type: 'moveArc', frame: arcDragFrame, from: arcDragStart, to: { ...to } });
+              entry.undoStack.push({ type: 'moveArc', frame: arcDragFrame, group: arcDragGroup, from: arcDragStart, to: { ...to } });
               entry.redoStack = [];
             }
           }
           arcDragStart = null;
           arcDragFrame = null;
+          arcDragGroup = null;
           hideArcMagnifier();
           updateArcTicks();
           scheduleAnnotationSave();
@@ -4181,22 +4280,21 @@
         const entry = getActivePanelEntry(); if (!entry || !entry.undoStack.length) return;
         const action = entry.undoStack.pop();
         if (action.type === 'moveArc') {
-          if (!entry.arcPoints) entry.arcPoints = {};
-          entry.arcPoints[action.frame] = { ...action.from };
+          arcPointsOf(entry, action.group || 1)[action.frame] = { ...action.from };
           entry.redoStack.push(action);
           refreshArc();
           return;
         }
         if (action.type === 'addArc') {
-          if (action.prev) { if (!entry.arcPoints) entry.arcPoints = {}; entry.arcPoints[action.frame] = { ...action.prev }; }
-          else if (entry.arcPoints) delete entry.arcPoints[action.frame];
+          const pts = arcPointsOf(entry, action.group || 1);
+          if (action.prev) pts[action.frame] = { ...action.prev };
+          else delete pts[action.frame];
           entry.redoStack.push(action);
           refreshArc();
           return;
         }
         if (action.type === 'removeArc') {
-          if (!entry.arcPoints) entry.arcPoints = {};
-          entry.arcPoints[action.frame] = { ...action.prev };
+          arcPointsOf(entry, action.group || 1)[action.frame] = { ...action.prev };
           entry.redoStack.push(action);
           refreshArc();
           return;
@@ -4220,21 +4318,19 @@
         const entry = getActivePanelEntry(); if (!entry || !entry.redoStack.length) return;
         const action = entry.redoStack.pop();
         if (action.type === 'moveArc') {
-          if (!entry.arcPoints) entry.arcPoints = {};
-          entry.arcPoints[action.frame] = { ...action.to };
+          arcPointsOf(entry, action.group || 1)[action.frame] = { ...action.to };
           entry.undoStack.push(action);
           refreshArc();
           return;
         }
         if (action.type === 'addArc') {
-          if (!entry.arcPoints) entry.arcPoints = {};
-          entry.arcPoints[action.frame] = { ...action.point };
+          arcPointsOf(entry, action.group || 1)[action.frame] = { ...action.point };
           entry.undoStack.push(action);
           refreshArc();
           return;
         }
         if (action.type === 'removeArc') {
-          if (entry.arcPoints) delete entry.arcPoints[action.frame];
+          delete arcPointsOf(entry, action.group || 1)[action.frame];
           entry.undoStack.push(action);
           refreshArc();
           return;
@@ -5073,6 +5169,7 @@
       setDrawColor(drawColor);
       updateToolCursor();
       updateArcStartBtn();
+      updateArcGroupBtns();
       mainCanvas.style.display = 'block';
       setSidebarOpen(!isMobile());
       resizeCanvases();
