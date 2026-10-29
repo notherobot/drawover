@@ -316,7 +316,9 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 #btn-arc-tracer { flex-shrink: 0; }
 /* Arc Tracer marker: a red line across the top edge of the frame column.
    Width is set inline to one frame. */
-.scrub-arc-tick { position: absolute; top: 0; height: 3px; min-width: 2px; background: #ff4444; border-radius: 0 0 1px 1px; z-index: 3; pointer-events: none; }
+/* One 2px lane per arc group (top set inline to 0 / 2.5 / 5px), so a frame with
+   points in more than one group shows a tick for each instead of hiding them. */
+.scrub-arc-tick { position: absolute; top: 0; height: 2px; min-width: 2px; background: #ff4444; border-radius: 0 0 1px 1px; z-index: 3; pointer-events: none; }
 #arc-magnifier { display: none; position: fixed; z-index: 9000; background: #1a1a1a; border: 1px solid #555; border-radius: 8px; padding: 6px; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
 #arc-magnifier canvas { display: block; border-radius: 3px; image-rendering: pixelated; }
 .tool-btn { width: 32px; height: 30px; padding: 0; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -476,10 +478,10 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 }
 #scrub-ticks { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 /* Drawover marker: a yellow chunk filling (almost) the frame column, cropped
-   at the top to leave room for the red arc indicator above it. Width is set
+   at the top to clear the three arc-group lanes above it. Width is set
    inline to one frame. */
 .scrub-tick {
-  position: absolute; top: 5px; bottom: 3px; min-width: 2px; background: #ffcc00;
+  position: absolute; top: 8px; bottom: 3px; min-width: 2px; background: #ffcc00;
   border-radius: 1px; z-index: 2; pointer-events: none;
 }
 /* Playhead: a hollow frame-wide rectangle (width set inline) with a downward
@@ -596,6 +598,20 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 2px; }
 }
 #arc-panel .arc-row input[type=range] { width: 96px; accent-color: #3aa0ff; cursor: pointer; }
 #arc-panel .arc-row span.arc-val { flex: none; width: 20px; text-align: right; color: #bbb; }
+/* Group picker: each button carries its group's hue so the choice reads the same
+   way the timeline ticks and canvas dots do. */
+#arc-panel .arc-groups { display: flex; gap: 6px; flex: none; }
+#arc-panel .arc-group-btn {
+  width: 34px; padding: 5px 0; font-size: 12px; font-weight: 700;
+  border-left: 3px solid var(--arc-g);
+}
+#arc-panel .arc-group-btn[data-arc-group="1"] { --arc-g: #ff4444; }
+#arc-panel .arc-group-btn[data-arc-group="2"] { --arc-g: #3ad162; }
+#arc-panel .arc-group-btn[data-arc-group="3"] { --arc-g: #3aa0ff; }
+#arc-panel .arc-group-btn.active {
+  background: var(--arc-g); border-color: var(--arc-g); color: #0b1a0b;
+  box-shadow: 0 0 8px var(--arc-g); text-shadow: none;
+}
 #arc-panel .arc-actions { display: flex; gap: 8px; }
 #arc-panel .arc-actions button {
   flex: 1; padding: 6px; border-radius: 5px; cursor: pointer; font-weight: 600; border: 1px solid #3a3a3a;
